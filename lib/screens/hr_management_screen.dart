@@ -13,6 +13,7 @@ enum HrTab {
   locations,
   payroll,
   dailyReport,
+  periodicReport,
   device,
 }
 

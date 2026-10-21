@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import '../models/hr_models.dart';
@@ -30,10 +32,13 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
   List<CameraDescription> _availableCameras = [];
   int _currentCameraIndex = 0;
   final FaceRecognitionService _faceService = FaceRecognitionService();
+
   bool _isProcessing = false;
+  bool _isSuccess = false;
   bool _isErrorMessage = false;
+  bool _isTorchOn = false;
   String? _initError;
-  String _statusMessage = 'Align your face inside the circle and tap capture.';
+  String _statusMessage = 'Position your face within the frame';
 
   @override
   void initState() {
@@ -45,7 +50,7 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
     try {
       setState(() {
         _initError = null;
-        _statusMessage = 'Initializing camera...';
+        _statusMessage = 'Starting camera...';
       });
 
       _availableCameras = await availableCameras();
@@ -68,7 +73,7 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
 
       if (mounted) {
         setState(() {
-          _statusMessage = 'Align your face inside the circle and tap capture.';
+          _statusMessage = 'Position your face within the frame';
         });
       }
     } catch (e) {
@@ -91,12 +96,64 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
     await _controller!.initialize();
   }
 
-  Future<void> _captureAndProcess() async {
-    if (_controller == null || !_controller!.value.isInitialized || _isProcessing) return;
+  Future<void> _toggleCamera() async {
+    if (_availableCameras.length < 2 || _isProcessing || _isSuccess) return;
+    HapticFeedback.lightImpact();
+    final nextIdx = (_currentCameraIndex + 1) % _availableCameras.length;
+    setState(() {
+      _currentCameraIndex = nextIdx;
+      _isTorchOn = false;
+      _statusMessage = 'Switching camera...';
+    });
+    try {
+      await _setupCameraController(_availableCameras[_currentCameraIndex]);
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Position your face within the frame';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isErrorMessage = true;
+          _statusMessage = 'Could not switch camera: $e';
+        });
+      }
+    }
+  }
 
+  Future<void> _toggleTorch() async {
+    if (_controller == null ||
+        !_controller!.value.isInitialized ||
+        _isProcessing ||
+        _isSuccess) {
+      return;
+    }
+    try {
+      HapticFeedback.lightImpact();
+      final targetMode = _isTorchOn ? FlashMode.off : FlashMode.torch;
+      await _controller!.setFlashMode(targetMode);
+      setState(() {
+        _isTorchOn = !_isTorchOn;
+      });
+    } catch (e) {
+      debugPrint('Torch toggle failed: $e');
+    }
+  }
+
+  Future<void> _captureAndProcess() async {
+    if (_controller == null ||
+        !_controller!.value.isInitialized ||
+        _isProcessing ||
+        _isSuccess) {
+      return;
+    }
+
+    HapticFeedback.lightImpact();
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Detecting & processing face...';
+      _isErrorMessage = false;
+      _statusMessage = 'Verifying face...';
     });
 
     try {
@@ -105,20 +162,16 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
+          _isErrorMessage = true;
           _statusMessage = 'Error taking photo: $e';
           _isProcessing = false;
         });
+        HapticFeedback.vibrate();
       }
     }
   }
 
   Future<void> _processImagePath(String imagePath) async {
-    setState(() {
-      _isProcessing = true;
-      _isErrorMessage = false;
-      _statusMessage = 'Analyzing facial biometric features...';
-    });
-
     try {
       final embedding = await _faceService.getFaceEmbedding(imagePath);
 
@@ -126,9 +179,10 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
         if (mounted) {
           setState(() {
             _isErrorMessage = true;
-            _statusMessage = 'No face detected. Please ensure your face is well-lit and clearly visible.';
+            _statusMessage = 'No face detected. Please try again.';
             _isProcessing = false;
           });
+          HapticFeedback.vibrate();
         }
         return;
       }
@@ -140,7 +194,8 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
 
         for (final emp in widget.matchEmployees!) {
           if (emp.faceEmbedding == null || emp.faceEmbedding!.isEmpty) continue;
-          final dist = _faceService.calculateEuclideanDistance(emp.faceEmbedding!, embedding);
+          final dist =
+              _faceService.calculateEuclideanDistance(emp.faceEmbedding!, embedding);
           debugPrint('Matching against ${emp.name}: distance = $dist');
           if (dist < minDistance) {
             minDistance = dist;
@@ -148,18 +203,28 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
           }
         }
 
-        // Threshold for MobileFaceNet is ~1.0
+        // Threshold for MobileFaceNet is ~1.05
         if (bestMatch != null && minDistance < 1.05) {
+          final matchedEmployee = bestMatch;
           if (!mounted) return;
-          Navigator.pop(context, bestMatch);
+          setState(() {
+            _isSuccess = true;
+            _isProcessing = false;
+            _statusMessage = 'Welcome, ${matchedEmployee.name}';
+          });
+          HapticFeedback.mediumImpact();
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (!mounted) return;
+          Navigator.pop(context, matchedEmployee);
           return;
         } else {
           if (mounted) {
             setState(() {
               _isErrorMessage = true;
-              _statusMessage = 'Face not recognized. Try again or sign in with your password.';
+              _statusMessage = 'Face not recognized. Please try again.';
               _isProcessing = false;
             });
+            HapticFeedback.vibrate();
           }
           return;
         }
@@ -175,6 +240,14 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
 
         if (distance < 1.05) {
           if (!mounted) return;
+          setState(() {
+            _isSuccess = true;
+            _isProcessing = false;
+            _statusMessage = 'Identity verified';
+          });
+          HapticFeedback.mediumImpact();
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (!mounted) return;
           Navigator.pop(context, true); // Verified successfully
           return;
         } else {
@@ -184,6 +257,7 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
               _statusMessage = 'Face did not match. Please try again.';
               _isProcessing = false;
             });
+            HapticFeedback.vibrate();
           }
           return;
         }
@@ -205,11 +279,20 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
               _statusMessage = template.replaceAll('{name}', duplicate.name);
               _isProcessing = false;
             });
+            HapticFeedback.vibrate();
           }
           return;
         }
       }
 
+      if (!mounted) return;
+      setState(() {
+        _isSuccess = true;
+        _isProcessing = false;
+        _statusMessage = 'Face enrolled successfully';
+      });
+      HapticFeedback.mediumImpact();
+      await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       Navigator.pop(context, embedding); // Return the List<double> face embedding
     } catch (e) {
@@ -219,6 +302,7 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
           _statusMessage = 'Authentication error: $e';
           _isProcessing = false;
         });
+        HapticFeedback.vibrate();
       }
     }
   }
@@ -230,233 +314,353 @@ class _FaceAuthScreenState extends State<FaceAuthScreen> {
     super.dispose();
   }
 
+  Color get _borderColor {
+    if (_isSuccess) return const Color(0xFF10B981); // Emerald green
+    if (_isErrorMessage) return const Color(0xFFEF4444); // Red
+    if (_isProcessing) return const Color(0xFF38BDF8); // Soft blue
+    return Colors.white.withValues(alpha: 0.85); // Clean subtle white
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(
-          widget.title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
-        ),
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
     if (_initError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.videocam_off_rounded, color: Colors.redAccent, size: 54),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                _initError!,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _statusMessage,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _initializeCamera,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Retry Camera'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00E5CE),
-                  foregroundColor: const Color(0xFF0A2342),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildErrorState();
     }
 
     if (_controller == null || !_controller!.value.isInitialized) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00E5CE)),
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
       );
     }
 
-    return Stack(
-      children: [
-        // Camera Preview
-        Center(
-          child: AspectRatio(
-            aspectRatio: 1 / _controller!.value.aspectRatio,
-            child: CameraPreview(_controller!),
-          ),
-        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final screenHeight = constraints.maxHeight;
 
-        // Darkened Mask with Oval Cutout
-        Positioned.fill(
-          child: ColorFiltered(
-            colorFilter: ColorFilter.mode(
-              Colors.black.withValues(alpha: 0.55),
-              BlendMode.srcOut,
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    backgroundBlendMode: BlendMode.dstOut,
-                  ),
-                ),
-                Center(
-                  child: Container(
-                    width: 270,
-                    height: 340,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(160),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        // Clean, proportional cutout dimensions
+        final reticleWidth = (screenWidth * 0.72).clamp(240.0, 300.0);
+        final reticleHeight = (screenHeight * 0.42).clamp(280.0, 370.0);
+        const topBarHeight = 90.0;
+        const bottomControlsHeight = 190.0;
+        final availableHeight = screenHeight - topBarHeight - bottomControlsHeight;
+        final reticleTop =
+            topBarHeight + math.max(0.0, (availableHeight - reticleHeight) / 2);
 
-        // Glowing Scanner Border
-        Center(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: 270,
-            height: 340,
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: _isErrorMessage ? const Color(0xFFEF4444) : const Color(0xFF00E5CE),
-                width: 3.5,
+        final reticleRect = Rect.fromLTWH(
+          (screenWidth - reticleWidth) / 2,
+          reticleTop,
+          reticleWidth,
+          reticleHeight,
+        );
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // 1. Full-screen Camera Viewfinder
+            Positioned.fill(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: 1,
+                  height: _controller!.value.aspectRatio < 1
+                      ? (1 / _controller!.value.aspectRatio)
+                      : _controller!.value.aspectRatio,
+                  child: CameraPreview(_controller!),
+                ),
               ),
-              borderRadius: BorderRadius.circular(160),
-              boxShadow: [
-                BoxShadow(
-                  color: (_isErrorMessage ? const Color(0xFFEF4444) : const Color(0xFF00E5CE)).withValues(alpha: 0.35),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ],
             ),
-          ),
-        ),
 
-        // Bottom Controls & Instruction
-        Positioned(
-          bottom: 30,
-          left: 20,
-          right: 20,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  color: _isErrorMessage
-                      ? const Color(0xFF7F1D1D).withValues(alpha: 0.90)
-                      : Colors.black.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _isErrorMessage ? const Color(0xFFEF4444) : Colors.white12,
-                    width: _isErrorMessage ? 1.5 : 1.0,
-                  ),
+            // 2. Simple, Elegant Cutout Mask
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _SimpleCutoutPainter(
+                  reticleRect: reticleRect,
+                  borderColor: _borderColor,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (_isErrorMessage) ...[
-                      const Icon(Icons.warning_amber_rounded, color: Color(0xFFFCA5A5), size: 20),
-                      const SizedBox(width: 8),
-                    ],
-                    Flexible(
-                      child: Text(
-                        _statusMessage,
-                        style: TextStyle(
-                          color: _isErrorMessage ? const Color(0xFFFEE2E2) : Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
+              ),
+            ),
+
+            // 3. Clean Minimalist Top Navigation
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Back / Close Button
+                      _buildCircleButton(
+                        icon: Icons.close_rounded,
+                        onTap: () => Navigator.pop(context),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              if (!_isProcessing)
-                Center(
-                  child: GestureDetector(
-                    onTap: _captureAndProcess,
-                    child: Container(
-                      width: 76,
-                      height: 76,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
+
+                      // Title
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF00F0D8).withValues(alpha: 0.5),
-                            blurRadius: 18,
-                            offset: const Offset(0, 4),
+                      ),
+
+                      // Right Action Controls (Flash & Camera Switch)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildCircleButton(
+                            icon: _isTorchOn
+                                ? Icons.flash_on_rounded
+                                : Icons.flash_off_rounded,
+                            color: _isTorchOn ? const Color(0xFFFBBF24) : Colors.white,
+                            onTap: _toggleTorch,
                           ),
+                          if (_availableCameras.length > 1) ...[
+                            const SizedBox(width: 8),
+                            _buildCircleButton(
+                              icon: Icons.flip_camera_ios_rounded,
+                              onTap: _toggleCamera,
+                            ),
+                          ],
                         ],
                       ),
-                      child: Center(
-                        child: Container(
-                          width: 62,
-                          height: 62,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // 4. Clean Bottom Status & Shutter Button
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Status Text
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _isErrorMessage
+                              ? Colors.red.withValues(alpha: 0.25)
+                              : (_isSuccess
+                                  ? Colors.green.withValues(alpha: 0.25)
+                                  : Colors.black.withValues(alpha: 0.5)),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _statusMessage,
+                          style: TextStyle(
+                            color: _isErrorMessage
+                                ? const Color(0xFFFCA5A5)
+                                : (_isSuccess
+                                    ? const Color(0xFF86EFAC)
+                                    : Colors.white),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
-                          child: const Icon(
-                            Icons.camera_alt_rounded,
-                            color: Color(0xFF0A2342),
-                            size: 32,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Minimalist Shutter Button
+                      GestureDetector(
+                        onTap: _captureAndProcess,
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 3.5,
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _isSuccess
+                                  ? const Color(0xFF10B981)
+                                  : Colors.white,
+                            ),
+                            child: Center(
+                              child: _isProcessing
+                                  ? const SizedBox(
+                                      width: 26,
+                                      height: 26,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                            Colors.black87),
+                                      ),
+                                    )
+                                  : (_isSuccess
+                                      ? const Icon(
+                                          Icons.check_rounded,
+                                          color: Colors.white,
+                                          size: 32,
+                                        )
+                                      : const Icon(
+                                          Icons.camera_alt_rounded,
+                                          color: Colors.black87,
+                                          size: 26,
+                                        )),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+
+                      // Optional Password link if login mode
+                      if (widget.matchEmployees != null &&
+                          widget.matchEmployees!.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            'Sign in with password',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              if (_isProcessing)
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: CircularProgressIndicator(color: Color(0xFF00E5CE)),
-                ),
-            ],
-          ),
-        ),
-      ],
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  Widget _buildCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    Color color = Colors.white,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.45),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.videocam_off_rounded, color: Colors.white54, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _initError ?? 'Camera Unavailable',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _statusMessage,
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _initializeCamera,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black87,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Retry Camera'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Simple, elegant rounded cutout mask without sci-fi lasers or ticks
+class _SimpleCutoutPainter extends CustomPainter {
+  final Rect reticleRect;
+  final Color borderColor;
+
+  _SimpleCutoutPainter({
+    required this.reticleRect,
+    required this.borderColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cutoutRRect = RRect.fromRectAndRadius(
+      reticleRect,
+      const Radius.circular(44),
+    );
+
+    // 1. Soft dark overlay outside the face frame
+    final fullScreenPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final cutoutPath = Path()..addRRect(cutoutRRect);
+    final maskPath = Path.combine(PathOperation.difference, fullScreenPath, cutoutPath);
+
+    final maskPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.55)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(maskPath, maskPaint);
+
+    // 2. Clean, smooth border
+    final borderPaint = Paint()
+      ..color = borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4;
+    canvas.drawRRect(cutoutRRect, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SimpleCutoutPainter oldDelegate) {
+    return oldDelegate.reticleRect != reticleRect ||
+        oldDelegate.borderColor != borderColor;
   }
 }

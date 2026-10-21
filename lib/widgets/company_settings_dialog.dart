@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
 import '../models/hr_models.dart';
+import '../screens/super_admin_screen.dart';
 import 'glass_dialog.dart';
+import 'neu_button.dart';
 
 Future<void> showCompanySettingsDialog(BuildContext context) async {
   final provider = Provider.of<AttendanceProvider>(context, listen: false);
@@ -114,10 +117,134 @@ class _CompanySettingsFormState extends State<CompanySettingsForm> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = Provider.of<AttendanceProvider>(context);
+    final license = provider.currentLicense;
+    final maxUsers = provider.maxActiveUsers;
+    final activeUsers = provider.activeEmployeesCount;
+    final isExpired = license?.isExpired ?? false;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // --- Subscription & License Status Card ---
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? const LinearGradient(
+                    colors: [Color(0xFF1E283C), Color(0xFF161F2E)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : const LinearGradient(
+                    colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.workspace_premium_rounded, color: Color(0xFF2E65FF), size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        provider.translate('license_info'),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2E65FF).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: Text(
+                      license?.planName ?? 'Standard',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E65FF),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${provider.translate('active_licenses_quota')}:',
+                        style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white60 : Colors.black54),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$activeUsers / $maxUsers seats',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: activeUsers >= maxUsers ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${provider.translate('expires_on')}:',
+                        style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white60 : Colors.black54),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        license != null ? DateFormat('yyyy-MM-dd').format(license.subscriptionExpiresAt) : 'Never',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: isExpired ? const Color(0xFFEF4444) : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Open Super Admin / SaaS Master Button
+              NeuButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (ctx) => const SuperAdminScreen()),
+                  );
+                },
+                icon: const Icon(Icons.admin_panel_settings_rounded, size: 16),
+                label: provider.translate('super_admin_portal'),
+                variant: NeuButtonVariant.primary,
+                height: 36,
+                fontSize: 12,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
         // Logo Picker
         Center(
           child: GestureDetector(

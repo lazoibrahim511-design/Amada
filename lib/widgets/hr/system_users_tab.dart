@@ -412,7 +412,9 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value,
+          value: items.any((item) => item.value == value)
+              ? value
+              : (items.isNotEmpty ? items.first.value! : value),
           items: items,
           onChanged: onChanged,
           dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -1149,10 +1151,11 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
           child: Text(provider.translate('cancel')),
         ),
         NeuButton(
-          onPressed: () {
+          onPressed: () async {
+            final targetCompany = (provider.currentCompanyCode == 'all' ? '' : provider.currentCompanyCode);
             final enteredId = userIdCtrl.text.trim().isNotEmpty
                 ? userIdCtrl.text.trim()
-                : provider.getNextEmployeeId();
+                : provider.getNextEmployeeId(companyCode: targetCompany.isNotEmpty ? targetCompany : null);
 
             if (enteredId.isEmpty || nameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1163,9 +1166,10 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
               return;
             }
 
-            final conflict = provider.employees.where(
-              (e) => e.id.toLowerCase() == enteredId.toLowerCase(),
-            ).firstOrNull;
+            final conflict = provider.getEmployeeConflict(
+              enteredId,
+              companyCode: targetCompany.isNotEmpty ? targetCompany : null,
+            );
             if (conflict != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -1180,6 +1184,7 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
 
             final newEmp = CompanyEmployee(
               id: enteredId,
+              companyCode: targetCompany,
               name: nameCtrl.text.trim(),
               email: emailCtrl.text.trim(),
               position: posCtrl.text.trim(),
@@ -1195,16 +1200,32 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
               salaryHistory: [],
             );
 
-            provider.addEmployee(newEmp);
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  provider.translate('user_created_success').replaceAll('{name}', newEmp.name),
+            final success = await provider.addEmployee(newEmp);
+            if (!success) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      provider.translate('user_id_in_use').replaceAll('{id}', enteredId).replaceAll('{name}', ''),
+                    ),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
+              return;
+            }
+
+            if (context.mounted) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    provider.translate('user_created_success').replaceAll('{name}', newEmp.name),
+                  ),
+                  backgroundColor: Colors.green,
                 ),
-                backgroundColor: Colors.green,
-              ),
-            );
+              );
+            }
           },
           variant: NeuButtonVariant.primary,
           label: provider.translate('create_account'),

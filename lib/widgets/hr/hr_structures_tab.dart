@@ -480,12 +480,16 @@ void showStructureDialog(BuildContext context, {OrgStructure? structure}) {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+                      : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: (selectedLatitude != null && selectedLongitude != null)
                         ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                        : Colors.white10,
+                        : (Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white10
+                            : const Color(0xFFE2E8F0)),
                   ),
                 ),
                 child: Column(

@@ -8,6 +8,7 @@ import '../models/hr_models.dart';
 import '../models/request_model.dart';
 import '../widgets/avatar_image_helper.dart';
 import '../widgets/neu_button.dart';
+import '../widgets/picker_theme.dart';
 import 'package:intl/intl.dart';
 
 class RequestsScreen extends StatefulWidget {
@@ -67,6 +68,33 @@ class _RequestsScreenState extends State<RequestsScreen> {
     }
   }
 
+DateTime? _parseRequestStartDate(String dateStr) {
+  try {
+    final trimmed = dateStr.trim();
+    if (trimmed.contains(' - ')) {
+      final parts = trimmed.split(' - ');
+      final startPart = parts[0].trim();
+      final endPart = parts[1].trim();
+      if (RegExp(r'\d{4}').hasMatch(startPart)) {
+        return DateFormat('MMMM d, yyyy').parse(startPart);
+      }
+      final yearMatch = RegExp(r'\d{4}').firstMatch(endPart);
+      if (yearMatch != null) {
+        final year = yearMatch.group(0);
+        return DateFormat('MMMM d, yyyy').parse('$startPart, $year');
+      }
+      return DateFormat('MMMM d, yyyy').parse(endPart);
+    }
+    return DateFormat('MMMM d, yyyy').parse(trimmed);
+  } catch (_) {
+    try {
+      return DateTime.parse(dateStr.trim());
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
   void _addNewRequest(
     String type,
     String date,
@@ -78,65 +106,72 @@ class _RequestsScreenState extends State<RequestsScreen> {
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
     final emp = targetEmployee ?? provider.currentEmployee;
 
+    if (provider.isDateStringInClosedMonth(date)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.translate('cannot_modify_closed_month')),
+          backgroundColor: Colors.amber.shade800,
+        ),
+      );
+      return;
+    }
+
     if (type == 'Missing Punch') {
       try {
-        final parsedDate = DateFormat(
-          'MMMM d, yyyy',
-        ).parse(date.split(' - ').first);
+        final parsedDate = _parseRequestStartDate(date);
 
-        int count = 0;
-        final targetReqs = (emp != null)
-            ? (emp.id == provider.employeeId
-                  ? provider.requests
-                  : (_subordinateRequests
-                        .where(
-                          (item) =>
-                              (item['employee'] as CompanyEmployee?)?.id ==
-                              emp.id,
-                        )
-                        .map((item) => item['request'] as Request)
-                        .toList()))
-            : provider.requests;
+        if (parsedDate != null) {
+          int count = 0;
+          final targetReqs = (emp != null)
+              ? (emp.id == provider.employeeId
+                    ? provider.requests
+                    : (_subordinateRequests
+                          .where(
+                            (item) =>
+                                (item['employee'] as CompanyEmployee?)?.id ==
+                                emp.id,
+                          )
+                          .map((item) => item['request'] as Request)
+                          .toList()))
+              : provider.requests;
 
-        for (var req in targetReqs) {
-          if (req.type == 'Missing Punch') {
-            try {
-              final reqDate = DateFormat(
-                'MMMM d, yyyy',
-              ).parse(req.date.split(' - ').first);
-              if (reqDate.year == parsedDate.year &&
+          for (var req in targetReqs) {
+            if (req.type == 'Missing Punch') {
+              final reqDate = _parseRequestStartDate(req.date);
+              if (reqDate != null &&
+                  reqDate.year == parsedDate.year &&
                   reqDate.month == parsedDate.month) {
                 count++;
               }
-            } catch (_) {}
+            }
           }
-        }
 
-        if (emp != null) {
-          final groupId = provider.getGroupIdForDate(emp, parsedDate);
-          final group = provider.groups.firstWhere(
-            (g) => g.id == groupId,
-            orElse: () => EmployeeGroup(
-              id: '',
-              name: 'None',
-              shiftId: '',
-              overtimeAllowed: false,
-              minOvertimeMinutes: 0,
-              maxOvertimeMinutes: 0,
-            ),
-          );
-          final limit = group.missedPunchLimitPerMonth;
-
-          if (limit > 0 && count >= limit) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Limit reached: You can only submit $limit Missed Punch requests per month.',
-                ),
-                backgroundColor: Colors.red,
+          if (emp != null) {
+            final groupId = provider.getGroupIdForDate(emp, parsedDate);
+            final group = provider.groups.firstWhere(
+              (g) => g.id == groupId,
+              orElse: () => EmployeeGroup(
+                id: '',
+                name: 'None',
+                shiftId: '',
+                overtimeAllowed: false,
+                minOvertimeMinutes: 0,
+                maxOvertimeMinutes: 0,
               ),
             );
-            return;
+            final limit = group.missedPunchLimitPerMonth;
+
+            if (limit > 0 && count >= limit) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Limit reached: You can only submit $limit Missed Punch requests per month.',
+                  ),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
           }
         }
       } catch (e) {
@@ -146,11 +181,9 @@ class _RequestsScreenState extends State<RequestsScreen> {
 
     if (type == 'Annual Leave') {
       try {
-        final parsedDate = DateFormat(
-          'MMMM d, yyyy',
-        ).parse(date.split(' - ').first);
+        final parsedDate = _parseRequestStartDate(date);
 
-        if (emp != null) {
+        if (parsedDate != null && emp != null) {
           final groupId = provider.getGroupIdForDate(emp, parsedDate);
           final group = provider.groups.firstWhere(
             (g) => g.id == groupId,
@@ -163,19 +196,46 @@ class _RequestsScreenState extends State<RequestsScreen> {
               maxOvertimeMinutes: 0,
             ),
           );
+
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final reqDate = DateTime(
+            parsedDate.year,
+            parsedDate.month,
+            parsedDate.day,
+          );
+
+          // 1. Minimum Advance Notice Days Rule
+          final minNotice = group.annualLeaveMinNoticeDays;
+          if (minNotice > 0) {
+            final noticeDays = reqDate.difference(today).inDays;
+            if (noticeDays < minNotice) {
+              final earliestDate = today.add(Duration(days: minNotice));
+              final formattedEarliest =
+                  DateFormat('yyyy-MM-dd').format(earliestDate);
+              final errPattern =
+                  provider.translate('annual_leave_min_notice_error');
+              final msg = errPattern
+                  .replaceAll('{days}', minNotice.toString())
+                  .replaceAll('{date}', formattedEarliest);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    msg.isNotEmpty && !msg.contains('{')
+                        ? msg
+                        : 'Annual leave requires at least $minNotice days advance notice. Earliest available date is $formattedEarliest.',
+                  ),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+          }
+
+          // 2. Retroactive Submission Deadline Rule
           final limit = group.annualLeaveRequestDeadlineDays;
-
           if (limit > 0) {
-            final now = DateTime.now();
-            final today = DateTime(now.year, now.month, now.day);
-            final reqDate = DateTime(
-              parsedDate.year,
-              parsedDate.month,
-              parsedDate.day,
-            );
-
             final difference = today.difference(reqDate).inDays;
-
             if (difference > limit) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -188,9 +248,98 @@ class _RequestsScreenState extends State<RequestsScreen> {
               return;
             }
           }
+
+          // 3. Application Frequency Limit per Month
+          final maxPerMonth = group.annualLeaveMaxRequestsPerPeriod;
+          if (maxPerMonth > 0) {
+            final allForEmp = <Request>{
+              ...provider.getRequestsForEmployee(emp.id),
+              ...provider.allCompanyRequests.where((r) => r.employeeId == emp.id),
+              if (emp.id == provider.employeeId) ...provider.requests,
+            }.toList();
+
+            int count = 0;
+            for (var req in allForEmp) {
+              if (req.type == 'Annual Leave' && req.status != 'Rejected') {
+                final rDate = _parseRequestStartDate(req.date);
+                if (rDate != null) {
+                  final matchesMonth = rDate.year == parsedDate.year &&
+                      rDate.month == parsedDate.month;
+                  if (matchesMonth) {
+                    count++;
+                  }
+                }
+              }
+            }
+
+            if (count >= maxPerMonth) {
+              final periodLabel = provider.translate('period_month');
+              final effectivePeriod = periodLabel.isNotEmpty ? periodLabel : 'Month';
+              final errPattern =
+                  provider.translate('annual_leave_period_limit_error');
+              final msg = errPattern
+                  .replaceAll('{limit}', maxPerMonth.toString())
+                  .replaceAll('{period}', effectivePeriod);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    msg.isNotEmpty && !msg.contains('{')
+                        ? msg
+                        : 'Limit reached: You can only apply for $maxPerMonth Annual Leave requests per $effectivePeriod.',
+                  ),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+          }
         }
       } catch (e) {
-        debugPrint('Error checking annual leave deadline: $e');
+        debugPrint('Error checking annual leave rules: $e');
+      }
+    }
+
+    if (type == 'Hourly Leave' && emp != null) {
+      try {
+        final parsedDate = _parseRequestStartDate(date) ?? DateTime.now();
+        final groupId = provider.getGroupIdForDate(emp, parsedDate);
+        final group = provider.groups.firstWhere(
+          (g) => g.id == groupId,
+          orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+        );
+
+        final reqMinutes = parseHourlyLeaveDurationMinutes(duration);
+        final minMins = group.totalHourlyLeaveMinMinutes;
+        if (minMins > 0 && reqMinutes < minMins) {
+          final formattedMin = formatMinutesToHoursAndMinutes(minMins);
+          final errPattern = provider.translate('hourly_leave_min_error');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                errPattern.replaceAll('{duration}', formattedMin),
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        final maxMins = group.totalHourlyLeaveMaxMinutes;
+        if (maxMins > 0 && reqMinutes > maxMins) {
+          final formattedMax = formatMinutesToHoursAndMinutes(maxMins);
+          final errPattern = provider.translate('hourly_leave_max_error');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                errPattern.replaceAll('{duration}', formattedMax),
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint('Error checking hourly leave rules: $e');
       }
     }
 
@@ -612,49 +761,59 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   ]
                 : [],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 17,
-                color: isSelected
-                    ? const Color(0xFF0A2342)
-                    : (isDark ? Colors.white60 : Colors.black54),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
                   color: isSelected
                       ? const Color(0xFF0A2342)
-                      : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                      : (isDark ? Colors.white60 : Colors.black54),
                 ),
-              ),
-              if (badgeCount > 0) ...[
                 const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$badgeCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                        color: isSelected
+                            ? const Color(0xFF0A2342)
+                            : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                      ),
                     ),
                   ),
                 ),
+                if (badgeCount > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1197,6 +1356,16 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           // Reject Button
                           GestureDetector(
                             onTap: () async {
+                              if (provider.isDateStringInClosedMonth(request.date)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(provider.translate('cannot_modify_closed_month')),
+                                    backgroundColor: Colors.amber.shade800,
+                                  ),
+                                );
+                                return;
+                              }
+
                               await provider.updateRequestStatus(
                                 employee.id,
                                 request.id,
@@ -1254,6 +1423,16 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           // Approve Button
                           GestureDetector(
                             onTap: () async {
+                              if (provider.isDateStringInClosedMonth(request.date)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(provider.translate('cannot_modify_closed_month')),
+                                    backgroundColor: Colors.amber.shade800,
+                                  ),
+                                );
+                                return;
+                              }
+
                               final hasHRManager = provider.employees.any(
                                 (e) => (e.role == 'hr' || e.role == 'admin') && e.id != employee.id,
                               );
@@ -1369,8 +1548,19 @@ class _RequestsScreenState extends State<RequestsScreen> {
         : null;
     bool isClockIn = true;
     String? errorMessage;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final initGroupId = provider.getGroupIdForDate(selectedEmployee, today);
+    final initGroup = provider.groups.firstWhere(
+      (g) => g.id == initGroupId,
+      orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+    );
+    final initNotice = initGroup.annualLeaveMinNoticeDays;
+    final defaultStart = today.add(Duration(days: initNotice > 0 ? initNotice : 1));
+    final defaultEnd = defaultStart.add(const Duration(days: 1));
     final dateController = TextEditingController(
-      text: 'June 20 - June 22, 2026',
+      text:
+          '${DateFormat('MMMM d').format(defaultStart)} - ${DateFormat('MMMM d, yyyy').format(defaultEnd)}',
     );
     final durController = TextEditingController(text: '2 Days');
     final timeController = TextEditingController(
@@ -1513,7 +1703,18 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     setDialogState(() {
                       selectedType = val;
                       if (selectedType == 'Annual Leave') {
-                        dateController.text = 'June 20 - June 22, 2026';
+                        final now = DateTime.now();
+                        final today = DateTime(now.year, now.month, now.day);
+                        final gId = provider.getGroupIdForDate(selectedEmployee, today);
+                        final grp = provider.groups.firstWhere(
+                          (g) => g.id == gId,
+                          orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+                        );
+                        final notice = grp.annualLeaveMinNoticeDays;
+                        final start = today.add(Duration(days: notice > 0 ? notice : 1));
+                        final end = start.add(const Duration(days: 1));
+                        dateController.text =
+                            '${DateFormat('MMMM d').format(start)} - ${DateFormat('MMMM d, yyyy').format(end)}';
                         durController.text = '2 Days';
                       } else if (selectedType == 'Sick Leave') {
                         dateController.text = 'June 3, 2026';
@@ -1529,8 +1730,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         ).format(DateTime.now());
                         durController.text = '1 Day';
                       } else if (selectedType == 'Hourly Leave') {
-                        dateController.text = 'June 3, 2026';
-                        durController.text = '2 Hours';
+                        dateController.text = DateFormat(
+                          'MMMM d, yyyy',
+                        ).format(DateTime.now());
+                        fromTimeController.text = '15:00';
+                        toTimeController.text = '16:00';
+                        durController.text = formatHourlyLeaveDurationString(
+                          fromTimeController.text,
+                          toTimeController.text,
+                        );
                       } else if (selectedType == 'Overtime Approval') {
                         dateController.text = DateFormat(
                           'MMMM d, yyyy',
@@ -1567,43 +1775,48 @@ class _RequestsScreenState extends State<RequestsScreen> {
               ],
               SizedBox(height: 16),
               _buildDialogField(
-                isOvertime
+                (isOvertime || selectedType == 'Hourly Leave')
                     ? provider.translate('date')
                     : provider.translate('dates'),
                 dateController,
                 readOnly: true,
                 onTap: () async {
+                  DateTime firstPickerDate =
+                      DateTime.now().subtract(const Duration(days: 365));
+                  if (selectedType == 'Annual Leave') {
+                    final now = DateTime.now();
+                    final today = DateTime(now.year, now.month, now.day);
+                    final gId =
+                        provider.getGroupIdForDate(selectedEmployee, today);
+                    final grp = provider.groups.firstWhere(
+                      (g) => g.id == gId,
+                      orElse: () =>
+                          EmployeeGroup(id: '', name: 'None', shiftId: ''),
+                    );
+                    if (grp.annualLeaveMinNoticeDays > 0) {
+                      firstPickerDate =
+                          today.add(Duration(days: grp.annualLeaveMinNoticeDays));
+                    }
+                  }
+                  final lastPickerDate =
+                      DateTime.now().add(const Duration(days: 365));
+                  if (firstPickerDate.isAfter(lastPickerDate)) {
+                    firstPickerDate = lastPickerDate;
+                  }
+
                   final picked = await showDateRangePicker(
                     context: context,
-                    firstDate: DateTime.now().subtract(
-                      const Duration(days: 365),
-                    ),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                    builder: (context, child) {
-                      return Theme(
-                        data: ThemeData.dark().copyWith(
-                          colorScheme: ColorScheme.dark(
-                            primary: Color(0xFF2E65FF),
-                            onPrimary:
-                                ((Theme.of(
-                                  context,
-                                ).textTheme.bodyLarge?.color ??
-                                Colors.black)),
-                            surface: Color(0xFF1E293B),
-                            onSurface:
-                                ((Theme.of(
-                                  context,
-                                ).textTheme.bodyLarge?.color ??
-                                Colors.black)),
-                          ),
-                        ),
-                        child: child!,
-                      );
-                    },
+                    firstDate: firstPickerDate,
+                    lastDate: lastPickerDate,
+                    builder: buildAdaptivePickerTheme,
                   );
                   if (picked != null) {
                     setDialogState(() {
-                      if (picked.start == picked.end) {
+                      if (selectedType == 'Hourly Leave' || isOvertime) {
+                        dateController.text = DateFormat(
+                          'MMMM d, yyyy',
+                        ).format(picked.start);
+                      } else if (picked.start == picked.end) {
                         dateController.text = DateFormat(
                           'MMMM d, yyyy',
                         ).format(picked.start);
@@ -1619,6 +1832,87 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   }
                 },
               ),
+              if (provider.isDateStringInClosedMonth(dateController.text)) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade900.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_rounded, size: 16, color: Colors.amber.shade400),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          provider.translate('cannot_modify_closed_month'),
+                          style: TextStyle(
+                            color: Colors.amber.shade300,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (selectedType == 'Annual Leave') ...[
+                Builder(
+                  builder: (context) {
+                    final parsedDate = _parseRequestStartDate(dateController.text);
+                    if (parsedDate != null) {
+                      final groupId = provider.getGroupIdForDate(selectedEmployee, parsedDate);
+                      final group = provider.groups.firstWhere(
+                        (g) => g.id == groupId,
+                        orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+                      );
+                      final now = DateTime.now();
+                      final today = DateTime(now.year, now.month, now.day);
+                      final reqDate = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+                      final minNotice = group.annualLeaveMinNoticeDays;
+                      if (minNotice > 0 && reqDate.difference(today).inDays < minNotice) {
+                        final earliestDate = today.add(Duration(days: minNotice));
+                        final formattedEarliest = DateFormat('yyyy-MM-dd').format(earliestDate);
+                        final errPattern = provider.translate('annual_leave_min_notice_error');
+                        final msg = errPattern
+                            .replaceAll('{days}', minNotice.toString())
+                            .replaceAll('{date}', formattedEarliest);
+                        return Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade900.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.shade700.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline_rounded, size: 16, color: Colors.red.shade400),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  msg.isNotEmpty && !msg.contains('{')
+                                      ? msg
+                                      : 'Annual leave requires at least $minNotice days advance notice. Earliest: $formattedEarliest.',
+                                  style: TextStyle(
+                                    color: Colors.red.shade300,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
               SizedBox(height: 16),
               if (selectedType == 'Missing Punch') ...[
                 Row(
@@ -1670,27 +1964,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     final TimeOfDay? picked = await showTimePicker(
                       context: context,
                       initialTime: TimeOfDay.now(),
-                      builder: (context, child) {
-                        return Theme(
-                          data: ThemeData.dark().copyWith(
-                            colorScheme: ColorScheme.dark(
-                              primary: Color(0xFF2E65FF),
-                              onPrimary:
-                                  ((Theme.of(
-                                    context,
-                                  ).textTheme.bodyLarge?.color ??
-                                  Colors.black)),
-                              surface: Color(0xFF1E293B),
-                              onSurface:
-                                  ((Theme.of(
-                                    context,
-                                  ).textTheme.bodyLarge?.color ??
-                                  Colors.black)),
-                            ),
-                          ),
-                          child: child!,
-                        );
-                      },
+                      builder: buildAdaptivePickerTheme,
                     );
                     if (picked != null) {
                       setDialogState(() {
@@ -1707,7 +1981,7 @@ class _RequestsScreenState extends State<RequestsScreen> {
                     }
                   },
                 ),
-              ] else if (isOvertime) ...[
+              ] else if (isOvertime || selectedType == 'Hourly Leave') ...[
                 Row(
                   children: [
                     Expanded(
@@ -1723,34 +1997,14 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   int.tryParse(
                                     fromTimeController.text.split(':')[0],
                                   ) ??
-                                  17,
+                                  (selectedType == 'Hourly Leave' ? 15 : 17),
                               minute:
                                   int.tryParse(
                                     fromTimeController.text.split(':')[1],
                                   ) ??
                                   0,
                             ),
-                            builder: (context, child) {
-                              return Theme(
-                                data: ThemeData.dark().copyWith(
-                                  colorScheme: ColorScheme.dark(
-                                    primary: Color(0xFF2E65FF),
-                                    onPrimary:
-                                        (Theme.of(
-                                          context,
-                                        ).textTheme.bodyLarge?.color ??
-                                        Colors.black),
-                                    surface: Color(0xFF1E293B),
-                                    onSurface:
-                                        (Theme.of(
-                                          context,
-                                        ).textTheme.bodyLarge?.color ??
-                                        Colors.black),
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
+                            builder: buildAdaptivePickerTheme,
                           );
                           if (picked != null) {
                             setDialogState(() {
@@ -1780,7 +2034,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                     int.parse(tParts[1]);
                                 int diff = tMins - fMins;
                                 if (diff < 0) diff += 24 * 60;
-                                durController.text = diff.toString();
+                                if (selectedType == 'Hourly Leave') {
+                                  durController.text =
+                                      formatHourlyLeaveDurationString(
+                                    fromTimeController.text,
+                                    toTimeController.text,
+                                  );
+                                } else {
+                                  durController.text = diff.toString();
+                                }
                               } catch (_) {}
                             });
                           }
@@ -1801,34 +2063,14 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                   int.tryParse(
                                     toTimeController.text.split(':')[0],
                                   ) ??
-                                  19,
+                                  (selectedType == 'Hourly Leave' ? 16 : 19),
                               minute:
                                   int.tryParse(
                                     toTimeController.text.split(':')[1],
                                   ) ??
                                   0,
                             ),
-                            builder: (context, child) {
-                              return Theme(
-                                data: ThemeData.dark().copyWith(
-                                  colorScheme: ColorScheme.dark(
-                                    primary: Color(0xFF2E65FF),
-                                    onPrimary:
-                                        (Theme.of(
-                                          context,
-                                        ).textTheme.bodyLarge?.color ??
-                                        Colors.black),
-                                    surface: Color(0xFF1E293B),
-                                    onSurface:
-                                        (Theme.of(
-                                          context,
-                                        ).textTheme.bodyLarge?.color ??
-                                        Colors.black),
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
+                            builder: buildAdaptivePickerTheme,
                           );
                           if (picked != null) {
                             setDialogState(() {
@@ -1858,7 +2100,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
                                     int.parse(tParts[1]);
                                 int diff = tMins - fMins;
                                 if (diff < 0) diff += 24 * 60;
-                                durController.text = diff.toString();
+                                if (selectedType == 'Hourly Leave') {
+                                  durController.text =
+                                      formatHourlyLeaveDurationString(
+                                    fromTimeController.text,
+                                    toTimeController.text,
+                                  );
+                                } else {
+                                  durController.text = diff.toString();
+                                }
                               } catch (_) {}
                             });
                           }
@@ -1878,6 +2128,57 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   provider.translate('duration_description'),
                   durController,
                   keyboardType: TextInputType.text,
+                ),
+              ],
+              if (selectedType == 'Hourly Leave') ...[
+                Builder(
+                  builder: (context) {
+                    final minMins = group.totalHourlyLeaveMinMinutes;
+                    final maxMins = group.totalHourlyLeaveMaxMinutes;
+                    if (minMins > 0 || maxMins > 0) {
+                      final minStr = minMins > 0
+                          ? '${formatMinutesToTimeString(minMins)} (${formatMinutesToHoursAndMinutes(minMins)})'
+                          : '00:00';
+                      final maxStr = maxMins > 0
+                          ? '${formatMinutesToTimeString(maxMins)} (${formatMinutesToHoursAndMinutes(maxMins)})'
+                          : 'unlimited';
+                      final infoMsg = provider
+                          .translate('allowed_hourly_limits')
+                          .replaceAll('{min}', minStr)
+                          .replaceAll('{max}', maxStr);
+                      return Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2E65FF).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFF2E65FF).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: Color(0xFF60A5FA),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                infoMsg,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
                 ),
               ],
               if (isOvertime) ...[
@@ -1998,6 +2299,13 @@ class _RequestsScreenState extends State<RequestsScreen> {
                         return;
                       }
 
+                      if (provider.isDateStringInClosedMonth(dateVal)) {
+                        setDialogState(() {
+                          errorMessage = provider.translate('cannot_modify_closed_month');
+                        });
+                        return;
+                      }
+
                       if (type == 'Annual Leave') {
                         final match = RegExp(r'(\d+)').firstMatch(durVal);
                         int days = 1;
@@ -2031,6 +2339,36 @@ class _RequestsScreenState extends State<RequestsScreen> {
                           setDialogState(() {
                             errorMessage =
                                 '${selectedEmployee.name} does not have enough balance for this request. (Requested: ${requestedHours.toStringAsFixed(1)}h, Balance: ${selectedEmployee.annualLeaveBalance.toStringAsFixed(1)}h)';
+                          });
+                          return;
+                        }
+                      }
+
+                      if (type == 'Hourly Leave') {
+                        final reqMinutes = parseHourlyLeaveDurationMinutes(durVal);
+                        if (reqMinutes <= 0) {
+                          setDialogState(() {
+                            errorMessage = provider.translate('invalid_duration_error');
+                          });
+                          return;
+                        }
+
+                        final minMins = group.totalHourlyLeaveMinMinutes;
+                        if (minMins > 0 && reqMinutes < minMins) {
+                          final formattedMin = formatMinutesToHoursAndMinutes(minMins);
+                          final errPattern = provider.translate('hourly_leave_min_error');
+                          setDialogState(() {
+                            errorMessage = errPattern.replaceAll('{duration}', formattedMin);
+                          });
+                          return;
+                        }
+
+                        final maxMins = group.totalHourlyLeaveMaxMinutes;
+                        if (maxMins > 0 && reqMinutes > maxMins) {
+                          final formattedMax = formatMinutesToHoursAndMinutes(maxMins);
+                          final errPattern = provider.translate('hourly_leave_max_error');
+                          setDialogState(() {
+                            errorMessage = errPattern.replaceAll('{duration}', formattedMax);
                           });
                           return;
                         }

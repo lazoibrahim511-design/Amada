@@ -9,6 +9,8 @@ class ChatMessage {
   final bool isRequestCard;
   final String? requestId;
   final bool isRead;
+  final String? companyCode;
+  final String? senderName;
 
   ChatMessage({
     required this.id,
@@ -19,6 +21,8 @@ class ChatMessage {
     this.isRequestCard = false,
     this.requestId,
     this.isRead = false,
+    this.companyCode,
+    this.senderName,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +35,8 @@ class ChatMessage {
       'isRequestCard': isRequestCard,
       'requestId': requestId,
       'isRead': isRead,
+      'companyCode': companyCode,
+      'senderName': senderName,
     };
   }
 
@@ -59,6 +65,8 @@ class ChatMessage {
       isRequestCard: map['isRequestCard'] == true,
       requestId: map['requestId']?.toString(),
       isRead: map['isRead'] == true,
+      companyCode: map['companyCode']?.toString(),
+      senderName: map['senderName']?.toString(),
     );
   }
 
@@ -71,6 +79,8 @@ class ChatMessage {
     bool? isRequestCard,
     String? requestId,
     bool? isRead,
+    String? companyCode,
+    String? senderName,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -81,6 +91,8 @@ class ChatMessage {
       isRequestCard: isRequestCard ?? this.isRequestCard,
       requestId: requestId ?? this.requestId,
       isRead: isRead ?? this.isRead,
+      companyCode: companyCode ?? this.companyCode,
+      senderName: senderName ?? this.senderName,
     );
   }
 }

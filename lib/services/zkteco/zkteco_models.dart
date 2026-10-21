@@ -123,6 +123,7 @@ class ZkDeviceConfig {
   final DateTime? lastSyncTime;
   final String lastSyncStatus;
   final ZkDeviceInfo? cachedInfo;
+  final String companyCode;
 
   const ZkDeviceConfig({
     required this.id,
@@ -134,6 +135,7 @@ class ZkDeviceConfig {
     this.lastSyncTime,
     this.lastSyncStatus = 'Not synced yet',
     this.cachedInfo,
+    this.companyCode = '',
   });
 
   ZkDeviceConfig copyWith({
@@ -146,6 +148,7 @@ class ZkDeviceConfig {
     DateTime? lastSyncTime,
     String? lastSyncStatus,
     ZkDeviceInfo? cachedInfo,
+    String? companyCode,
   }) {
     return ZkDeviceConfig(
       id: id ?? this.id,
@@ -157,6 +160,7 @@ class ZkDeviceConfig {
       lastSyncTime: lastSyncTime ?? this.lastSyncTime,
       lastSyncStatus: lastSyncStatus ?? this.lastSyncStatus,
       cachedInfo: cachedInfo ?? this.cachedInfo,
+      companyCode: companyCode ?? this.companyCode,
     );
   }
 
@@ -170,6 +174,7 @@ class ZkDeviceConfig {
       'isEnabled': isEnabled,
       'lastSyncTime': lastSyncTime?.toIso8601String(),
       'lastSyncStatus': lastSyncStatus,
+      'companyCode': companyCode.trim().toLowerCase(),
     };
   }
 
@@ -185,6 +190,7 @@ class ZkDeviceConfig {
           ? DateTime.tryParse(map['lastSyncTime'].toString())
           : null,
       lastSyncStatus: map['lastSyncStatus']?.toString() ?? 'Not synced yet',
+      companyCode: map['companyCode']?.toString().trim().toLowerCase() ?? '',
     );
   }
 }

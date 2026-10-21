@@ -25,10 +25,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     _scrollToBottom(isInit: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Provider.of<AttendanceProvider>(context, listen: false)
-            .ensureChatLoaded(widget.contact.id);
+        final prov = Provider.of<AttendanceProvider>(context, listen: false);
+        prov.setActiveChatContactId(widget.contact.id);
+        prov.ensureChatLoaded(widget.contact.id);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    try {
+      Provider.of<AttendanceProvider>(context, listen: false)
+          .setActiveChatContactId(null);
+    } catch (_) {}
+    super.dispose();
   }
 
   void _scrollToBottom({bool isInit = false}) {

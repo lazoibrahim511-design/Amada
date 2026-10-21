@@ -29,6 +29,22 @@ class HrEmployeesTab extends StatefulWidget {
     this.onDelete,
   });
 
+  static void showEmployeeFormDialog({
+    required BuildContext context,
+    required AttendanceProvider provider,
+    CompanyEmployee? employee,
+  }) {
+    _HrEmployeesTabState._showUserFormDialog(
+      context: context,
+      provider: provider,
+      employee: employee,
+    );
+  }
+
+  static void showLicenseLimitDialog(BuildContext context, AttendanceProvider provider) {
+    _HrEmployeesTabState._showLicenseLimitDialog(context, provider);
+  }
+
   @override
   State<HrEmployeesTab> createState() => _HrEmployeesTabState();
 }
@@ -142,10 +158,10 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
           ),
           _buildKpiChip(
             context: context,
-            label: provider.translate('active_users'),
-            value: '$active',
-            icon: Icons.check_circle_rounded,
-            color: const Color(0xFF10B981),
+            label: provider.translate('active_users_quota_stat'),
+            value: provider.maxActiveUsers > 0 ? '$active / ${provider.maxActiveUsers}' : '$active',
+            icon: active >= provider.maxActiveUsers ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+            color: active >= provider.maxActiveUsers ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
             isDark: isDark,
             width: isMobile ? 140 : 160,
           ),
@@ -279,35 +295,8 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
         final isMobile = constraints.maxWidth < 650;
         
         if (isMobile) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Top Action Buttons on Mobile
-              Row(
-                children: [
-                  Expanded(
-                    child: NeuButton(
-                      onPressed: () => _showUserFormDialog(context: context, provider: provider),
-                      icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
-                      label: provider.translate('add_user'),
-                      variant: NeuButtonVariant.primary,
-                      height: 40,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  NeuIconButton(
-                    onPressed: () => _showResequenceConfirm(context, provider),
-                    icon: const Icon(Icons.format_list_numbered_rounded, size: 18),
-                    tooltip: provider.translate('resequence_ids'),
-                    size: 40,
-                    variant: NeuButtonVariant.whitePill,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Mobile Filter Chips / Dropdowns Scrollable Row
-              SingleChildScrollView(
+          // Mobile Filter Chips / Dropdowns Scrollable Row
+          return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 child: Row(
@@ -360,9 +349,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                     ),
                   ],
                 ),
-              ),
-            ],
-          );
+              );
         }
 
         // Desktop layout
@@ -419,31 +406,6 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 ),
               ],
             ),
-            const Spacer(),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                NeuButton(
-                  onPressed: () => _showResequenceConfirm(context, provider),
-                  icon: const Icon(Icons.format_list_numbered_rounded, size: 16),
-                  label: provider.translate('resequence_ids'),
-                  variant: NeuButtonVariant.navy,
-                  height: 38,
-                  fontSize: 12.5,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                ),
-                NeuButton(
-                  onPressed: () => _showUserFormDialog(context: context, provider: provider),
-                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
-                  label: provider.translate('add_user'),
-                  variant: NeuButtonVariant.primary,
-                  height: 38,
-                  fontSize: 13,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
-              ],
-            ),
           ],
         );
       },
@@ -475,7 +437,9 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: value,
+          value: items.any((item) => item.value == value)
+              ? value
+              : (items.isNotEmpty ? items.first.value! : value),
           items: items,
           onChanged: onChanged,
           dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -697,11 +661,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                         if (value == 'view') {
                           _showUserDetailsDialog(context, employee, provider, isDark);
                         } else if (value == 'edit') {
-                          if (widget.onEdit != null) {
-                            widget.onEdit!(employee);
-                          } else {
-                            _showUserFormDialog(context: context, provider: provider, employee: employee);
-                          }
+                          _showUserFormDialog(context: context, provider: provider, employee: employee);
                         } else if (value == 'face') {
                           _showFaceIdManageDialog(context, employee, provider);
                         } else if (value == 'toggle_status') {
@@ -717,11 +677,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                             ),
                           );
                         } else if (value == 'delete') {
-                          if (widget.onDelete != null) {
-                            widget.onDelete!(employee.id);
-                          } else {
-                            _showDeleteConfirm(context, employee, provider);
-                          }
+                          _showDeleteConfirm(context, employee, provider);
                         }
                       },
                       itemBuilder: (context) => [
@@ -881,31 +837,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                         ),
                       ),
 
-                    // Insurance Badge
-                    if (employee.hasInsurance)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2E65FF).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.3), width: 0.8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.shield_outlined, size: 11, color: Color(0xFF2E65FF)),
-                            const SizedBox(width: 4),
-                            Text(
-                              provider.translate('social_insurance_title'),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF2E65FF),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -962,11 +894,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                             tooltip: 'Edit',
                             color: isDark ? Colors.white70 : const Color(0xFF475569),
                             onPressed: () {
-                              if (widget.onEdit != null) {
-                                widget.onEdit!(employee);
-                              } else {
-                                _showUserFormDialog(context: context, provider: provider, employee: employee);
-                              }
+                              _showUserFormDialog(context: context, provider: provider, employee: employee);
                             },
                           ),
                           const SizedBox(width: 8),
@@ -1214,32 +1142,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                                         ],
                                       ),
                                     ),
-                                    if (employee.hasInsurance) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF2E65FF).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.3), width: 0.8),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.shield_outlined, size: 10, color: Color(0xFF2E65FF)),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              provider.translate('social_insurance_title'),
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF2E65FF),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+
                                   ],
                                 ),
                               ],
@@ -1328,11 +1231,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(6),
                                     onTap: () {
-                                      if (widget.onEdit != null) {
-                                        widget.onEdit!(employee);
-                                      } else {
-                                        _showUserFormDialog(context: context, provider: provider, employee: employee);
-                                      }
+                                      _showUserFormDialog(context: context, provider: provider, employee: employee);
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.all(5),
@@ -1374,11 +1273,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(6),
                                     onTap: () {
-                                      if (widget.onDelete != null) {
-                                        widget.onDelete!(employee.id);
-                                      } else {
-                                        _showDeleteConfirm(context, employee, provider);
-                                      }
+                                      _showDeleteConfirm(context, employee, provider);
                                     },
                                     child: const Padding(
                                       padding: EdgeInsets.all(5),
@@ -1436,7 +1331,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     );
   }
 
-  bool _isPdfDocument(String source) {
+  static bool _isPdfDocument(String source) {
     final clean = source.trim();
     if (clean.toLowerCase().endsWith('.pdf')) return true;
     if (clean.startsWith('data:application/pdf')) return true;
@@ -1455,7 +1350,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     return false;
   }
 
-  Uint8List? _getDocumentBytes(String source) {
+  static Uint8List? _getDocumentBytes(String source) {
     try {
       String base64Str = source.trim();
       if (base64Str.contains(',')) {
@@ -1469,7 +1364,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     }
   }
 
-  Future<void> _downloadDocumentFile(BuildContext context, String title, String source) async {
+  static Future<void> _downloadDocumentFile(BuildContext context, String title, String source) async {
     try {
       final isPdf = _isPdfDocument(source);
       final bytes = _getDocumentBytes(source);
@@ -1514,7 +1409,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     }
   }
 
-  void _showDocumentPreviewDialog(BuildContext context, String title, String documentSource) {
+  static void _showDocumentPreviewDialog(BuildContext context, String title, String documentSource) {
     final isPdf = _isPdfDocument(documentSource);
     final docBytes = _getDocumentBytes(documentSource);
     final imageProvider = !isPdf ? getAvatarProvider(documentSource) : null;
@@ -1701,7 +1596,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
   ) {
     int activeTab = 0;
     final primaryColor = const Color(0xFF2E65FF);
-    final tabBg = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04);
+    final tabBg = isDark ? const Color(0xFF0F172A).withValues(alpha: 0.6) : const Color(0xFFF1F5F9);
     final tabActiveBg = primaryColor.withValues(alpha: 0.18);
 
     showGlassDialog(
@@ -1850,14 +1745,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                   _buildDetailRow('Hire Date', employee.startDate.isNotEmpty ? employee.startDate : 'N/A', isDark),
                   _buildDetailRow('Annual Leave Balance', '${employee.annualLeaveBalance} hours', isDark),
                   _buildDetailRow('Account Status', employee.disabled ? 'SUSPENDED' : 'ACTIVE', isDark),
-                  _buildDetailRow(
-                    'Social Insurance',
-                    employee.hasInsurance
-                        ? 'ACTIVE (${NumberFormat('#,##0').format(employee.insuranceSalary > 0 ? employee.insuranceSalary : employee.basicSalary)} ${employee.salaryCurrency.isNotEmpty ? employee.salaryCurrency : 'USD'})'
-                        : 'INACTIVE',
-                    isDark,
-                    valueColor: employee.hasInsurance ? const Color(0xFF2E65FF) : (isDark ? Colors.white60 : Colors.black54),
-                  ),
+
                   _buildDetailRow(
                     'Face ID Biometrics',
                     employee.faceEmbedding != null ? 'ENROLLED & VERIFIED' : 'NOT ENROLLED',
@@ -2031,12 +1919,15 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     );
   }
 
-  void _showUserFormDialog({
+  static void _showUserFormDialog({
     required BuildContext context,
     required AttendanceProvider provider,
     CompanyEmployee? employee,
   }) {
     final isEditing = employee != null;
+    final targetCompany = (employee != null && employee.companyCode.isNotEmpty)
+        ? employee.companyCode
+        : (provider.currentCompanyCode == 'all' ? '' : provider.currentCompanyCode);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subtextColor = isDark ? Colors.white60 : const Color(0xFF64748B);
@@ -2053,7 +1944,9 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
 
     // Basic & System Controllers
     final userIdController = TextEditingController(
-      text: employee != null ? employee.id : provider.getNextEmployeeId(),
+      text: employee != null
+          ? employee.id
+          : provider.getNextEmployeeId(companyCode: targetCompany.isNotEmpty ? targetCompany : null),
     );
     final nameController = TextEditingController(text: employee?.name ?? '');
     final emailController = TextEditingController(text: employee?.email ?? '');
@@ -2061,14 +1954,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     final passwordController = TextEditingController(text: employee?.password ?? '');
     final phoneController = TextEditingController(text: employee?.phoneNumber ?? '');
     final salaryController = TextEditingController(text: employee?.basicSalary.toString() ?? '0');
-    bool formHasInsurance = employee?.hasInsurance ?? false;
-    final insuranceSalaryController = TextEditingController(
-      text: (employee?.insuranceSalary != null && employee!.insuranceSalary > 0)
-          ? employee.insuranceSalary.toString()
-          : (employee?.basicSalary != null && employee!.basicSalary > 0
-              ? employee.basicSalary.toString()
-              : ''),
-    );
+
     final annualLeaveBalanceController = TextEditingController(
       text: employee != null ? employee.annualLeaveBalance.toString() : '24.0',
     );
@@ -2083,11 +1969,14 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
 
     // General Info Controllers & State
     final dobController = TextEditingController(text: employee?.dateOfBirth ?? '');
-    String? selectedGender = employee?.gender;
-    String? selectedMaritalStatus = employee?.maritalStatus;
+    final validGenders = ['Male', 'Female'];
+    String? selectedGender = validGenders.contains(employee?.gender) ? employee?.gender : null;
+    final validMarital = ['Single', 'Married', 'Divorced', 'Widowed'];
+    String? selectedMaritalStatus = validMarital.contains(employee?.maritalStatus) ? employee?.maritalStatus : null;
     final emergencyContactController = TextEditingController(text: employee?.emergencyContact ?? '');
     final emergencyPhoneController = TextEditingController(text: employee?.emergencyPhone ?? '');
-    String? selectedBloodGroup = employee?.bloodGroup;
+    final validBlood = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+    String? selectedBloodGroup = validBlood.contains(employee?.bloodGroup) ? employee?.bloodGroup : null;
     final nationalityController = TextEditingController(text: employee?.nationality ?? '');
     final addressController = TextEditingController(text: employee?.address ?? '');
 
@@ -2406,7 +2295,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
       icon: isEditing ? Icons.edit_note_rounded : Icons.person_add_rounded,
       content: StatefulBuilder(
         builder: (context, setDialogState) {
-          final tabBg = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04);
+          final tabBg = isDark ? const Color(0xFF0F172A).withValues(alpha: 0.6) : const Color(0xFFF1F5F9);
           final tabActiveBg = primaryColor.withValues(alpha: 0.18);
 
           return SingleChildScrollView(
@@ -2597,7 +2486,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: DropdownButtonFormField<String>(
+                        child: DropdownButtonFormField<String?>(
                           initialValue: selectedGender,
                           dropdownColor: dropdownBg,
                           style: TextStyle(color: textColor),
@@ -2610,7 +2499,6 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                             DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), style: TextStyle(color: textColor))),
                             DropdownMenuItem(value: 'Male', child: Text(provider.translate('male'), style: TextStyle(color: textColor))),
                             DropdownMenuItem(value: 'Female', child: Text(provider.translate('female'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Other', child: Text(provider.translate('other'), style: TextStyle(color: textColor))),
                           ],
                           onChanged: (val) => setDialogState(() => selectedGender = val),
                         ),
@@ -2623,7 +2511,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                   Row(
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<String>(
+                        child: DropdownButtonFormField<String?>(
                           initialValue: selectedMaritalStatus,
                           dropdownColor: dropdownBg,
                           style: TextStyle(color: textColor),
@@ -2644,7 +2532,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: DropdownButtonFormField<String>(
+                        child: DropdownButtonFormField<String?>(
                           initialValue: selectedBloodGroup,
                           dropdownColor: dropdownBg,
                           style: TextStyle(color: textColor),
@@ -2786,78 +2674,132 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                   const SizedBox(height: 12),
                   
                   // Role Selection Dropdown
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedRole,
-                    dropdownColor: dropdownBg,
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      labelText: provider.translate('access_role'),
-                      labelStyle: TextStyle(color: labelColor),
-                      prefixIcon: Icon(Icons.security_outlined, size: 18, color: iconColor),
-                    ),
-                    items: [
-                      DropdownMenuItem(value: 'employee', child: Text(provider.translate('employee_role'), style: TextStyle(color: textColor))),
-                      DropdownMenuItem(value: 'supervisor', child: Text(provider.translate('supervisor_role'), style: TextStyle(color: textColor))),
-                      DropdownMenuItem(value: 'hr', child: Text(provider.translate('role_hr_admin'), style: TextStyle(color: textColor))),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => selectedRole = val);
-                      }
+                  Builder(
+                    builder: (context) {
+                      final validRoles = ['employee', 'supervisor', 'hr'];
+                      final safeRole = validRoles.contains(selectedRole.toLowerCase())
+                          ? selectedRole.toLowerCase()
+                          : 'employee';
+                      return DropdownButtonFormField<String>(
+                        initialValue: safeRole,
+                        dropdownColor: dropdownBg,
+                        style: TextStyle(color: textColor),
+                        decoration: InputDecoration(
+                          labelText: provider.translate('access_role'),
+                          labelStyle: TextStyle(color: labelColor),
+                          prefixIcon: Icon(Icons.security_outlined, size: 18, color: iconColor),
+                        ),
+                        items: [
+                          DropdownMenuItem(value: 'employee', child: Text(provider.translate('employee_role'), style: TextStyle(color: textColor))),
+                          DropdownMenuItem(value: 'supervisor', child: Text(provider.translate('supervisor_role'), style: TextStyle(color: textColor))),
+                          DropdownMenuItem(value: 'hr', child: Text(provider.translate('role_hr_admin'), style: TextStyle(color: textColor))),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() => selectedRole = val);
+                          }
+                        },
+                      );
                     },
                   ),
                   const SizedBox(height: 12),
 
                   // Structure Dropdown
-                  DropdownButtonFormField<String?>(
-                    initialValue: selectedStructure,
-                    dropdownColor: dropdownBg,
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      labelText: provider.translate('structure_department'),
-                      labelStyle: TextStyle(color: labelColor),
-                      prefixIcon: Icon(Icons.corporate_fare_outlined, size: 18, color: iconColor),
-                    ),
-                    items: [
-                      DropdownMenuItem(value: null, child: Text(provider.translate('none_unassigned'), style: TextStyle(color: textColor))),
-                      ...provider.structures.map(
-                        (s) => DropdownMenuItem(value: s.id, child: Text(s.name, style: TextStyle(color: textColor))),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setDialogState(() => selectedStructure = val);
+                  Builder(
+                    builder: (context) {
+                      final seenStructs = <String?>{};
+                      final structItems = <DropdownMenuItem<String?>>[
+                        DropdownMenuItem(value: null, child: Text(provider.translate('none_unassigned'), style: TextStyle(color: textColor))),
+                      ];
+                      seenStructs.add(null);
+
+                      for (final s in provider.structures) {
+                        if (!seenStructs.contains(s.id)) {
+                          seenStructs.add(s.id);
+                          structItems.add(DropdownMenuItem(value: s.id, child: Text(s.name, style: TextStyle(color: textColor))));
+                        }
+                      }
+
+                      if (selectedStructure != null && !seenStructs.contains(selectedStructure)) {
+                        final structMatch = provider.structures.where((s) => s.id == selectedStructure).firstOrNull;
+                        final label = structMatch?.name ?? '(${provider.translate('department')}: $selectedStructure)';
+                        structItems.add(
+                          DropdownMenuItem(
+                            value: selectedStructure,
+                            child: Text(label, style: TextStyle(color: textColor)),
+                          ),
+                        );
+                      }
+
+                      return DropdownButtonFormField<String?>(
+                        initialValue: selectedStructure,
+                        dropdownColor: dropdownBg,
+                        style: TextStyle(color: textColor),
+                        decoration: InputDecoration(
+                          labelText: provider.translate('structure_department'),
+                          labelStyle: TextStyle(color: labelColor),
+                          prefixIcon: Icon(Icons.corporate_fare_outlined, size: 18, color: iconColor),
+                        ),
+                        items: structItems,
+                        onChanged: (val) {
+                          setDialogState(() => selectedStructure = val);
+                        },
+                      );
                     },
                   ),
                   const SizedBox(height: 12),
 
                   // Group / Shift Dropdown
-                  DropdownButtonFormField<String?>(
-                    initialValue: selectedGroup,
-                    dropdownColor: dropdownBg,
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      labelText: provider.translate('employee_group_shift'),
-                      labelStyle: TextStyle(color: labelColor),
-                      prefixIcon: Icon(Icons.schedule_outlined, size: 18, color: iconColor),
-                    ),
-                    items: [
-                      DropdownMenuItem(value: null, child: Text(provider.translate('none_standard'), style: TextStyle(color: textColor))),
-                      ...provider.groups.map(
-                        (g) {
+                  Builder(
+                    builder: (context) {
+                      final seenGroups = <String?>{};
+                      final groupItems = <DropdownMenuItem<String?>>[
+                        DropdownMenuItem(value: null, child: Text(provider.translate('none_standard'), style: TextStyle(color: textColor))),
+                      ];
+                      seenGroups.add(null);
+
+                      for (final g in provider.groups) {
+                        if (!seenGroups.contains(g.id)) {
+                          seenGroups.add(g.id);
                           final shift = provider.shifts.where((s) => s.id == g.shiftId).firstOrNull;
                           final shiftName = shift != null ? ' (${shift.name})' : '';
-                          return DropdownMenuItem(value: g.id, child: Text('${g.name}$shiftName', style: TextStyle(color: textColor)));
-                        },
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedGroup = val;
-                        if (val != employee?.groupId) {
-                          groupStartDateController.text = nowStr;
-                          groupEndDateController.clear();
+                          groupItems.add(
+                            DropdownMenuItem(value: g.id, child: Text('${g.name}$shiftName', style: TextStyle(color: textColor))),
+                          );
                         }
-                      });
+                      }
+
+                      if (selectedGroup != null && !seenGroups.contains(selectedGroup)) {
+                        final groupMatch = provider.groups.where((g) => g.id == selectedGroup).firstOrNull;
+                        final label = groupMatch?.name ?? '(${provider.translate('shift')}: $selectedGroup)';
+                        groupItems.add(
+                          DropdownMenuItem(
+                            value: selectedGroup,
+                            child: Text(label, style: TextStyle(color: textColor)),
+                          ),
+                        );
+                      }
+
+                      return DropdownButtonFormField<String?>(
+                        initialValue: selectedGroup,
+                        dropdownColor: dropdownBg,
+                        style: TextStyle(color: textColor),
+                        decoration: InputDecoration(
+                          labelText: provider.translate('employee_group_shift'),
+                          labelStyle: TextStyle(color: labelColor),
+                          prefixIcon: Icon(Icons.schedule_outlined, size: 18, color: iconColor),
+                        ),
+                        items: groupItems,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedGroup = val;
+                            if (val != employee?.groupId) {
+                              groupStartDateController.text = nowStr;
+                              groupEndDateController.clear();
+                            }
+                          });
+                        },
+                      );
                     },
                   ),
                   if (selectedGroup != null) ...[
@@ -3035,13 +2977,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                     controller: salaryController,
                     style: TextStyle(color: textColor),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) {
-                      setDialogState(() {
-                        if (formHasInsurance && insuranceSalaryController.text.trim().isEmpty) {
-                          insuranceSalaryController.text = salaryController.text;
-                        }
-                      });
-                    },
+                    onChanged: (_) => setDialogState(() {}),
                     decoration: InputDecoration(
                       labelText: '${provider.translate('basic_salary')} (${employee?.salaryCurrency.isNotEmpty == true ? employee!.salaryCurrency : 'USD'})',
                       labelStyle: TextStyle(color: labelColor),
@@ -3050,145 +2986,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Social Insurance Section
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: formHasInsurance
-                            ? const Color(0xFF2E65FF).withValues(alpha: 0.4)
-                            : borderColor,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.shield_outlined,
-                                  size: 18,
-                                  color: formHasInsurance ? const Color(0xFF2E65FF) : iconColor,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  provider.translate('social_insurance_title'),
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Switch(
-                              value: formHasInsurance,
-                              activeThumbColor: const Color(0xFF2E65FF),
-                              onChanged: (val) {
-                                setDialogState(() {
-                                  formHasInsurance = val;
-                                  if (val && insuranceSalaryController.text.trim().isEmpty) {
-                                    insuranceSalaryController.text = salaryController.text;
-                                  }
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        if (formHasInsurance) ...[
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: insuranceSalaryController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            style: TextStyle(color: textColor),
-                            onChanged: (_) => setDialogState(() {}),
-                            decoration: InputDecoration(
-                              labelText: '${provider.translate('insurance_salary_label')} (${employee?.salaryCurrency.isNotEmpty == true ? employee!.salaryCurrency : 'USD'})',
-                              labelStyle: TextStyle(color: labelColor),
-                              helperText: provider.translate('optional_insurance_hint'),
-                              helperStyle: TextStyle(color: subtextColor, fontSize: 10),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Builder(
-                            builder: (context) {
-                              final insSal = double.tryParse(insuranceSalaryController.text) ?? (double.tryParse(salaryController.text) ?? 0.0);
-                              final ins5 = insSal * 0.05;
-                              final ins12 = insSal * 0.12;
-                              final curr = employee?.salaryCurrency.isNotEmpty == true ? employee!.salaryCurrency : 'USD';
-                              return Row(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFF5C5C).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: const Color(0xFFFF5C5C).withValues(alpha: 0.25)),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            provider.translate('ins_5_short'),
-                                            style: const TextStyle(color: Color(0xFFFF5C5C), fontSize: 11, fontWeight: FontWeight.bold),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '-${NumberFormat('#,##0').format(ins5)} $curr',
-                                            style: const TextStyle(color: Color(0xFFFF5C5C), fontSize: 12, fontWeight: FontWeight.bold),
-                                          ),
-                                          Text(
-                                            provider.translate('insurance_5_desc'),
-                                            style: TextStyle(color: subtextColor, fontSize: 9.5),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF00E5CE).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: const Color(0xFF00E5CE).withValues(alpha: 0.25)),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            provider.translate('ins_12_short'),
-                                            style: const TextStyle(color: Color(0xFF00E5CE), fontSize: 11, fontWeight: FontWeight.bold),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '${NumberFormat('#,##0').format(ins12)} $curr',
-                                            style: const TextStyle(color: Color(0xFF00E5CE), fontSize: 12, fontWeight: FontWeight.bold),
-                                          ),
-                                          Text(
-                                            provider.translate('insurance_12_desc'),
-                                            style: TextStyle(color: subtextColor, fontSize: 9.5),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+
 
                   // Face ID Biometrics Section
                   if (provider.isHRManager)
@@ -3487,10 +3285,12 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
           variant: NeuButtonVariant.primary,
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 18),
-          onPressed: () {
+          onPressed: () async {
             final enteredId = userIdController.text.trim().isNotEmpty
                 ? userIdController.text.trim()
-                : (employee != null ? employee.id : provider.getNextEmployeeId());
+                : (employee != null
+                    ? employee.id
+                    : provider.getNextEmployeeId(companyCode: targetCompany.isNotEmpty ? targetCompany : null));
             final name = nameController.text.trim();
             final email = emailController.text.trim();
             final pos = positionController.text.trim();
@@ -3502,9 +3302,11 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
               return;
             }
 
-            final conflict = provider.employees.where(
-              (e) => e.id.toLowerCase() == enteredId.toLowerCase() && (employee == null || e.id != employee.id),
-            ).firstOrNull;
+            final conflict = provider.getEmployeeConflict(
+              enteredId,
+              companyCode: targetCompany.isNotEmpty ? targetCompany : null,
+              excludeEmpId: employee?.id,
+            );
             if (conflict != null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -3520,12 +3322,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
             }
 
             final salaryVal = double.tryParse(salaryController.text) ?? 0.0;
-            final parsedInsSalary = double.tryParse(insuranceSalaryController.text);
-            final double finalInsSalary = formHasInsurance
-                ? (parsedInsSalary != null && parsedInsSalary > 0
-                    ? parsedInsSalary
-                    : salaryVal)
-                : 0.0;
+
             final leaveBalanceVal = double.tryParse(annualLeaveBalanceController.text.trim()) ?? (employee?.annualLeaveBalance ?? 24.0);
 
             List<GroupHistoryEntry> gHistory = List<GroupHistoryEntry>.from(tempGroupHistory);
@@ -3668,15 +3465,13 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                     foodAllowance: employee.foodAllowance,
                     transportationAllowance: employee.transportationAllowance,
                     otherAllowance: employee.otherAllowance,
-                    hasInsurance: formHasInsurance,
-                    insuranceSalary: finalInsSalary,
+                    hasInsurance: employee.hasInsurance,
+                    insuranceSalary: employee.insuranceSalary,
                   ),
                 );
               } else if (sHistory.isNotEmpty) {
                 final lastIdx = sHistory.length - 1;
                 sHistory[lastIdx] = sHistory[lastIdx].copyWith(
-                  hasInsurance: formHasInsurance,
-                  insuranceSalary: finalInsSalary,
                   basicSalary: salaryVal > 0 ? salaryVal : sHistory[lastIdx].basicSalary,
                 );
               }
@@ -3699,8 +3494,8 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 basicSalary: salaryVal,
                 workingHours: employee.workingHours > 0 ? employee.workingHours : 160.0,
                 salaryHistory: sHistory,
-                hasInsurance: formHasInsurance,
-                insuranceSalary: finalInsSalary,
+                hasInsurance: employee.hasInsurance,
+                insuranceSalary: employee.insuranceSalary,
                 faceEmbedding: formFaceEmbedding,
                 overrideFaceEmbedding: true,
                 // General Info
@@ -3725,7 +3520,10 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 residenceCardAttachment: residenceCardAttachment,
                 overrideResidenceCardAttachment: true,
               );
-              provider.updateEmployee(newOrUpdatedEmp, oldId: employee.id);
+              if (newOrUpdatedEmp.companyCode.isEmpty && targetCompany.isNotEmpty) {
+                newOrUpdatedEmp = newOrUpdatedEmp.copyWith(companyCode: targetCompany);
+              }
+              await provider.updateEmployee(newOrUpdatedEmp, oldId: employee.id);
             } else {
               List<SalaryHistoryEntry> initialHistory = [];
               if (salaryVal > 0) {
@@ -3736,13 +3534,14 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                     currency: 'USD',
                     startDate: nowStr,
                     endDate: null,
-                    hasInsurance: formHasInsurance,
-                    insuranceSalary: finalInsSalary,
+                    hasInsurance: false,
+                    insuranceSalary: 0.0,
                   ),
                 );
               }
               newOrUpdatedEmp = CompanyEmployee(
                 id: enteredId,
+                companyCode: targetCompany,
                 name: name,
                 email: email,
                 position: pos.isNotEmpty ? pos : 'Team Member',
@@ -3758,8 +3557,8 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 basicSalary: salaryVal,
                 workingHours: 160.0,
                 salaryHistory: initialHistory,
-                hasInsurance: formHasInsurance,
-                insuranceSalary: finalInsSalary,
+                hasInsurance: false,
+                insuranceSalary: 0.0,
                 annualLeaveBalance: leaveBalanceVal,
                 faceEmbedding: formFaceEmbedding,
                 // General Info
@@ -3781,53 +3580,29 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 passportAttachment: passportAttachment,
                 residenceCardAttachment: residenceCardAttachment,
               );
-              provider.addEmployee(newOrUpdatedEmp);
+              final success = await provider.addEmployee(newOrUpdatedEmp);
+              if (!success) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        provider.translate('user_id_conflict_error')
+                            .replaceAll('{id}', enteredId)
+                            .replaceAll('{name}', ''),
+                      ),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
+                return;
+              }
             }
 
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(isEditing ? provider.translate('user_updated_success') : provider.translate('user_created_success_msg')),
-                backgroundColor: const Color(0xFF10B981),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  void _showResequenceConfirm(BuildContext context, AttendanceProvider provider) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final cancelColor = isDark ? Colors.white70 : const Color(0xFF64748B);
-
-    showGlassDialog(
-      context: context,
-      title: provider.translate('resequence_ids'),
-      subtitle: '1, 2, 3...',
-      icon: Icons.format_list_numbered_rounded,
-      content: Text(
-        '${provider.translate('resequence_ids')} (1, 2, 3...)? ${provider.translate('delete_confirm_desc')}',
-        style: TextStyle(color: textColor, fontSize: 13, height: 1.4),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(provider.translate('cancel'), style: TextStyle(color: cancelColor)),
-        ),
-        NeuButton(
-          label: provider.translate('confirm'),
-          variant: NeuButtonVariant.primary,
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          onPressed: () async {
-            Navigator.pop(context);
-            await provider.resequenceEmployeeIds();
             if (context.mounted) {
+              Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${provider.translate('resequence_ids')}: ${provider.translate('completed')}'),
+                  content: Text(isEditing ? provider.translate('user_updated_success') : provider.translate('user_created_success_msg')),
                   backgroundColor: const Color(0xFF10B981),
                 ),
               );
@@ -3837,6 +3612,87 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
       ],
     );
   }
+
+  static void _showLicenseLimitDialog(BuildContext context, AttendanceProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtextColor = isDark ? Colors.white70 : const Color(0xFF64748B);
+    final license = provider.currentLicense;
+    final planName = license?.planName ?? 'Standard';
+    final maxUsers = provider.maxActiveUsers;
+    final currentActive = provider.activeEmployeesCount;
+
+    showGlassDialog(
+      context: context,
+      title: provider.translate('user_limit_reached_title'),
+      subtitle: '$currentActive / $maxUsers ${provider.translate('active_licenses_quota')}',
+      icon: Icons.workspace_premium_rounded,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Color(0xFFF59E0B), size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        provider.translate('user_limit_reached_desc')
+                            .replaceAll('{max}', '$maxUsers')
+                            .replaceAll('{current}', '$currentActive'),
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 13,
+                          height: 1.4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${provider.translate('plan_label')}: $planName',
+                        style: const TextStyle(
+                          color: Color(0xFFD97706),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'To add more workforce accounts, please contact your account manager or upgrade to a higher tier plan.',
+            style: TextStyle(color: subtextColor, fontSize: 12, height: 1.35),
+          ),
+        ],
+      ),
+      actions: [
+        NeuButton(
+          label: provider.translate('cancel'),
+          variant: NeuButtonVariant.navy,
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+    );
+  }
+
 
   void _showDeleteConfirm(BuildContext context, CompanyEmployee employee, AttendanceProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -3849,8 +3705,14 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
       subtitle: provider.translate('delete_confirm_title'),
       icon: Icons.delete_forever_rounded,
       content: Text(
-        '${provider.translate('confirm_delete')} ${employee.name} (${employee.email})? ${provider.translate('delete_confirm_desc')}',
-        style: TextStyle(color: textColor),
+        provider.translate(
+          'delete_employee_confirm',
+          params: {
+            'name': employee.name,
+            'email': employee.email,
+          },
+        ),
+        style: TextStyle(color: textColor, height: 1.4),
       ),
       actions: [
         TextButton(
@@ -3858,15 +3720,20 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
           child: Text(provider.translate('cancel'), style: TextStyle(color: cancelColor)),
         ),
         NeuButton(
-          onPressed: () {
-            provider.deleteEmployee(employee.id);
+          onPressed: () async {
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${employee.name} - ${provider.translate('completed')}'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            await provider.deleteEmployee(employee.id, companyCode: employee.companyCode);
+            if (widget.onDelete != null) {
+              widget.onDelete!(employee.id);
+            }
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${employee.name} - ${provider.translate('completed')}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           },
           variant: NeuButtonVariant.danger,
           label: provider.translate('delete'),

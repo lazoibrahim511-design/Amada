@@ -77,9 +77,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String _getRoleLabel(String? role) {
-    switch (role) {
-      case 'admin':
+    switch (role?.toLowerCase().trim()) {
+      case 'super_admin':
+      case 'superadmin':
         return 'Super Admin';
+      case 'admin':
+        return 'Admin';
       case 'hr':
         return 'HR Manager';
       case 'supervisor':
@@ -1874,6 +1877,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color primaryColor,
     Color secondaryColor,
   ) {
+    final currentId = provider.employeeId.trim();
+    final currentEmp = provider.currentEmployee;
+
+    // Deduplicate employees and ensure current active user is included
+    final seenIds = <String>{};
+    final distinctEmps = <CompanyEmployee>[];
+
+    // Ensure active user is present in the list
+    if (currentId.isNotEmpty) {
+      seenIds.add(currentId);
+      distinctEmps.add(
+        currentEmp ??
+            CompanyEmployee(
+              id: currentId,
+              name: provider.userName.isNotEmpty ? provider.userName : 'Admin',
+              email: provider.email,
+              position: provider.position.isNotEmpty ? provider.position : 'Administrator',
+              role: provider.userRole.isNotEmpty ? provider.userRole : 'admin',
+              companyCode: provider.currentCompanyCode,
+            ),
+      );
+    }
+
+    for (final emp in provider.employees) {
+      final empId = emp.id.trim();
+      if (empId.isNotEmpty && seenIds.add(empId)) {
+        distinctEmps.add(emp);
+      }
+    }
+
+    // Determine a guaranteed safe selected value
+    final effectiveValue = distinctEmps.any((e) => e.id.trim() == currentId)
+        ? currentId
+        : (distinctEmps.isNotEmpty ? distinctEmps.first.id.trim() : null);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -1890,7 +1928,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: provider.employeeId,
+          value: effectiveValue,
           isExpanded: true,
           dropdownColor: cardBg,
           borderRadius: BorderRadius.circular(16),
@@ -1903,11 +1941,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
-          items: provider.employees.map((emp) {
+          items: distinctEmps.map((emp) {
             final role = _getRoleLabel(emp.role);
-            final isCurrent = emp.id == provider.employeeId;
+            final isCurrent = emp.id.trim() == effectiveValue;
             return DropdownMenuItem<String>(
-              value: emp.id,
+              value: emp.id.trim(),
               child: Row(
                 children: [
                   Container(
@@ -1952,7 +1990,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           }).toList(),
           onChanged: (val) {
-            if (val != null) {
+            if (val != null && val != provider.employeeId) {
               HapticFeedback.mediumImpact();
               provider.switchProfile(val);
             }

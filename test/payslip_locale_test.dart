@@ -9,7 +9,7 @@ void main() {
     expect(ku['employee'], 'فەرمانبەر');
     expect(ku['employee_details'], 'زانیاری فەرمانبەر');
     expect(ku['name_label'], 'ناوی فەرمانبەر');
-    expect(ku['id_label'], 'ناسنامەی فەرمانبەر');
+    expect(ku['id_label'], 'کۆد');
     expect(ku['employee_signature'], 'واژۆی فەرمانبەر');
 
     // 2. Earnings & Additions

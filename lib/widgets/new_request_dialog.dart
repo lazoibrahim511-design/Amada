@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/hr_models.dart';
+import '../models/request_model.dart';
 import '../providers/attendance_provider.dart';
 import 'glass_dialog.dart';
+import 'picker_theme.dart';
 
 List<CompanyEmployee> _getSubordinatesList(AttendanceProvider provider) {
   final currentUser = provider.currentEmployee;
@@ -59,6 +61,33 @@ List<CompanyEmployee> _getSubordinatesList(AttendanceProvider provider) {
   return [];
 }
 
+DateTime? _parseRequestStartDate(String dateStr) {
+  try {
+    final trimmed = dateStr.trim();
+    if (trimmed.contains(' - ')) {
+      final parts = trimmed.split(' - ');
+      final startPart = parts[0].trim();
+      final endPart = parts[1].trim();
+      if (RegExp(r'\d{4}').hasMatch(startPart)) {
+        return DateFormat('MMMM d, yyyy').parse(startPart);
+      }
+      final yearMatch = RegExp(r'\d{4}').firstMatch(endPart);
+      if (yearMatch != null) {
+        final year = yearMatch.group(0);
+        return DateFormat('MMMM d, yyyy').parse('$startPart, $year');
+      }
+      return DateFormat('MMMM d, yyyy').parse(endPart);
+    }
+    return DateFormat('MMMM d, yyyy').parse(trimmed);
+  } catch (_) {
+    try {
+      return DateTime.parse(dateStr.trim());
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 void _addNewRequestHelper({
   required BuildContext context,
   required AttendanceProvider provider,
@@ -74,54 +103,51 @@ void _addNewRequestHelper({
 
   if (type == 'Missing Punch') {
     try {
-      final parsedDate = DateFormat(
-        'MMMM d, yyyy',
-      ).parse(date.split(' - ').first);
+      final parsedDate = _parseRequestStartDate(date);
 
-      int count = 0;
-      final targetReqs = (emp != null)
-          ? provider.requests.where((r) => r.employeeId == emp.id).toList()
-          : provider.requests;
+      if (parsedDate != null) {
+        int count = 0;
+        final targetReqs = (emp != null)
+            ? provider.requests.where((r) => r.employeeId == emp.id).toList()
+            : provider.requests;
 
-      for (var req in targetReqs) {
-        if (req.type == 'Missing Punch') {
-          try {
-            final reqDate = DateFormat(
-              'MMMM d, yyyy',
-            ).parse(req.date.split(' - ').first);
-            if (reqDate.year == parsedDate.year &&
+        for (var req in targetReqs) {
+          if (req.type == 'Missing Punch') {
+            final reqDate = _parseRequestStartDate(req.date);
+            if (reqDate != null &&
+                reqDate.year == parsedDate.year &&
                 reqDate.month == parsedDate.month) {
               count++;
             }
-          } catch (_) {}
+          }
         }
-      }
 
-      if (emp != null) {
-        final groupId = provider.getGroupIdForDate(emp, parsedDate);
-        final group = provider.groups.firstWhere(
-          (g) => g.id == groupId,
-          orElse: () => EmployeeGroup(
-            id: '',
-            name: 'None',
-            shiftId: '',
-            overtimeAllowed: false,
-            minOvertimeMinutes: 0,
-            maxOvertimeMinutes: 0,
-          ),
-        );
-        final limit = group.missedPunchLimitPerMonth;
-
-        if (limit > 0 && count >= limit) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Limit reached: You can only submit $limit Missed Punch requests per month.',
-              ),
-              backgroundColor: Colors.red,
+        if (emp != null) {
+          final groupId = provider.getGroupIdForDate(emp, parsedDate);
+          final group = provider.groups.firstWhere(
+            (g) => g.id == groupId,
+            orElse: () => EmployeeGroup(
+              id: '',
+              name: 'None',
+              shiftId: '',
+              overtimeAllowed: false,
+              minOvertimeMinutes: 0,
+              maxOvertimeMinutes: 0,
             ),
           );
-          return;
+          final limit = group.missedPunchLimitPerMonth;
+
+          if (limit > 0 && count >= limit) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Limit reached: You can only submit $limit Missed Punch requests per month.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
         }
       }
     } catch (e) {
@@ -131,11 +157,9 @@ void _addNewRequestHelper({
 
   if (type == 'Annual Leave') {
     try {
-      final parsedDate = DateFormat(
-        'MMMM d, yyyy',
-      ).parse(date.split(' - ').first);
+      final parsedDate = _parseRequestStartDate(date);
 
-      if (emp != null) {
+      if (parsedDate != null && emp != null) {
         final groupId = provider.getGroupIdForDate(emp, parsedDate);
         final group = provider.groups.firstWhere(
           (g) => g.id == groupId,
@@ -148,19 +172,46 @@ void _addNewRequestHelper({
             maxOvertimeMinutes: 0,
           ),
         );
+
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final reqDate = DateTime(
+          parsedDate.year,
+          parsedDate.month,
+          parsedDate.day,
+        );
+
+        // 1. Advance notice requirement (how many days in advance before leave start date)
+        final minNotice = group.annualLeaveMinNoticeDays;
+        if (minNotice > 0) {
+          final noticeDays = reqDate.difference(today).inDays;
+          if (noticeDays < minNotice) {
+            final earliestDate = today.add(Duration(days: minNotice));
+            final formattedEarliest =
+                DateFormat('yyyy-MM-dd').format(earliestDate);
+            final errPattern =
+                provider.translate('annual_leave_min_notice_error');
+            final msg = errPattern
+                .replaceAll('{days}', minNotice.toString())
+                .replaceAll('{date}', formattedEarliest);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  msg.isNotEmpty && !msg.contains('{')
+                      ? msg
+                      : 'Annual leave requires at least $minNotice days advance notice. Earliest available date is $formattedEarliest.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+        }
+
+        // 2. Retroactive submission deadline
         final limit = group.annualLeaveRequestDeadlineDays;
-
         if (limit > 0) {
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
-          final reqDate = DateTime(
-            parsedDate.year,
-            parsedDate.month,
-            parsedDate.day,
-          );
-
           final difference = today.difference(reqDate).inDays;
-
           if (difference > limit) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -173,10 +224,109 @@ void _addNewRequestHelper({
             return;
           }
         }
+
+        // 3. Application frequency limit per month
+        final maxPerMonth = group.annualLeaveMaxRequestsPerPeriod;
+        if (maxPerMonth > 0) {
+          final allForEmp = <Request>{
+            ...provider.getRequestsForEmployee(emp.id),
+            ...provider.allCompanyRequests.where((r) => r.employeeId == emp.id),
+            if (emp.id == provider.employeeId) ...provider.requests,
+          }.toList();
+
+          int count = 0;
+          for (var req in allForEmp) {
+            if (req.type == 'Annual Leave' && req.status != 'Rejected') {
+              final rDate = _parseRequestStartDate(req.date);
+              if (rDate != null) {
+                final matchesMonth = rDate.year == parsedDate.year &&
+                    rDate.month == parsedDate.month;
+                if (matchesMonth) {
+                  count++;
+                }
+              }
+            }
+          }
+
+          if (count >= maxPerMonth) {
+            final periodLabel = provider.translate('period_month');
+            final effectivePeriod = periodLabel.isNotEmpty ? periodLabel : 'Month';
+            final errPattern =
+                provider.translate('annual_leave_period_limit_error');
+            final msg = errPattern
+                .replaceAll('{limit}', maxPerMonth.toString())
+                .replaceAll('{period}', effectivePeriod);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  msg.isNotEmpty && !msg.contains('{')
+                      ? msg
+                      : 'Limit reached: You can only apply for $maxPerMonth Annual Leave requests per $effectivePeriod.',
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+        }
       }
     } catch (e) {
-      debugPrint('Error checking annual leave deadline: $e');
+      debugPrint('Error checking annual leave rules: $e');
     }
+  }
+
+  if (type == 'Hourly Leave' && emp != null) {
+    try {
+      final parsedDate = _parseRequestStartDate(date) ?? DateTime.now();
+      final groupId = provider.getGroupIdForDate(emp, parsedDate);
+      final group = provider.groups.firstWhere(
+        (g) => g.id == groupId,
+        orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+      );
+
+      final reqMinutes = parseHourlyLeaveDurationMinutes(duration);
+      final minMins = group.totalHourlyLeaveMinMinutes;
+      if (minMins > 0 && reqMinutes < minMins) {
+        final formattedMin = formatMinutesToHoursAndMinutes(minMins);
+        final errPattern = provider.translate('hourly_leave_min_error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errPattern.replaceAll('{duration}', formattedMin),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final maxMins = group.totalHourlyLeaveMaxMinutes;
+      if (maxMins > 0 && reqMinutes > maxMins) {
+        final formattedMax = formatMinutesToHoursAndMinutes(maxMins);
+        final errPattern = provider.translate('hourly_leave_max_error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errPattern.replaceAll('{duration}', formattedMax),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error checking hourly leave rules: $e');
+    }
+  }
+
+  if (provider.isDateStringInClosedMonth(date)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(provider.translate('cannot_modify_closed_month')),
+        backgroundColor: Colors.amber.shade800,
+      ),
+    );
+    return;
   }
 
   provider.submitRequest(
@@ -239,9 +389,19 @@ Future<void> showNewRequestDialog({
       provider.shifts.isNotEmpty ? provider.shifts.first.id : null;
   bool isClockIn = true;
   String? errorMessage;
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final initGroupId = provider.getGroupIdForDate(selectedEmployee, today);
+  final initGroup = provider.groups.firstWhere(
+    (g) => g.id == initGroupId,
+    orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+  );
+  final initNotice = initGroup.annualLeaveMinNoticeDays;
+  final defaultStart = today.add(Duration(days: initNotice > 0 ? initNotice : 1));
+  final defaultEnd = defaultStart.add(const Duration(days: 1));
   final initialDateStr = initialDate != null
       ? DateFormat('MMMM d, yyyy').format(initialDate)
-      : 'June 20 - June 22, 2026';
+      : '${DateFormat('MMMM d').format(defaultStart)} - ${DateFormat('MMMM d, yyyy').format(defaultEnd)}';
   final dateController = TextEditingController(
     text: initialDateStr,
   );
@@ -385,7 +545,18 @@ Future<void> showNewRequestDialog({
                   setDialogState(() {
                     selectedType = val;
                     if (selectedType == 'Annual Leave') {
-                      dateController.text = 'June 20 - June 22, 2026';
+                      final now = DateTime.now();
+                      final today = DateTime(now.year, now.month, now.day);
+                      final gId = provider.getGroupIdForDate(selectedEmployee, today);
+                      final grp = provider.groups.firstWhere(
+                        (g) => g.id == gId,
+                        orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+                      );
+                      final notice = grp.annualLeaveMinNoticeDays;
+                      final start = today.add(Duration(days: notice > 0 ? notice : 1));
+                      final end = start.add(const Duration(days: 1));
+                      dateController.text =
+                          '${DateFormat('MMMM d').format(start)} - ${DateFormat('MMMM d, yyyy').format(end)}';
                       durController.text = '2 Days';
                     } else if (selectedType == 'Sick Leave') {
                       dateController.text = 'June 3, 2026';
@@ -399,8 +570,14 @@ Future<void> showNewRequestDialog({
                           DateFormat('MMMM d, yyyy').format(DateTime.now());
                       durController.text = '1 Day';
                     } else if (selectedType == 'Hourly Leave') {
-                      dateController.text = 'June 3, 2026';
-                      durController.text = '2 Hours';
+                      dateController.text =
+                          DateFormat('MMMM d, yyyy').format(DateTime.now());
+                      fromTimeController.text = '15:00';
+                      toTimeController.text = '16:00';
+                      durController.text = formatHourlyLeaveDurationString(
+                        fromTimeController.text,
+                        toTimeController.text,
+                      );
                     } else if (selectedType == 'Overtime Approval') {
                       dateController.text =
                           DateFormat('MMMM d, yyyy').format(DateTime.now());
@@ -436,38 +613,47 @@ Future<void> showNewRequestDialog({
             const SizedBox(height: 16),
             _buildDialogFieldWidget(
               context: context,
-              label: isOvertime
+              label: (isOvertime || selectedType == 'Hourly Leave')
                   ? provider.translate('date')
                   : provider.translate('dates'),
               controller: dateController,
               readOnly: true,
               onTap: () async {
+                DateTime firstPickerDate =
+                    DateTime.now().subtract(const Duration(days: 365));
+                if (selectedType == 'Annual Leave') {
+                  final now = DateTime.now();
+                  final today = DateTime(now.year, now.month, now.day);
+                  final gId =
+                      provider.getGroupIdForDate(selectedEmployee, today);
+                  final grp = provider.groups.firstWhere(
+                    (g) => g.id == gId,
+                    orElse: () =>
+                        EmployeeGroup(id: '', name: 'None', shiftId: ''),
+                  );
+                  if (grp.annualLeaveMinNoticeDays > 0) {
+                    firstPickerDate =
+                        today.add(Duration(days: grp.annualLeaveMinNoticeDays));
+                  }
+                }
+                final lastPickerDate =
+                    DateTime.now().add(const Duration(days: 365));
+                if (firstPickerDate.isAfter(lastPickerDate)) {
+                  firstPickerDate = lastPickerDate;
+                }
+
                 final picked = await showDateRangePicker(
                   context: context,
-                  firstDate:
-                      DateTime.now().subtract(const Duration(days: 365)),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                  builder: (context, child) {
-                    return Theme(
-                      data: ThemeData.dark().copyWith(
-                        colorScheme: ColorScheme.dark(
-                          primary: const Color(0xFF2E65FF),
-                          onPrimary:
-                              ((Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black)),
-                          surface: const Color(0xFF1E293B),
-                          onSurface:
-                              ((Theme.of(context).textTheme.bodyLarge?.color ??
-                                  Colors.black)),
-                        ),
-                      ),
-                      child: child!,
-                    );
-                  },
+                  firstDate: firstPickerDate,
+                  lastDate: lastPickerDate,
+                  builder: buildAdaptivePickerTheme,
                 );
                 if (picked != null) {
                   setDialogState(() {
-                    if (picked.start == picked.end) {
+                    if (selectedType == 'Hourly Leave' || isOvertime) {
+                      dateController.text =
+                          DateFormat('MMMM d, yyyy').format(picked.start);
+                    } else if (picked.start == picked.end) {
                       dateController.text =
                           DateFormat('MMMM d, yyyy').format(picked.start);
                       durController.text = '1 Day';
@@ -482,6 +668,87 @@ Future<void> showNewRequestDialog({
                 }
               },
             ),
+            if (provider.isDateStringInClosedMonth(dateController.text)) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade900.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_rounded, size: 16, color: Colors.amber.shade400),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        provider.translate('cannot_modify_closed_month'),
+                        style: TextStyle(
+                          color: Colors.amber.shade300,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (selectedType == 'Annual Leave') ...[
+              Builder(
+                builder: (context) {
+                  final parsedDate = _parseRequestStartDate(dateController.text);
+                  if (parsedDate != null) {
+                    final groupId = provider.getGroupIdForDate(selectedEmployee, parsedDate);
+                    final group = provider.groups.firstWhere(
+                      (g) => g.id == groupId,
+                      orElse: () => EmployeeGroup(id: '', name: 'None', shiftId: ''),
+                    );
+                    final now = DateTime.now();
+                    final today = DateTime(now.year, now.month, now.day);
+                    final reqDate = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+                    final minNotice = group.annualLeaveMinNoticeDays;
+                    if (minNotice > 0 && reqDate.difference(today).inDays < minNotice) {
+                      final earliestDate = today.add(Duration(days: minNotice));
+                      final formattedEarliest = DateFormat('yyyy-MM-dd').format(earliestDate);
+                      final errPattern = provider.translate('annual_leave_min_notice_error');
+                      final msg = errPattern
+                          .replaceAll('{days}', minNotice.toString())
+                          .replaceAll('{date}', formattedEarliest);
+                      return Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade900.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade700.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 16, color: Colors.red.shade400),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                msg.isNotEmpty && !msg.contains('{')
+                                    ? msg
+                                    : 'Annual leave requires at least $minNotice days advance notice. Earliest: $formattedEarliest.',
+                                style: TextStyle(
+                                  color: Colors.red.shade300,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
             const SizedBox(height: 16),
             if (selectedType == 'Missing Punch') ...[
               Row(
@@ -534,23 +801,7 @@ Future<void> showNewRequestDialog({
                   final TimeOfDay? picked = await showTimePicker(
                     context: context,
                     initialTime: TimeOfDay.now(),
-                    builder: (context, child) {
-                      return Theme(
-                        data: ThemeData.dark().copyWith(
-                          colorScheme: ColorScheme.dark(
-                            primary: const Color(0xFF2E65FF),
-                            onPrimary:
-                                ((Theme.of(context).textTheme.bodyLarge?.color ??
-                                    Colors.black)),
-                            surface: const Color(0xFF1E293B),
-                            onSurface:
-                                ((Theme.of(context).textTheme.bodyLarge?.color ??
-                                    Colors.black)),
-                          ),
-                        ),
-                        child: child!,
-                      );
-                    },
+                    builder: buildAdaptivePickerTheme,
                   );
                   if (picked != null) {
                     setDialogState(() {
@@ -567,7 +818,7 @@ Future<void> showNewRequestDialog({
                   }
                 },
               ),
-            ] else if (isOvertime) ...[
+            ] else if (isOvertime || selectedType == 'Hourly Leave') ...[
               Row(
                 children: [
                   Expanded(
@@ -583,33 +834,13 @@ Future<void> showNewRequestDialog({
                             hour: int.tryParse(
                                   fromTimeController.text.split(':')[0],
                                 ) ??
-                                17,
+                                (selectedType == 'Hourly Leave' ? 15 : 17),
                             minute: int.tryParse(
                                   fromTimeController.text.split(':')[1],
                                 ) ??
                                 0,
                           ),
-                          builder: (context, child) {
-                            return Theme(
-                              data: ThemeData.dark().copyWith(
-                                colorScheme: ColorScheme.dark(
-                                  primary: const Color(0xFF2E65FF),
-                                  onPrimary: (Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.color ??
-                                      Colors.black),
-                                  surface: const Color(0xFF1E293B),
-                                  onSurface: (Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.color ??
-                                      Colors.black),
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
+                          builder: buildAdaptivePickerTheme,
                         );
                         if (picked != null) {
                           setDialogState(() {
@@ -634,7 +865,15 @@ Future<void> showNewRequestDialog({
                                   int.parse(tParts[1]);
                               int diff = tMins - fMins;
                               if (diff < 0) diff += 24 * 60;
-                              durController.text = diff.toString();
+                              if (selectedType == 'Hourly Leave') {
+                                durController.text =
+                                    formatHourlyLeaveDurationString(
+                                  fromTimeController.text,
+                                  toTimeController.text,
+                                );
+                              } else {
+                                durController.text = diff.toString();
+                              }
                             } catch (_) {}
                           });
                         }
@@ -655,33 +894,13 @@ Future<void> showNewRequestDialog({
                             hour: int.tryParse(
                                   toTimeController.text.split(':')[0],
                                 ) ??
-                                19,
+                                (selectedType == 'Hourly Leave' ? 16 : 19),
                             minute: int.tryParse(
                                   toTimeController.text.split(':')[1],
                                 ) ??
                                 0,
                           ),
-                          builder: (context, child) {
-                            return Theme(
-                              data: ThemeData.dark().copyWith(
-                                colorScheme: ColorScheme.dark(
-                                  primary: const Color(0xFF2E65FF),
-                                  onPrimary: (Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.color ??
-                                      Colors.black),
-                                  surface: const Color(0xFF1E293B),
-                                  onSurface: (Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.color ??
-                                      Colors.black),
-                                ),
-                              ),
-                              child: child!,
-                            );
-                          },
+                          builder: buildAdaptivePickerTheme,
                         );
                         if (picked != null) {
                           setDialogState(() {
@@ -706,7 +925,15 @@ Future<void> showNewRequestDialog({
                                   int.parse(tParts[1]);
                               int diff = tMins - fMins;
                               if (diff < 0) diff += 24 * 60;
-                              durController.text = diff.toString();
+                              if (selectedType == 'Hourly Leave') {
+                                durController.text =
+                                    formatHourlyLeaveDurationString(
+                                  fromTimeController.text,
+                                  toTimeController.text,
+                                );
+                              } else {
+                                durController.text = diff.toString();
+                              }
                             } catch (_) {}
                           });
                         }
@@ -728,6 +955,57 @@ Future<void> showNewRequestDialog({
                 label: provider.translate('duration_description'),
                 controller: durController,
                 keyboardType: TextInputType.text,
+              ),
+            ],
+            if (selectedType == 'Hourly Leave') ...[
+              Builder(
+                builder: (context) {
+                  final minMins = group.totalHourlyLeaveMinMinutes;
+                  final maxMins = group.totalHourlyLeaveMaxMinutes;
+                  if (minMins > 0 || maxMins > 0) {
+                    final minStr = minMins > 0
+                        ? '${formatMinutesToTimeString(minMins)} (${formatMinutesToHoursAndMinutes(minMins)})'
+                        : '00:00';
+                    final maxStr = maxMins > 0
+                        ? '${formatMinutesToTimeString(maxMins)} (${formatMinutesToHoursAndMinutes(maxMins)})'
+                        : 'unlimited';
+                    final infoMsg = provider
+                        .translate('allowed_hourly_limits')
+                        .replaceAll('{min}', minStr)
+                        .replaceAll('{max}', maxStr);
+                    return Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2E65FF).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF2E65FF).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Color(0xFF60A5FA),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              infoMsg,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
               ),
             ],
             if (isOvertime) ...[
@@ -848,6 +1126,13 @@ Future<void> showNewRequestDialog({
                       return;
                     }
 
+                    if (provider.isDateStringInClosedMonth(dateVal)) {
+                      setDialogState(() {
+                        errorMessage = provider.translate('cannot_modify_closed_month');
+                      });
+                      return;
+                    }
+
                     if (type == 'Annual Leave') {
                       final match = RegExp(r'(\d+)').firstMatch(durVal);
                       int days = 1;
@@ -881,6 +1166,36 @@ Future<void> showNewRequestDialog({
                         setDialogState(() {
                           errorMessage =
                               '${selectedEmployee.name} does not have enough balance for this request. (Requested: ${requestedHours.toStringAsFixed(1)}h, Balance: ${selectedEmployee.annualLeaveBalance.toStringAsFixed(1)}h)';
+                        });
+                        return;
+                      }
+                    }
+
+                    if (type == 'Hourly Leave') {
+                      final reqMinutes = parseHourlyLeaveDurationMinutes(durVal);
+                      if (reqMinutes <= 0) {
+                        setDialogState(() {
+                          errorMessage = provider.translate('invalid_duration_error');
+                        });
+                        return;
+                      }
+
+                      final minMins = group.totalHourlyLeaveMinMinutes;
+                      if (minMins > 0 && reqMinutes < minMins) {
+                        final formattedMin = formatMinutesToHoursAndMinutes(minMins);
+                        final errPattern = provider.translate('hourly_leave_min_error');
+                        setDialogState(() {
+                          errorMessage = errPattern.replaceAll('{duration}', formattedMin);
+                        });
+                        return;
+                      }
+
+                      final maxMins = group.totalHourlyLeaveMaxMinutes;
+                      if (maxMins > 0 && reqMinutes > maxMins) {
+                        final formattedMax = formatMinutesToHoursAndMinutes(maxMins);
+                        final errPattern = provider.translate('hourly_leave_max_error');
+                        setDialogState(() {
+                          errorMessage = errPattern.replaceAll('{duration}', formattedMax);
                         });
                         return;
                       }
@@ -1154,7 +1469,9 @@ Widget _buildDropdownFieldWidget({
               : Colors.white,
         ),
         child: DropdownButton<String>(
-          value: value,
+          value: items.any((i) => i.value == value)
+              ? value
+              : (items.isNotEmpty ? items.first.value : null),
           items: items,
           onChanged: onChanged,
           isExpanded: true,

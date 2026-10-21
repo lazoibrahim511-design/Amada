@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
@@ -11,6 +13,7 @@ import '../models/hr_models.dart';
 import '../models/request_model.dart';
 import '../models/translation_keys.dart';
 import '../services/firebase_service.dart';
+import '../models/company_license.dart';
 import '../models/chat_message.dart';
 import '../models/app_notification.dart';
 import '../services/web_notification_helper.dart';
@@ -19,6 +22,8 @@ import '../main.dart';
 import '../screens/chat_room_screen.dart';
 import '../services/face_recognition_service.dart';
 import '../services/fcm_push_service.dart';
+import '../models/deleted_punch_model.dart';
+import '../services/wifi_detector_service.dart';
 
 class AttendanceProvider with ChangeNotifier {
   // User Profile Data
@@ -155,6 +160,11 @@ class AttendanceProvider with ChangeNotifier {
       if (savedTheme != null && savedTheme.isNotEmpty) {
         _themePreference = savedTheme;
       }
+      final savedCompany = prefs.getString('app_company_code');
+      if (savedCompany != null && savedCompany.isNotEmpty) {
+        _currentCompanyCode = savedCompany;
+      }
+      await loadCompanyLicense(_currentCompanyCode);
       final isLoggedInSaved = prefs.getBool('isLoggedIn') ?? false;
       final savedEmployeeId = prefs.getString('loggedInEmployeeId');
       final savedName = prefs.getString('loggedInUserName');
@@ -201,13 +211,47 @@ class AttendanceProvider with ChangeNotifier {
   Future<bool> login({
     required String identifier,
     required String password,
+    String? companyCode,
+  }) async {
+    final err = await loginWithResult(
+      identifier: identifier,
+      password: password,
+      companyCode: companyCode,
+    );
+    return err == null;
+  }
+
+  Future<String?> loginWithResult({
+    required String identifier,
+    required String password,
+    String? companyCode,
   }) async {
     _isLoading = true;
     notifyListeners();
 
     try {
+      final code = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
+      if (code.isNotEmpty && code != _currentCompanyCode) {
+        await setCompanyCode(code);
+      }
+
+      // Check license validity
+      if (_currentLicense != null) {
+        if (!_currentLicense!.isActive) {
+          _isLoading = false;
+          notifyListeners();
+          return translate('account_suspended');
+        }
+        if (_currentLicense!.isHardLocked) {
+          final expStr = DateFormat('yyyy-MM-dd').format(_currentLicense!.subscriptionExpiresAt);
+          _isLoading = false;
+          notifyListeners();
+          return translate('subscription_expired').replaceAll('{date}', expStr);
+        }
+      }
+
       final input = identifier.trim().toLowerCase();
-      final matchIndex = _employees.indexWhere(
+      int matchIndex = _employees.indexWhere(
         (e) =>
             (e.email.toLowerCase() == input ||
                 e.id.toLowerCase() == input ||
@@ -215,8 +259,44 @@ class AttendanceProvider with ChangeNotifier {
             (e.password == null || e.password == password),
       );
 
+      // Default Admin Auto-Provisioning for newly created client companies
+      if (matchIndex == -1 &&
+          password == 'admin123' &&
+          (input == 'admin' ||
+              input == 'admin@$code.com' ||
+              input == '${code}_admin' ||
+              input == 'admin@company.com')) {
+        final compName = _currentLicense?.companyName ?? code.toUpperCase();
+        final autoAdmin = CompanyEmployee(
+          id: '${code}_admin',
+          name: '$compName Admin',
+          email: 'admin@$code.com',
+          position: 'Company Administrator',
+          role: 'admin',
+          password: 'admin123',
+          companyCode: code,
+          startDate: DateTime.now().toIso8601String().split('T')[0],
+          positionStartDate: DateTime.now().toIso8601String().split('T')[0],
+          groupStartDate: DateTime.now().toIso8601String().split('T')[0],
+          positionHistory: [],
+          groupHistory: [],
+          salaryHistory: [],
+        );
+        _employees.add(autoAdmin);
+        if (_firebaseService.isAvailable) {
+          _firebaseService.saveEmployee(autoAdmin);
+        }
+        matchIndex = _employees.length - 1;
+      }
+
       if (matchIndex != -1) {
         final match = _employees[matchIndex];
+        if (match.disabled) {
+          _isLoading = false;
+          notifyListeners();
+          return translate('prevent_login_clocking');
+        }
+
         _employeeId = match.id;
         _userName = match.name;
         _userTitle = match.position;
@@ -251,20 +331,19 @@ class AttendanceProvider with ChangeNotifier {
         await _setupFirestoreListeners();
         recalculateAllStats();
         notifyListeners();
-        return true;
+        return null; // Success!
       }
 
       // If no exact match, login fails
       _isLoading = false;
       notifyListeners();
-      return false;
+      return 'Invalid email or password. Please try again.';
     } catch (e) {
       debugPrint('Login error: $e');
+      _isLoading = false;
+      notifyListeners();
+      return 'Login error: $e';
     }
-
-    _isLoading = false;
-    notifyListeners();
-    return false;
   }
 
   Future<void> loginAsEmployee(CompanyEmployee employee) async {
@@ -316,6 +395,13 @@ class AttendanceProvider with ChangeNotifier {
         debugPrint('Error clearing FCM token on logout: $e');
       }
     }
+    for (var sub in _chatSubscriptionsMap.values) {
+      sub.cancel();
+    }
+    _chatSubscriptionsMap.clear();
+    _chatMessagesMap.clear();
+    _chatRoomContactIds.clear();
+
     _isLoggedIn = false;
     _saveAuthSession(false, '');
     notifyListeners();
@@ -324,6 +410,16 @@ class AttendanceProvider with ChangeNotifier {
   // Chat state
   final Map<String, List<ChatMessage>> _chatMessagesMap = {};
   final Map<String, StreamSubscription> _chatSubscriptionsMap = {};
+  final Set<String> _chatRoomContactIds = {};
+
+  String? _activeChatContactId;
+  String? get activeChatContactId => _activeChatContactId;
+  void setActiveChatContactId(String? contactId) {
+    _activeChatContactId = contactId;
+  }
+
+  String? _currentDeviceFcmToken;
+  String? get currentDeviceFcmToken => _currentDeviceFcmToken;
 
   // In-app Notifications
   List<AppNotification>? _notifications;
@@ -397,6 +493,17 @@ class AttendanceProvider with ChangeNotifier {
 
   final List<AttendanceRecord> _allCompanyRecords = [];
   final List<Request> _allCompanyRequests = [];
+  final Set<String> _deletedPunchSignatures = {};
+
+  bool isPunchDeleted(String employeeId, DateTime punchTime) {
+    final key = '${employeeId.trim().toLowerCase()}_${punchTime.year}_${punchTime.month}_${punchTime.day}_${punchTime.hour}_${punchTime.minute}';
+    return _deletedPunchSignatures.contains(key);
+  }
+
+  void recordDeletedPunchSignature(String employeeId, DateTime punchTime) {
+    final key = '${employeeId.trim().toLowerCase()}_${punchTime.year}_${punchTime.month}_${punchTime.day}_${punchTime.hour}_${punchTime.minute}';
+    _deletedPunchSignatures.add(key);
+  }
 
   // Selected Month for Payroll/History
   DateTime _selectedMonth = DateTime.now();
@@ -431,10 +538,183 @@ class AttendanceProvider with ChangeNotifier {
   final List<Holiday> _holidays = [];
   final List<WorkLocation> _locations = [];
   final List<PayrollAdjustment> _payrollAdjustments = [];
+  final List<PayrollMonthClosure> _payrollClosures = [];
   CompanyProfile? _companyProfile;
+
+  // --- SaaS Multi-Tenancy & Licensing ---
+  String _currentCompanyCode = 'amada';
+  CompanyLicense? _currentLicense;
+  StreamSubscription<CompanyLicense?>? _licenseSubscription;
+  StreamSubscription<List<PayrollMonthClosure>>? _payrollClosuresSubscription;
+
+  final List<CompanyLicense> _allCompanies = [];
+  List<CompanyLicense> get allCompanies => List.unmodifiable(_allCompanies);
+
+  String get currentCompanyCode => _currentCompanyCode;
+  CompanyLicense? get currentLicense => _currentLicense;
+  int get activeEmployeesCount => employees.where((e) => !e.disabled).length;
+  int get maxActiveUsers => _currentLicense?.maxActiveUsers ?? 50;
+
+  bool get canAddActiveEmployee {
+    if (_currentLicense == null) return true;
+    if (_currentLicense!.maxActiveUsers <= 0) return true;
+    return activeEmployeesCount < _currentLicense!.maxActiveUsers;
+  }
+
+  bool get isCompanySubscriptionValid =>
+      _currentLicense == null || !_currentLicense!.isHardLocked;
 
   // Getters
   List<PayrollAdjustment> get payrollAdjustments => _payrollAdjustments;
+  List<PayrollMonthClosure> get payrollClosures => List.unmodifiable(
+        _payrollClosures.where((c) =>
+            _currentCompanyCode == 'all' ||
+            c.companyCode.isEmpty ||
+            c.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
+      );
+
+  PayrollMonthClosure? getClosureForMonthStr(String yearMonth) {
+    return _payrollClosures
+        .where((c) =>
+            c.yearMonth == yearMonth &&
+            (_currentCompanyCode == 'all' ||
+                c.companyCode.isEmpty ||
+                c.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()))
+        .firstOrNull;
+  }
+
+  PayrollMonthClosure? getClosureForMonth(DateTime date) {
+    final ym = DateFormat('yyyy-MM').format(date);
+    return getClosureForMonthStr(ym);
+  }
+
+  bool isMonthClosedStr(String yearMonth) {
+    final c = getClosureForMonthStr(yearMonth);
+    return c != null && c.isClosed;
+  }
+
+  bool isMonthClosed(DateTime date) {
+    final ym = DateFormat('yyyy-MM').format(date);
+    return isMonthClosedStr(ym);
+  }
+
+  DateTime? parseFlexibleDate(dynamic dateInput) {
+    if (dateInput == null) return null;
+    if (dateInput is DateTime) return dateInput;
+    final str = dateInput.toString().trim();
+    if (str.isEmpty) return null;
+
+    final iso = DateTime.tryParse(str);
+    if (iso != null) return iso;
+
+    final patterns = [
+      'MMMM d, yyyy',
+      'MMMM dd, yyyy',
+      'd MMMM yyyy',
+      'dd MMMM yyyy',
+      'yyyy-MM-dd',
+      'yyyy/MM/dd',
+      'MMMM yyyy',
+      'yyyy-MM',
+      'MMM d, yyyy',
+      'd MMM yyyy',
+    ];
+    for (final pattern in patterns) {
+      try {
+        return DateFormat(pattern, 'en_US').parseLoose(str);
+      } catch (_) {}
+      try {
+        return DateFormat(pattern).parseLoose(str);
+      } catch (_) {}
+    }
+
+    final monthMap = {
+      'january': 1, 'jan': 1,
+      'february': 2, 'feb': 2,
+      'march': 3, 'mar': 3,
+      'april': 4, 'apr': 4,
+      'may': 5,
+      'june': 6, 'jun': 6,
+      'july': 7, 'jul': 7,
+      'august': 8, 'aug': 8,
+      'september': 9, 'sep': 9, 'sept': 9,
+      'october': 10, 'oct': 10,
+      'november': 11, 'nov': 11,
+      'december': 12, 'dec': 12,
+    };
+    final lower = str.toLowerCase();
+    int? foundMonth;
+    for (final entry in monthMap.entries) {
+      if (RegExp('\\b${entry.key}\\b').hasMatch(lower)) {
+        foundMonth = entry.value;
+        break;
+      }
+    }
+    if (foundMonth != null) {
+      final yearMatch = RegExp(r'\b(20\d\d)\b').firstMatch(str);
+      final year = yearMatch != null ? int.parse(yearMatch.group(1)!) : _selectedMonth.year;
+      final dayMatches = RegExp(r'\b(\d{1,2})\b').allMatches(str);
+      int day = 1;
+      for (final m in dayMatches) {
+        if (m.group(1) != yearMatch?.group(1)) {
+          day = int.tryParse(m.group(1)!) ?? 1;
+          break;
+        }
+      }
+      return DateTime(year, foundMonth, day.clamp(1, 28));
+    }
+
+    return null;
+  }
+
+  bool isDateStringInClosedMonth(dynamic dateInput) {
+    if (dateInput == null) return false;
+    final str = dateInput.toString().trim();
+    if (str.isEmpty) return false;
+
+    if (str.contains(' - ')) {
+      final parts = str.split(' - ');
+      final startPart = parts.first.trim();
+      final endPart = parts.last.trim();
+
+      final startDate = parseFlexibleDate(startPart);
+      final endDate = parseFlexibleDate(endPart);
+
+      if (startDate != null && isMonthClosed(startDate)) return true;
+      if (endDate != null && isMonthClosed(endDate)) return true;
+
+      if (startDate != null && endDate != null && endDate.isAfter(startDate)) {
+        var cur = DateTime(startDate.year, startDate.month, 1);
+        final endMonth = DateTime(endDate.year, endDate.month, 1);
+        while (!cur.isAfter(endMonth)) {
+          if (isMonthClosed(cur)) return true;
+          cur = DateTime(cur.year, cur.month + 1, 1);
+        }
+      }
+
+      final ymMatches = RegExp(r'(\d{4})[/-](\d{2})').allMatches(str);
+      for (final m in ymMatches) {
+        final ym = '${m.group(1)}-${m.group(2)}';
+        if (isMonthClosedStr(ym)) return true;
+      }
+
+      return false;
+    }
+
+    final dt = parseFlexibleDate(str);
+    if (dt != null) {
+      return isMonthClosed(dt);
+    }
+
+    final ymMatch = RegExp(r'(\d{4})[/-](\d{2})').firstMatch(str);
+    if (ymMatch != null) {
+      final ym = '${ymMatch.group(1)}-${ymMatch.group(2)}';
+      return isMonthClosedStr(ym);
+    }
+
+    return false;
+  }
+
   String get userName => _userName;
   String get userTitle => _userTitle;
   String get employeeId => _employeeId;
@@ -489,23 +769,177 @@ class AttendanceProvider with ChangeNotifier {
   double get insuranceEmployee => _insuranceEmployee;
   double get insuranceCompany => _insuranceCompany;
 
-  List<OrgStructure> get structures => _structures;
-  List<WorkShift> get shifts => _shifts;
-  List<EmployeeGroup> get groups => _groups;
-  List<CompanyEmployee> get employees => _employees;
-  List<Holiday> get holidays => _holidays;
-  List<WorkLocation> get locations => _locations;
+  static bool isSuperAdminUser(CompanyEmployee? emp) {
+    if (emp == null) return false;
+    final id = emp.id.toLowerCase().trim();
+    final email = emp.email.toLowerCase().trim();
+    final role = emp.role.toLowerCase().trim();
+    final pos = emp.position.toLowerCase().trim();
+    return id == 'admin_super_account' ||
+        email == 'admin@company.com' ||
+        role == 'super_admin' ||
+        role == 'superadmin' ||
+        pos == 'super administrator' ||
+        pos == 'super admin';
+  }
+
+  List<OrgStructure> get structures => List.unmodifiable(
+        _structures.where((s) =>
+            _currentCompanyCode == 'all' ||
+            s.companyCode.isEmpty ||
+            s.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
+      );
+  List<WorkShift> get shifts => List.unmodifiable(
+        _shifts.where((s) =>
+            _currentCompanyCode == 'all' ||
+            s.companyCode.isEmpty ||
+            s.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
+      );
+  List<EmployeeGroup> get groups => List.unmodifiable(
+        _groups.where((g) =>
+            _currentCompanyCode == 'all' ||
+            g.companyCode.isEmpty ||
+            g.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
+      );
+  List<CompanyEmployee> get allEmployees => List.unmodifiable(_employees);
+  List<CompanyEmployee> get employees => List.unmodifiable(
+        _employees.where((e) {
+          if (isSuperAdminUser(e)) return false;
+          if (_currentCompanyCode == 'all') return true;
+          return e.companyCode.isEmpty ||
+              e.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase();
+        }),
+      );
+  List<Holiday> get holidays => List.unmodifiable(
+        _holidays.where((h) =>
+            _currentCompanyCode == 'all' ||
+            h.companyCode.isEmpty ||
+            h.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
+      );
+  List<WorkLocation> get locations => List.unmodifiable(
+        _locations.where((l) =>
+            _currentCompanyCode == 'all' ||
+            l.companyCode.isEmpty ||
+            l.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
+      );
   List<Request> get requests => _allRequestsMap[_employeeId] ?? [];
   String get currentLanguage => _currentLanguage;
   bool get isLoading => _isLoading;
   FirebaseService get firebaseService => _firebaseService;
   CompanyProfile? get companyProfile => _companyProfile;
 
+  Future<void> loadCompanyLicense(String companyCode) async {
+    final clean = companyCode.trim().toLowerCase();
+    _currentCompanyCode = clean.isEmpty ? 'amada' : clean;
+    if (_currentCompanyCode == 'all') {
+      _licenseSubscription?.cancel();
+      _currentLicense = CompanyLicense.defaultLicense(
+        code: 'all',
+        name: 'All Companies (Master View)',
+        maxUsers: 99999,
+      );
+      _companyProfile = CompanyProfile(
+        name: 'All Companies',
+        address: 'Master Multi-Tenant Network',
+        email: 'admin@company.com',
+        phone: '',
+      );
+      notifyListeners();
+      return;
+    }
+    if (_firebaseService.isAvailable) {
+      final lic = await _firebaseService.getCompanyLicense(_currentCompanyCode);
+      if (lic != null) {
+        _currentLicense = lic;
+        _syncProfileFromLicense(lic);
+      } else {
+        final defaultLic = CompanyLicense.defaultLicense(code: _currentCompanyCode);
+        await _firebaseService.saveCompanyLicense(defaultLic);
+        _currentLicense = defaultLic;
+      }
+      _listenToCompanyLicense(_currentCompanyCode);
+    } else {
+      _currentLicense ??= CompanyLicense.defaultLicense(code: _currentCompanyCode);
+      if (_currentLicense != null) {
+        _syncProfileFromLicense(_currentLicense!);
+      }
+    }
+    notifyListeners();
+  }
+
+  void _listenToCompanyLicense(String companyCode) {
+    _licenseSubscription?.cancel();
+    _licenseSubscription = _firebaseService.streamCompanyLicense(companyCode).listen((lic) {
+      if (lic != null) {
+        _currentLicense = lic;
+        _syncProfileFromLicense(lic);
+        notifyListeners();
+      }
+    });
+  }
+
+  void _syncProfileFromLicense(CompanyLicense lic) {
+    if ((lic.logoBase64 != null && lic.logoBase64!.isNotEmpty) || lic.companyName.isNotEmpty) {
+      _companyProfile = CompanyProfile(
+        name: lic.companyName.isNotEmpty ? lic.companyName : (_companyProfile?.name ?? 'Company'),
+        address: lic.address ?? _companyProfile?.address ?? '',
+        email: lic.ownerEmail ?? _companyProfile?.email,
+        phone: lic.ownerPhone ?? _companyProfile?.phone,
+        logoBase64: lic.logoBase64 ?? _companyProfile?.logoBase64,
+      );
+    }
+  }
+
+  Future<void> setCompanyCode(String code) async {
+    final clean = code.trim().toLowerCase();
+    if (clean.isEmpty) return;
+    final bool changed = _currentCompanyCode != clean;
+    _currentCompanyCode = clean;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('app_company_code', clean);
+    } catch (_) {}
+    await loadCompanyLicense(clean);
+    if (changed) {
+      await _loadPayrollClosuresFromPrefs();
+      _listenToPayrollClosures();
+      await _setupFirestoreListeners();
+    }
+  }
+
+  void _listenToPayrollClosures() {
+    _payrollClosuresSubscription?.cancel();
+    if (_firebaseService.isAvailable) {
+      final code = _currentCompanyCode == 'all' ? null : _currentCompanyCode;
+      _payrollClosuresSubscription = _firebaseService
+          .streamPayrollClosures(companyCode: code)
+          .listen((data) {
+        _payrollClosures.clear();
+        _payrollClosures.addAll(data);
+        _savePayrollClosuresToPrefs();
+        recalculateAllStats();
+        notifyListeners();
+      });
+    }
+  }
+
+  Future<void> saveCompanyLicense(CompanyLicense license) async {
+    await _firebaseService.saveCompanyLicense(license);
+    if (license.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()) {
+      _currentLicense = license;
+      _syncProfileFromLicense(license);
+      if (_firebaseService.isAvailable && _companyProfile != null) {
+        await _firebaseService.saveCompanyProfile(_companyProfile!);
+      }
+      notifyListeners();
+    }
+  }
+
   CompanyEmployee? get currentEmployee {
     for (var e in _employees) {
       if (e.id == _employeeId) return e;
     }
-    if (_isLoggedIn && _employeeId.isNotEmpty) {
+    if (_employeeId.isNotEmpty) {
       return CompanyEmployee(
         id: _employeeId,
         name: _userName,
@@ -532,7 +966,7 @@ class AttendanceProvider with ChangeNotifier {
         .toList();
 
     for (var structId in supervisedStructures) {
-      final emps = _employees.where(
+      final emps = employees.where(
         (e) => e.id != supervisor.id && e.structureId == structId,
       );
       for (var e in emps) {
@@ -542,9 +976,9 @@ class AttendanceProvider with ChangeNotifier {
       }
     }
 
-    // Co-workers in same structure if supervisor is just regular employee (wait, only supervisors)
+    // Co-workers in same structure if supervisor is just regular employee
     if (supervisor.structureId != null && supervisor.structureId!.isNotEmpty) {
-      final emps = _employees.where(
+      final emps = employees.where(
         (e) =>
             e.id != supervisor.id &&
             e.structureId == supervisor.structureId &&
@@ -560,18 +994,24 @@ class AttendanceProvider with ChangeNotifier {
     return subordinates;
   }
 
-  bool get canEditCompanyInfo {
-    final emp = currentEmployee;
-    if (emp == null) return false;
-    if (emp.role == 'hr' || emp.role == 'admin') return true;
+  String get userRole => _role;
 
-    // Check group permission
-    final groupId = getGroupIdForDate(emp, DateTime.now());
-    final group = _groups.firstWhere(
-      (g) => g.id == groupId,
-      orElse: () => EmployeeGroup(id: '', name: '', shiftId: ''),
-    );
-    return group.canEditCompanyInfo;
+  bool get isSuperAdmin {
+    if (isSuperAdminUser(currentEmployee)) return true;
+    final r = _role.toLowerCase().trim();
+    final e = _email.toLowerCase().trim();
+    final id = _employeeId.toLowerCase().trim();
+    final pos = _position.toLowerCase().trim();
+    return r == 'super_admin' ||
+        r == 'superadmin' ||
+        e == 'admin@company.com' ||
+        id == 'admin_super_account' ||
+        pos == 'super administrator' ||
+        pos == 'super admin';
+  }
+
+  bool get canEditCompanyInfo {
+    return isSuperAdmin;
   }
 
   /// Whether the logged-in user is an HR manager/admin who can register/delete Face ID
@@ -579,10 +1019,10 @@ class AttendanceProvider with ChangeNotifier {
     final emp = currentEmployee;
     if (emp == null) return false;
     final role = emp.role.toLowerCase().trim();
-    if (role == 'hr' || role == 'admin') return true;
+    if (role == 'hr' || role == 'admin' || role == 'super_admin' || role == 'superadmin' || emp.email.toLowerCase() == 'admin@company.com') return true;
     final pos = emp.position.toLowerCase();
     if (pos.contains('hr') || pos.contains('human resource')) return true;
-    return canEditCompanyInfo;
+    return isSuperAdmin;
   }
 
   bool get isDarkMode {
@@ -700,12 +1140,14 @@ class AttendanceProvider with ChangeNotifier {
     _initializeHRMockData();
     _initializeMockChats();
     _loadAuthSession();
+    _loadPayrollClosuresFromPrefs();
     _initializeFirebaseAndSync();
     recalculateAllStats();
   }
 
   @override
   void dispose() {
+    _licenseSubscription?.cancel();
     for (var sub in _subscriptions) {
       sub.cancel();
     }
@@ -818,6 +1260,8 @@ class AttendanceProvider with ChangeNotifier {
     _subscriptions.clear();
 
     try {
+      final filterCode = _currentCompanyCode == 'all' ? null : _currentCompanyCode;
+
       _subscriptions.add(
         _firebaseService.streamCompanyProfile().listen((data) {
           _companyProfile = data;
@@ -826,7 +1270,15 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamStructures().listen((data) {
+        _firebaseService.streamCompanyLicenses().listen((data) {
+          _allCompanies.clear();
+          _allCompanies.addAll(data);
+          notifyListeners();
+        }),
+      );
+
+      _subscriptions.add(
+        _firebaseService.streamStructures(companyCode: filterCode).listen((data) {
           _structures.clear();
           _structures.addAll(data);
           loadChatsForCurrentUser();
@@ -835,7 +1287,7 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamShifts().listen((data) {
+        _firebaseService.streamShifts(companyCode: filterCode).listen((data) {
           _shifts.clear();
           _shifts.addAll(data);
           notifyListeners();
@@ -843,7 +1295,7 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamGroups().listen((data) {
+        _firebaseService.streamGroups(companyCode: filterCode).listen((data) {
           _groups.clear();
           _groups.addAll(data);
           notifyListeners();
@@ -851,7 +1303,7 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamEmployees().listen((data) {
+        _firebaseService.streamEmployees(companyCode: filterCode).listen((data) {
           _employees.clear();
           for (var emp in data) {
             // Auto-heal: If employee has basicSalary configured but empty salaryHistory, synthesize initial entry and persist
@@ -886,7 +1338,7 @@ class AttendanceProvider with ChangeNotifier {
               name: 'Super Admin',
               email: 'admin@company.com',
               position: 'Super Administrator',
-              role: 'admin',
+              role: 'super_admin',
               password: 'admin123',
               startDate: DateTime.now().toIso8601String().split('T')[0],
               positionStartDate: DateTime.now().toIso8601String().split('T')[0],
@@ -894,9 +1346,36 @@ class AttendanceProvider with ChangeNotifier {
               positionHistory: [],
               groupHistory: [],
               salaryHistory: [],
+              companyCode: '',
             );
             _employees.add(superAdmin);
             _firebaseService.saveEmployee(superAdmin);
+          }
+
+          // --- ENSURE CLIENT COMPANY ADMIN REMAINS ---
+          final code = (filterCode ?? '').trim().toLowerCase();
+          if (code.isNotEmpty && code != 'all' && code != 'amada') {
+            final clientAdminId = '${code}_admin';
+            if (!_employees.any((e) => e.id == clientAdminId || e.email == 'admin@$code.com')) {
+              final compName = _currentLicense?.companyName ?? code.toUpperCase();
+              final clientAdmin = CompanyEmployee(
+                id: clientAdminId,
+                name: '$compName Admin',
+                email: 'admin@$code.com',
+                position: 'Company Administrator',
+                role: 'admin',
+                password: 'admin123',
+                companyCode: code,
+                startDate: DateTime.now().toIso8601String().split('T')[0],
+                positionStartDate: DateTime.now().toIso8601String().split('T')[0],
+                groupStartDate: DateTime.now().toIso8601String().split('T')[0],
+                positionHistory: [],
+                groupHistory: [],
+                salaryHistory: [],
+              );
+              _employees.add(clientAdmin);
+              _firebaseService.saveEmployee(clientAdmin);
+            }
           }
 
           _syncCurrentEmployeeInfo();
@@ -907,7 +1386,7 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamHolidays().listen((data) {
+        _firebaseService.streamHolidays(companyCode: filterCode).listen((data) {
           _holidays.clear();
           _holidays.addAll(data);
           notifyListeners();
@@ -915,7 +1394,7 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamLocations().listen((data) {
+        _firebaseService.streamLocations(companyCode: filterCode).listen((data) {
           _locations.clear();
           _locations.addAll(data);
           notifyListeners();
@@ -930,6 +1409,8 @@ class AttendanceProvider with ChangeNotifier {
           notifyListeners();
         }),
       );
+
+      _listenToPayrollClosures();
 
       _subscriptions.add(
         _firebaseService.streamUserRecords(_employeeId).listen((data) {
@@ -953,6 +1434,16 @@ class AttendanceProvider with ChangeNotifier {
           _allCompanyRecords.clear();
           _allCompanyRecords.addAll(data);
           notifyListeners();
+        }),
+      );
+
+      _subscriptions.add(
+        _firebaseService.streamDeletedPunches().listen((punches) {
+          _deletedPunchSignatures.clear();
+          for (var p in punches) {
+            final key = '${p.employeeId.trim().toLowerCase()}_${p.punchTime.year}_${p.punchTime.month}_${p.punchTime.day}_${p.punchTime.hour}_${p.punchTime.minute}';
+            _deletedPunchSignatures.add(key);
+          }
         }),
       );
 
@@ -1001,6 +1492,23 @@ class AttendanceProvider with ChangeNotifier {
         }),
       );
 
+      if (_employeeId.isNotEmpty) {
+        _subscriptions.add(
+          _firebaseService.streamUserChatContactIds(_employeeId).listen((contactIds) {
+            bool hasNew = false;
+            for (var cid in contactIds) {
+              if (_chatRoomContactIds.add(cid)) {
+                hasNew = true;
+                ensureChatLoaded(cid);
+              }
+            }
+            if (hasNew) {
+              notifyListeners();
+            }
+          }),
+        );
+      }
+
       await loadChatsForCurrentUser();
       if (!kIsWeb) {
         await _setupPushNotifications();
@@ -1022,11 +1530,24 @@ class AttendanceProvider with ChangeNotifier {
       // Request permission
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
+      // On iOS, configure foreground notification presentation options
+      try {
+        await messaging.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } catch (_) {}
+
       // Initialize local notifications for foreground and register high-priority notification channel
       const AndroidInitializationSettings initializationSettingsAndroid =
           AndroidInitializationSettings('@mipmap/ic_launcher');
       const DarwinInitializationSettings initializationSettingsIOS =
-          DarwinInitializationSettings();
+          DarwinInitializationSettings(
+            requestAlertPermission: true,
+            requestBadgePermission: true,
+            requestSoundPermission: true,
+          );
       const InitializationSettings initializationSettings =
           InitializationSettings(
             android: initializationSettingsAndroid,
@@ -1034,7 +1555,26 @@ class AttendanceProvider with ChangeNotifier {
           );
       await _localNotificationsPlugin.initialize(
         settings: initializationSettings,
+        onDidReceiveNotificationResponse: (response) {
+          final payload = response.payload;
+          if (payload != null && payload.isNotEmpty) {
+            _handleNotificationPayload(payload);
+          }
+        },
       );
+
+      // Check if app was launched via local notification tap from killed state
+      try {
+        final launchDetails = await _localNotificationsPlugin.getNotificationAppLaunchDetails();
+        if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+          final payload = launchDetails.notificationResponse?.payload;
+          if (payload != null && payload.isNotEmpty) {
+            _handleNotificationPayload(payload);
+          }
+        }
+      } catch (e) {
+        debugPrint('Error checking local notification launch details: $e');
+      }
 
       // Create high-priority notification channel for Android system tray
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -1050,8 +1590,8 @@ class AttendanceProvider with ChangeNotifier {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
 
-      // Get token and ensure it belongs exclusively to the current logged-in employee
-      String? token = await messaging.getToken();
+      _currentDeviceFcmToken = await messaging.getToken();
+      String? token = _currentDeviceFcmToken;
       if (token != null && currentEmployee != null) {
         // Disassociate this hardware token from any other employee who previously used this device
         for (var emp in _employees) {
@@ -1075,6 +1615,7 @@ class AttendanceProvider with ChangeNotifier {
 
       // Listen to token refresh
       messaging.onTokenRefresh.listen((newToken) async {
+        _currentDeviceFcmToken = newToken;
         if (currentEmployee != null) {
           for (var emp in _employees) {
             if (emp.id != currentEmployee!.id && emp.fcmToken == newToken) {
@@ -1094,32 +1635,103 @@ class AttendanceProvider with ChangeNotifier {
         }
       });
 
-      // Setup foreground notification display
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-        debugPrint('Got a message whilst in the foreground!');
-        debugPrint('Message data: ${message.data}');
+      // Handle notification clicks when app was in background
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint('Notification clicked while app in background: ${message.data}');
+        final senderId = message.data['senderId']?.toString();
+        final senderName = message.data['senderName']?.toString();
+        final text = message.data['body']?.toString() ?? message.data['text']?.toString();
+        _openChatWithSender(senderId, senderName: senderName, initialText: text);
+      });
 
-        if (message.notification != null) {
-          debugPrint(
-            'Message also contained a notification: ${message.notification}',
-          );
+      // Handle notification click when app was terminated
+      messaging.getInitialMessage().then((RemoteMessage? message) {
+        if (message != null) {
+          debugPrint('Notification opened app from terminated state: ${message.data}');
+          final senderId = message.data['senderId']?.toString();
+          final senderName = message.data['senderName']?.toString();
+          final text = message.data['body']?.toString() ?? message.data['text']?.toString();
+          _openChatWithSender(senderId, senderName: senderName, initialText: text);
+        }
+      });
+
+      // Setup foreground Cloud Messaging listener:
+      // When the user is ON THE APP, Android suppresses system tray display.
+      // We show 1 heads-up notification so the user is immediately alerted while inside the app.
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        debugPrint('Cloud FCM message received in foreground: ${message.data}');
+
+        final senderId = message.data['senderId']?.toString();
+        // If the user currently has this contact's chat open, skip notification popup
+        if (_activeChatContactId != null && _activeChatContactId == senderId) {
+          return;
+        }
+
+        final title = message.notification?.title ??
+            message.data['title'] ??
+            'Message from ${message.data['senderName'] ?? 'Contact'}';
+        final body = message.notification?.body ??
+            message.data['body'] ??
+            message.data['text'] ??
+            '';
+
+        // 1. Add to in-app notification center (the bell icon)
+        _notifications ??= [];
+        _notifications!.insert(
+          0,
+          AppNotification(
+            id: 'notif_${DateTime.now().millisecondsSinceEpoch}',
+            title: title,
+            body: body,
+            timestamp: DateTime.now(),
+            type: NotificationType.chat,
+            relatedId: senderId,
+            isRead: false,
+          ),
+        );
+        notifyListeners();
+
+        // 2. Show heads-up notification on Mobile so user gets notified while in-app
+        if (!kIsWeb) {
+          final msgId = message.data['messageId']?.toString() ??
+              message.messageId ??
+              '${title}_$body';
+          final notifId = msgId.hashCode.abs() % 100000;
 
           const AndroidNotificationDetails androidDetails =
               AndroidNotificationDetails(
                 'chat_channel_id',
                 'Chat Messages',
+                channelDescription:
+                    'Notifications for new messages and attendance alerts',
                 importance: Importance.max,
                 priority: Priority.high,
+                playSound: true,
+                enableVibration: true,
+              );
+          const DarwinNotificationDetails darwinDetails =
+              DarwinNotificationDetails(
+                presentAlert: true,
+                presentBadge: true,
+                presentSound: true,
               );
           const NotificationDetails platformDetails = NotificationDetails(
             android: androidDetails,
+            iOS: darwinDetails,
           );
 
+          final payloadData = jsonEncode({
+            'senderId': senderId,
+            'senderName': message.data['senderName'] ?? title.replaceFirst('Message from ', ''),
+            'body': body,
+          });
+
           await _localNotificationsPlugin.show(
-            id: DateTime.now().millisecond,
-            title: message.notification!.title,
-            body: message.notification!.body,
+            id: notifId,
+            title: title,
+            body: body,
             notificationDetails: platformDetails,
+            payload: payloadData,
           );
         }
       });
@@ -1128,74 +1740,141 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
 
+  void _handleNotificationPayload(String payload) {
+    try {
+      if (payload.trim().startsWith('{')) {
+        final map = jsonDecode(payload) as Map<String, dynamic>;
+        final senderId = map['senderId']?.toString();
+        final senderName = map['senderName']?.toString();
+        final text = map['body']?.toString() ?? map['text']?.toString();
+        _openChatWithSender(senderId, senderName: senderName, initialText: text);
+      } else {
+        _openChatWithSender(payload);
+      }
+    } catch (_) {
+      _openChatWithSender(payload);
+    }
+  }
+
+  Future<void> _openChatWithSender(
+    String? senderId, {
+    String? senderName,
+    String? initialText,
+  }) async {
+    if (senderId == null || senderId.trim().isEmpty) return;
+    final cleanId = senderId.trim();
+
+    // 1. Wait for navigator key to be mounted (e.g. cold start)
+    int attempts = 0;
+    while (rootNavigatorKey.currentState == null && attempts < 25) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      attempts++;
+    }
+
+    final navState = rootNavigatorKey.currentState;
+    if (navState == null) {
+      debugPrint('[_openChatWithSender] NavigatorState is null after waiting.');
+      return;
+    }
+
+    // 2. Wait briefly if initial data sync is still actively populating
+    if (_isLoading && _employees.isEmpty) {
+      int dataAttempts = 0;
+      while (_isLoading && _employees.isEmpty && dataAttempts < 10) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        dataAttempts++;
+      }
+    }
+
+    // 3. Resolve the Contact employee
+    CompanyEmployee? contact;
+    try {
+      contact = _employees.firstWhere(
+        (e) =>
+            e.id.trim().toLowerCase() == cleanId.toLowerCase() ||
+            e.email.trim().toLowerCase() == cleanId.toLowerCase(),
+      );
+    } catch (_) {}
+
+    // 4. Try fetching from Firebase if not in local memory
+    if (contact == null && _firebaseService.isAvailable) {
+      try {
+        contact = await _firebaseService.getEmployee(cleanId);
+      } catch (_) {}
+    }
+
+    // 5. Fallback contact so navigation never fails
+    contact ??= CompanyEmployee(
+      id: cleanId,
+      name: (senderName != null && senderName.isNotEmpty) ? senderName : 'Management',
+      email: '',
+      position: 'HR / Supervisor',
+      role: 'hr',
+      companyCode: _currentCompanyCode,
+    );
+
+    // 6. Check if chat with this contact is already open
+    final isAlreadyOpen = _activeChatContactId == contact.id;
+
+    // 7. Ensure chat messages are loaded and set active contact
+    ensureChatLoaded(contact.id);
+    setActiveChatContactId(contact.id);
+
+    if (isAlreadyOpen) {
+      return;
+    }
+
+    // 8. Open ChatRoomScreen
+    await navState.push(
+      MaterialPageRoute(
+        builder: (context) => ChatRoomScreen(contact: contact!),
+      ),
+    );
+  }
+
   Future<void> _showLocalChatNotification(
     String senderName,
     String messageText, {
     String? senderId,
   }) async {
-    if (kIsWeb) {
-      showBrowserNotification('Message from $senderName', messageText);
+    // Mobile uses purely Cloud Messaging (FCM from Cloud Function).
+    // Local notifications are strictly for Web browsers.
+    if (!kIsWeb) return;
 
-      _notifications ??= [];
-      _notifications!.insert(
-        0,
-        AppNotification(
-          id: 'notif_${DateTime.now().millisecondsSinceEpoch}',
-          title: 'Message from $senderName',
-          body: messageText,
-          timestamp: DateTime.now(),
-          type: NotificationType.chat,
-          relatedId: senderId,
-          isRead: false,
-        ),
-      );
-
-      // Show redesigned compact floating toast at top-right on Web
-      showWebNotificationToast(
-        senderName: senderName,
-        messageText: messageText,
-        senderId: senderId,
-        onReply: () {
-          if (senderId != null) {
-            final contact = _employees
-                .where((e) => e.id == senderId)
-                .firstOrNull;
-            if (contact != null && rootNavigatorKey.currentState != null) {
-              rootNavigatorKey.currentState!.push(
-                MaterialPageRoute(
-                  builder: (context) => ChatRoomScreen(contact: contact),
-                ),
-              );
-            }
-          }
-        },
-      );
-
-      notifyListeners();
+    // If the user currently has this contact's chat open, skip notification
+    if (_activeChatContactId != null && _activeChatContactId == senderId) {
       return;
     }
 
-    try {
-      const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
-            'chat_channel_id',
-            'Chat Messages',
-            importance: Importance.max,
-            priority: Priority.high,
-          );
-      const NotificationDetails platformDetails = NotificationDetails(
-        android: androidDetails,
-      );
+    showBrowserNotification('Message from $senderName', messageText);
 
-      await _localNotificationsPlugin.show(
-        id: DateTime.now().millisecond,
+    _notifications ??= [];
+    _notifications!.insert(
+      0,
+      AppNotification(
+        id: 'notif_${DateTime.now().millisecondsSinceEpoch}',
         title: 'Message from $senderName',
         body: messageText,
-        notificationDetails: platformDetails,
-      );
-    } catch (e) {
-      debugPrint('Error showing local notification: $e');
-    }
+        timestamp: DateTime.now(),
+        type: NotificationType.chat,
+        relatedId: senderId,
+        isRead: false,
+      ),
+    );
+
+    // Show redesigned compact floating toast at top-right on Web
+    showWebNotificationToast(
+      senderName: senderName,
+      messageText: messageText,
+      senderId: senderId,
+      onReply: () {
+        if (senderId != null) {
+          _openChatWithSender(senderId, senderName: senderName, initialText: messageText);
+        }
+      },
+    );
+
+    notifyListeners();
   }
 
   Future<void> refreshData() async {
@@ -1435,7 +2114,25 @@ class AttendanceProvider with ChangeNotifier {
     CompanyEmployee emp,
     DateTime targetMonth, {
     List<AttendanceRecord>? customRecords,
+    bool bypassSnapshot = false,
   }) {
+    final yearMonth = DateFormat('yyyy-MM').format(targetMonth);
+    if (!bypassSnapshot && isMonthClosedStr(yearMonth)) {
+      final closure = getClosureForMonthStr(yearMonth);
+      if (closure != null && closure.snapshots.containsKey(emp.id)) {
+        final snap = closure.snapshots[emp.id]!;
+        final empAdjustments = _payrollAdjustments.where((adj) {
+          final matchesEmp = adj.employeeId.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
+              adj.employeeId.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
+              adj.employeeId.trim().toLowerCase() == emp.email.trim().toLowerCase();
+          final matchesMonth = adj.month == yearMonth ||
+              (adj.date.length >= 7 && adj.date.substring(0, 7) == yearMonth);
+          return matchesEmp && matchesMonth;
+        }).toList();
+        return snap.toPayrollReport(emp, empAdjustments);
+      }
+    }
+
     final config = getActiveSalaryConfig(emp, targetMonth);
     final basicSalary = config.basicSalary;
     final configWorkingHours = config.workingHours > 0
@@ -1486,6 +2183,13 @@ class AttendanceProvider with ChangeNotifier {
     double totalPenalties = 0.0;
     int daysWorked = 0;
 
+    int delayTier1Occurrences = 0;
+    int delayTier2Occurrences = 0;
+    int delayTier3Occurrences = 0;
+    int earlyExitTier1Occurrences = 0;
+    int earlyExitTier2Occurrences = 0;
+    int earlyExitTier3Occurrences = 0;
+
     for (int day = 1; day <= daysInMonth; day++) {
       final date = DateTime(targetMonth.year, targetMonth.month, day);
       final activeGroupId = getGroupIdForDate(emp, date);
@@ -1524,12 +2228,21 @@ class AttendanceProvider with ChangeNotifier {
           )
           .toList();
 
-      final hasLeave = dayApprovedRequests.any(
+      final hasFullDayLeave = dayApprovedRequests.any(
         (r) =>
             r.type == 'Annual Leave' ||
             r.type == 'Sick Leave' ||
-            r.type == 'Hourly Leave',
+            (r.type.contains('Leave') &&
+                r.type != 'Hourly Leave' &&
+                !r.type.toLowerCase().contains('hourly')),
       );
+      int approvedHourlyMinutes = 0;
+      for (var r in dayApprovedRequests) {
+        if (r.type == 'Hourly Leave' || r.type.toLowerCase().contains('hourly')) {
+          final m = parseHourlyLeaveDurationMinutes(r.duration);
+          approvedHourlyMinutes += m > 0 ? m : 60;
+        }
+      }
       final hasApprovedOt = dayApprovedRequests.any(
         (r) => r.type == 'Overtime Approval',
       );
@@ -1559,40 +2272,60 @@ class AttendanceProvider with ChangeNotifier {
       );
       final isHoliday = holiday.id.isNotEmpty;
 
-      if (hasRecord) {
+      final hasApprovedMissingPunch = dayApprovedRequests.any(
+        (r) =>
+            r.type == 'Missing Punch' ||
+            r.type == 'Forgot to Clock In' ||
+            r.type == 'Forgot to Clock Out',
+      );
+
+      final startTimeStr = shift.getStartTimeForDate(date);
+      final endTimeStr = shift.getEndTimeForDate(date);
+      final sParts = startTimeStr.split(':');
+      final eParts = endTimeStr.split(':');
+      final shiftStartMins = sParts.length >= 2
+          ? int.parse(sParts[0]) * 60 + int.parse(sParts[1])
+          : 540;
+      final shiftEndMins = eParts.length >= 2
+          ? int.parse(eParts[0]) * 60 + int.parse(eParts[1])
+          : 1020;
+
+      final shiftStart = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        shiftStartMins ~/ 60,
+        shiftStartMins % 60,
+      );
+      var shiftEnd = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        shiftEndMins ~/ 60,
+        shiftEndMins % 60,
+      );
+      if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart) || shift.isOvernightForDate(date)) {
+        shiftEnd = shiftEnd.add(const Duration(days: 1));
+      }
+
+      final isToday = DateUtils.isSameDay(date, DateTime.now());
+      final hasUnexcusedMissedPunch = !hasApprovedMissingPunch &&
+          hasRecord &&
+          dayRecords.any((rec) {
+            if (rec.checkIn == rec.checkOut) return true;
+            if (rec.checkOut == null) {
+              if (!isToday) return true;
+              if (DateTime.now().isAfter(shiftEnd)) return true;
+            }
+            return false;
+          });
+
+      if (hasRecord && !hasUnexcusedMissedPunch) {
         daysWorked++;
         int dayDuty = 0;
         int dayExtra = 0;
+        int dayNightExtra = 0;
         int dayActualMinutes = 0;
-
-        final startTimeStr = shift.getStartTimeForDate(date);
-        final endTimeStr = shift.getEndTimeForDate(date);
-        final sParts = startTimeStr.split(':');
-        final eParts = endTimeStr.split(':');
-        final shiftStartMins = sParts.length >= 2
-            ? int.parse(sParts[0]) * 60 + int.parse(sParts[1])
-            : 540;
-        final shiftEndMins = eParts.length >= 2
-            ? int.parse(eParts[0]) * 60 + int.parse(eParts[1])
-            : 1020;
-
-        final shiftStart = DateTime(
-          date.year,
-          date.month,
-          date.day,
-          shiftStartMins ~/ 60,
-          shiftStartMins % 60,
-        );
-        var shiftEnd = DateTime(
-          date.year,
-          date.month,
-          date.day,
-          shiftEndMins ~/ 60,
-          shiftEndMins % 60,
-        );
-        if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart) || shift.isOvernightForDate(date)) {
-          shiftEnd = shiftEnd.add(const Duration(days: 1));
-        }
 
         for (var rec in dayRecords) {
           final rawIn = rec.checkIn;
@@ -1620,14 +2353,23 @@ class AttendanceProvider with ChangeNotifier {
 
           if (!isWorkingDay) {
             dayExtra += cOut.difference(cIn).inMinutes;
+            if (group.nightOvertimeAllowed) {
+              dayNightExtra += group.calculateNightMinutes(cIn, cOut);
+            }
           } else {
             if (cIn.isBefore(shiftStart)) {
               final eBefore = cOut.isBefore(shiftStart) ? cOut : shiftStart;
               dayExtra += eBefore.difference(cIn).inMinutes;
+              if (group.nightOvertimeAllowed) {
+                dayNightExtra += group.calculateNightMinutes(cIn, eBefore);
+              }
             }
             if (cOut.isAfter(shiftEnd)) {
               final sAfter = cIn.isAfter(shiftEnd) ? cIn : shiftEnd;
               dayExtra += cOut.difference(sAfter).inMinutes;
+              if (group.nightOvertimeAllowed) {
+                dayNightExtra += group.calculateNightMinutes(sAfter, cOut);
+              }
             }
           }
           dayActualMinutes += cOut.difference(cIn).inMinutes;
@@ -1648,24 +2390,48 @@ class AttendanceProvider with ChangeNotifier {
           dayEarlyExit = 0;
           dayDuty = dayActualMinutes > shiftDur ? shiftDur : dayActualMinutes;
           dayExtra = dayActualMinutes > shiftDur ? (dayActualMinutes - shiftDur) : 0;
-        } else if (isWorkingDay && !hasLeave && !isHoliday) {
+          if (group.nightOvertimeAllowed && dayExtra > 0 && dayRecords.isNotEmpty) {
+            final lastRec = dayRecords.last;
+            final lastOut = lastRec.checkOut ?? lastRec.checkIn;
+            final extraStart = lastOut.subtract(Duration(minutes: dayExtra));
+            dayNightExtra = group.calculateNightMinutes(extraStart, lastOut);
+          }
+        } else if (isWorkingDay && !hasFullDayLeave && !isHoliday) {
           final sorted = List<AttendanceRecord>.from(dayRecords)
             ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
-          final firstRec = sorted.first;
-          final delay = firstRec.checkIn.difference(shiftStart).inMinutes;
-          if (delay > shift.forgivenessOfDelay) {
-            dayDelay = delay;
-          }
 
-          final lastRec = sorted.last;
-          if (lastRec.checkOut != null) {
-            final earlyExit = shiftEnd.difference(lastRec.checkOut!).inMinutes;
-            if (earlyExit > shift.earlyExit) {
-              dayEarlyExit = earlyExit;
+          final shiftRecords = sorted.where((r) => r.checkIn.isBefore(shiftEnd)).toList();
+          if (shiftRecords.isNotEmpty) {
+            final firstRec = shiftRecords.first;
+            final delay = firstRec.checkIn.difference(shiftStart).inMinutes;
+            if (delay > shift.forgivenessOfDelay) {
+              dayDelay = delay;
+            }
+
+            final lastRec = shiftRecords.last;
+            if (lastRec.checkOut != null) {
+              final earlyExit = shiftEnd.difference(lastRec.checkOut!).inMinutes;
+              if (earlyExit > shift.earlyExit) {
+                dayEarlyExit = earlyExit;
+              }
+            }
+
+            if (approvedHourlyMinutes > 0) {
+              int remainingHourly = approvedHourlyMinutes;
+              if (dayDelay > 0) {
+                final excused = math.min(dayDelay, remainingHourly);
+                dayDelay -= excused;
+                remainingHourly -= excused;
+              }
+              if (dayEarlyExit > 0 && remainingHourly > 0) {
+                final excused = math.min(dayEarlyExit, remainingHourly);
+                dayEarlyExit -= excused;
+                remainingHourly -= excused;
+              }
             }
           }
 
-          // Calculate Unexcused Rest Time
+          // Calculate Unexcused Rest Time (within shift bounds)
           int totalExcusedRestMinutes = 0;
 
           final breakStartStr = shift.getBreakStartForDate(date);
@@ -1705,13 +2471,26 @@ class AttendanceProvider with ChangeNotifier {
               final currentOut = sorted[i].checkOut;
               final nextIn = sorted[i + 1].checkIn;
               if (currentOut != null && nextIn.isAfter(currentOut)) {
-                final gapDuration = nextIn.difference(currentOut).inMinutes;
+                // If the gap starts at or after shiftEnd, it's outside shift hours (e.g. night overtime gap)
+                if (currentOut.isAfter(shiftEnd) || currentOut.isAtSameMomentAs(shiftEnd)) {
+                  continue;
+                }
+                // If the employee does not return before shiftEnd, their departure is handled by Early Exit
+                if (nextIn.isAfter(shiftEnd) || nextIn.isAtSameMomentAs(shiftEnd)) {
+                  continue;
+                }
+
+                final gapStart = currentOut.isAfter(shiftStart) ? currentOut : shiftStart;
+                final gapEnd = nextIn.isBefore(shiftEnd) ? nextIn : shiftEnd;
+                if (!gapEnd.isAfter(gapStart)) continue;
+
+                final gapDuration = gapEnd.difference(gapStart).inMinutes;
 
                 if (bStart != null && bEnd != null) {
-                  final intersectStart = currentOut.isAfter(bStart)
-                      ? currentOut
+                  final intersectStart = gapStart.isAfter(bStart)
+                      ? gapStart
                       : bStart;
-                  final intersectEnd = nextIn.isBefore(bEnd) ? nextIn : bEnd;
+                  final intersectEnd = gapEnd.isBefore(bEnd) ? gapEnd : bEnd;
 
                   int excusedInGap = 0;
                   if (intersectEnd.isAfter(intersectStart)) {
@@ -1739,17 +2518,26 @@ class AttendanceProvider with ChangeNotifier {
 
         // Removed unused delay & early exit accumulators
 
-        // Penalties
+        // Penalties (with forgiveness evaluation per tier)
         double delayPenalty = 0.0;
         if (dayDelay > 0 && group.delayPenaltiesEnabled) {
           if (dayDelay >= group.delayTier1Min &&
               dayDelay <= group.delayTier1Max) {
-            delayPenalty = group.delayTier1Penalty;
+            delayTier1Occurrences++;
+            if (delayTier1Occurrences > group.delayTier1Forgiveness) {
+              delayPenalty = group.delayTier1Penalty;
+            }
           } else if (dayDelay >= group.delayTier2Min &&
               dayDelay <= group.delayTier2Max) {
-            delayPenalty = group.delayTier2Penalty;
+            delayTier2Occurrences++;
+            if (delayTier2Occurrences > group.delayTier2Forgiveness) {
+              delayPenalty = group.delayTier2Penalty;
+            }
           } else if (dayDelay >= group.delayTier3Min) {
-            delayPenalty = group.delayTier3Penalty;
+            delayTier3Occurrences++;
+            if (delayTier3Occurrences > group.delayTier3Forgiveness) {
+              delayPenalty = group.delayTier3Penalty;
+            }
           }
         }
 
@@ -1757,12 +2545,21 @@ class AttendanceProvider with ChangeNotifier {
         if (dayEarlyExit > 0 && group.earlyExitPenaltiesEnabled) {
           if (dayEarlyExit >= group.earlyExitTier1Min &&
               dayEarlyExit <= group.earlyExitTier1Max) {
-            earlyExitPenalty = group.earlyExitTier1Penalty;
+            earlyExitTier1Occurrences++;
+            if (earlyExitTier1Occurrences > group.earlyExitTier1Forgiveness) {
+              earlyExitPenalty = group.earlyExitTier1Penalty;
+            }
           } else if (dayEarlyExit >= group.earlyExitTier2Min &&
               dayEarlyExit <= group.earlyExitTier2Max) {
-            earlyExitPenalty = group.earlyExitTier2Penalty;
+            earlyExitTier2Occurrences++;
+            if (earlyExitTier2Occurrences > group.earlyExitTier2Forgiveness) {
+              earlyExitPenalty = group.earlyExitTier2Penalty;
+            }
           } else if (dayEarlyExit >= group.earlyExitTier3Min) {
-            earlyExitPenalty = group.earlyExitTier3Penalty;
+            earlyExitTier3Occurrences++;
+            if (earlyExitTier3Occurrences > group.earlyExitTier3Forgiveness) {
+              earlyExitPenalty = group.earlyExitTier3Penalty;
+            }
           }
         }
 
@@ -1770,29 +2567,62 @@ class AttendanceProvider with ChangeNotifier {
 
         // Overtime
         if (dayExtra > 0 && hasApprovedOt && group.overtimeAllowed) {
-          if (dayExtra >= group.minOvertimeMinutes) {
-            final baseOt = dayExtra.clamp(0, group.maxOvertimeMinutes);
-            if (!isWorkingDay) {
-              totalOvertimeMinutes += (baseOt * group.weekendOvertimeRatio)
-                  .toInt();
-            } else {
-              totalOvertimeMinutes += baseOt;
-            }
-          }
+          totalOvertimeMinutes += group.calculateOvertimeMinutes(
+            dayExtraMinutes: dayExtra,
+            nightExtraMinutes: dayNightExtra,
+            isWeekend: !isWorkingDay,
+            isHoliday: isHoliday,
+          );
         }
 
         // Deficit on active day
         int dayDeficit = 0;
         if (isSpecial) {
-          if (isWorkingDay && !hasLeave && !isHoliday) {
-            if (dayActualMinutes < shiftDur) {
-              dayDeficit = shiftDur - dayActualMinutes;
+          if (isWorkingDay && !hasFullDayLeave && !isHoliday) {
+            final effShiftDur = math.max(0, shiftDur - approvedHourlyMinutes);
+            if (dayActualMinutes < effShiftDur) {
+              dayDeficit = effShiftDur - dayActualMinutes;
             }
           }
-        } else {
-          dayDeficit = dayDelay + dayEarlyExit + unexcusedRestMinutes;
+        } else if (isWorkingDay && !hasFullDayLeave && !isHoliday) {
+          final shiftRecords = dayRecords.where((r) => r.checkIn.isBefore(shiftEnd)).toList();
+          if (shiftRecords.isEmpty && dayRecords.isNotEmpty) {
+            // Employee only had punches after shift hours, full shift was missed
+            dayDeficit = shiftDur;
+          } else {
+            int remainingHourly = approvedHourlyMinutes;
+            int effDelay = dayDelay;
+            int effEarly = dayEarlyExit;
+            if (effDelay > 0 && remainingHourly > 0) {
+              final excused = math.min(effDelay, remainingHourly);
+              effDelay -= excused;
+              remainingHourly -= excused;
+            }
+            if (effEarly > 0 && remainingHourly > 0) {
+              final excused = math.min(effEarly, remainingHourly);
+              effEarly -= excused;
+              remainingHourly -= excused;
+            }
+            dayDeficit = effDelay + effEarly + unexcusedRestMinutes;
+            if (remainingHourly > 0 && dayDeficit > 0) {
+              dayDeficit = math.max(0, dayDeficit - remainingHourly);
+            }
+          }
+          if (dayDeficit > shiftDur) {
+            dayDeficit = shiftDur;
+          }
         }
         totalDeficitMinutes += dayDeficit;
+      } else if (hasRecord && hasUnexcusedMissedPunch) {
+        // Missed punch: do not calculate attendance, deficit is full shift time
+        if (isWorkingDay && !hasFullDayLeave && !isHoliday && !date.isAfter(DateTime.now())) {
+          final shiftDur = shift.getShiftDurationMinutesForDate(date);
+          int dayDeficit = shiftDur;
+          if (approvedHourlyMinutes > 0) {
+            dayDeficit = math.max(0, dayDeficit - approvedHourlyMinutes);
+          }
+          totalDeficitMinutes += dayDeficit;
+        }
       } else {
         // No record on this day
         // Since Gross Salary is based on Days Worked (salaryCalcByDay),
@@ -1881,7 +2711,166 @@ class AttendanceProvider with ChangeNotifier {
     );
   }
 
+  Future<void> _loadPayrollClosuresFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final code = _currentCompanyCode.toLowerCase();
+      var str = prefs.getString('payroll_closures_cache_$code');
+      if ((str == null || str.isEmpty) && code == 'amada') {
+        str = prefs.getString('payroll_closures');
+      }
+      if (str != null && str.isNotEmpty) {
+        final List<dynamic> list = jsonDecode(str);
+        _payrollClosures.clear();
+        for (var item in list) {
+          if (item is Map<String, dynamic>) {
+            final c = PayrollMonthClosure.fromMap(
+                item, item['id']?.toString() ?? '');
+            if (c.companyCode.isEmpty || c.companyCode.toLowerCase() == code) {
+              _payrollClosures.add(c);
+            }
+          }
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading payroll closures from prefs: $e');
+    }
+  }
+
+  Future<void> _savePayrollClosuresToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final code = _currentCompanyCode.toLowerCase();
+      final list = _payrollClosures
+          .where((c) =>
+              c.companyCode.isEmpty || c.companyCode.toLowerCase() == code)
+          .map((c) => c.toMap())
+          .toList();
+      await prefs.setString('payroll_closures_cache_$code', jsonEncode(list));
+      if (code == 'amada') {
+        await prefs.setString('payroll_closures', jsonEncode(list));
+      }
+    } catch (e) {
+      debugPrint('Error saving payroll closures to prefs: $e');
+    }
+  }
+
+  Future<bool> closeMonth({
+    required DateTime month,
+    required String closedBy,
+    String? closedByEmail,
+  }) async {
+    final ym = DateFormat('yyyy-MM').format(month);
+    final code = _currentCompanyCode.toLowerCase();
+    final closureId = '${code}_$ym';
+
+    final snapshots = <String, PayrollReportSnapshot>{};
+    double totalPayout = 0.0;
+    String currency = 'USD';
+
+    for (var emp in employees) {
+      final report = generatePayrollReport(emp, month, bypassSnapshot: true);
+      snapshots[emp.id] = report.toSnapshot();
+      totalPayout += report.netEarnings;
+      currency = report.currency;
+    }
+
+    final closure = PayrollMonthClosure(
+      id: closureId,
+      yearMonth: ym,
+      companyCode: code,
+      isClosed: true,
+      closedAt: DateTime.now(),
+      closedBy: closedBy,
+      closedByEmail: closedByEmail,
+      totalPayout: totalPayout,
+      totalEmployees: snapshots.length,
+      currency: currency,
+      snapshots: snapshots,
+    );
+
+    final idx = _payrollClosures.indexWhere(
+      (c) =>
+          c.yearMonth == ym &&
+          (c.companyCode.isEmpty || c.companyCode.toLowerCase() == code),
+    );
+    if (idx != -1) {
+      _payrollClosures[idx] = closure;
+    } else {
+      _payrollClosures.add(closure);
+    }
+
+    await _savePayrollClosuresToPrefs();
+    recalculateAllStats();
+    notifyListeners();
+
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.savePayrollClosure(closure);
+    }
+
+    return true;
+  }
+
+  Future<bool> reopenMonth({
+    required DateTime month,
+    required String reopenedBy,
+    required String reason,
+  }) async {
+    final ym = DateFormat('yyyy-MM').format(month);
+    final code = _currentCompanyCode.toLowerCase();
+    final existing = getClosureForMonthStr(ym);
+    if (existing == null) return false;
+
+    final updated = PayrollMonthClosure(
+      id: existing.id.contains('_') ? existing.id : '${code}_$ym',
+      yearMonth: existing.yearMonth,
+      companyCode:
+          existing.companyCode.isNotEmpty ? existing.companyCode : code,
+      isClosed: false,
+      closedAt: existing.closedAt,
+      closedBy: existing.closedBy,
+      closedByEmail: existing.closedByEmail,
+      reopenedAt: DateTime.now(),
+      reopenedBy: reopenedBy,
+      reopenReason: reason,
+      totalPayout: existing.totalPayout,
+      totalEmployees: existing.totalEmployees,
+      currency: existing.currency,
+      snapshots: existing.snapshots,
+    );
+
+    final idx = _payrollClosures.indexWhere(
+      (c) =>
+          c.yearMonth == ym &&
+          (c.companyCode.isEmpty || c.companyCode.toLowerCase() == code),
+    );
+    if (idx != -1) {
+      _payrollClosures[idx] = updated;
+    } else {
+      _payrollClosures.add(updated);
+    }
+
+    await _savePayrollClosuresToPrefs();
+    recalculateAllStats();
+    notifyListeners();
+
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.savePayrollClosure(updated);
+    }
+
+    return true;
+  }
+
   Future<void> addPayrollAdjustment(PayrollAdjustment adjustment) async {
+    final m = adjustment.month.isNotEmpty
+        ? adjustment.month
+        : (adjustment.date.length >= 7 ? adjustment.date.substring(0, 7) : '');
+    if (isMonthClosedStr(m)) {
+      debugPrint('Cannot add or edit payroll adjustment for closed month $m');
+      return;
+    }
+
     final existingIdx = _payrollAdjustments.indexWhere((a) => a.id == adjustment.id);
     if (existingIdx != -1) {
       _payrollAdjustments[existingIdx] = adjustment;
@@ -1897,6 +2886,12 @@ class AttendanceProvider with ChangeNotifier {
   }
 
   Future<void> deletePayrollAdjustment(String id) async {
+    final adj = _payrollAdjustments.where((a) => a.id == id).firstOrNull;
+    if (adj != null && isMonthClosedStr(adj.month)) {
+      debugPrint('Cannot delete payroll adjustment for closed month ${adj.month}');
+      return;
+    }
+
     _payrollAdjustments.removeWhere((a) => a.id == id);
     recalculateAllStats();
     notifyListeners();
@@ -2019,6 +3014,16 @@ class AttendanceProvider with ChangeNotifier {
       }
     }
 
+    // Always include any employee discovered from Firestore chat rooms
+    for (var otherId in _chatRoomContactIds) {
+      if (contactIds.add(otherId)) {
+        try {
+          final emp = _employees.firstWhere((e) => e.id == otherId);
+          contacts.add(emp);
+        } catch (_) {}
+      }
+    }
+
     // Always include any employee with existing messages in the conversation history
     for (var otherId in _chatMessagesMap.keys) {
       if (_chatMessagesMap[otherId]?.isNotEmpty ?? false) {
@@ -2036,10 +3041,22 @@ class AttendanceProvider with ChangeNotifier {
 
   void ensureChatLoaded(dynamic contactId) {
     if (!_firebaseService.isAvailable) return;
-    final cId = contactId.toString();
+    final cId = contactId.toString().trim();
+    if (cId.isEmpty) return;
     final currentUser = currentEmployee;
     if (currentUser == null) return;
     if (_chatSubscriptionsMap.containsKey(cId)) return;
+
+    // Fast one-time async get so existing messages appear immediately
+    _firebaseService.getChatMessages(currentUser.id, cId).then((initial) {
+      if (initial.isNotEmpty) {
+        final existing = _chatMessagesMap[cId] ?? [];
+        if (existing.length < initial.length) {
+          _chatMessagesMap[cId] = initial;
+          notifyListeners();
+        }
+      }
+    }).catchError((_) {});
 
     _chatSubscriptionsMap[cId] = _firebaseService
         .streamChatMessages(currentUser.id, cId)
@@ -2077,6 +3094,19 @@ class AttendanceProvider with ChangeNotifier {
   Future<void> loadChatsForCurrentUser() async {
     final currentUser = currentEmployee;
     if (currentUser == null) return;
+
+    if (_firebaseService.isAvailable) {
+      try {
+        final existingRoomContacts =
+            await _firebaseService.getUserChatContactIds(currentUser.id);
+        for (var cId in existingRoomContacts) {
+          _chatRoomContactIds.add(cId);
+          ensureChatLoaded(cId);
+        }
+      } catch (e) {
+        debugPrint('Error loading user chat rooms: $e');
+      }
+    }
 
     final contacts = getChatContacts(currentUser);
     for (var contact in contacts) {
@@ -2242,7 +3272,16 @@ class AttendanceProvider with ChangeNotifier {
   Future<void> switchProfile(String userId) async {
     final emp = _employees.firstWhere(
       (e) => e.id == userId,
-      orElse: () => _employees.first,
+      orElse: () => _employees.isNotEmpty
+          ? _employees.first
+          : CompanyEmployee(
+              id: userId,
+              name: _userName.isNotEmpty ? _userName : userId,
+              email: _email,
+              position: _position,
+              companyCode: _currentCompanyCode,
+              role: _role,
+            ),
     );
     _employeeId = emp.id;
     _userName = emp.name;
@@ -2481,6 +3520,11 @@ class AttendanceProvider with ChangeNotifier {
     String? employeeId,
     String? note,
   }) async {
+    if (isDateStringInClosedMonth(date)) {
+      debugPrint('Cannot submit request for closed month: $date');
+      return;
+    }
+
     final empId = employeeId ?? _employeeId;
 
     // Auto-approve if the employee is the top of the structure and manager of it
@@ -2573,6 +3617,11 @@ class AttendanceProvider with ChangeNotifier {
     final targetReq = _allCompanyRequests.where((r) => r.id == rId).firstOrNull ??
         _allRequestsMap[empId]?.where((r) => r.id == rId).firstOrNull;
 
+    if (targetReq != null && isDateStringInClosedMonth(targetReq.date)) {
+      debugPrint('Cannot delete request for closed month: ${targetReq.date}');
+      return;
+    }
+
     _allRequestsMap[empId]?.removeWhere((r) => r.id == rId);
     _allCompanyRequests.removeWhere((r) => r.id == rId);
     notifyListeners();
@@ -2613,6 +3662,11 @@ class AttendanceProvider with ChangeNotifier {
 
     final existing = _allCompanyRequests.where((r) => r.id == reqId).firstOrNull ??
         _allRequestsMap[empId]?.where((r) => r.id == reqId).firstOrNull;
+
+    if (existing != null && isDateStringInClosedMonth(existing.date)) {
+      debugPrint('Cannot update request status for closed month: ${existing.date}');
+      return;
+    }
     final oldStatus = existing?.status;
 
     String finalStatus = targetStatus;
@@ -2729,36 +3783,148 @@ class AttendanceProvider with ChangeNotifier {
       }
     }
 
-    if (updatedReq != null && _firebaseService.isAvailable) {
-      await _firebaseService.saveRequest(empId, updatedReq);
+    if (updatedReq != null) {
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRequest(empId, updatedReq);
+      }
 
-      // Automated messages to the employee who registered the request:
+      // Automated messages to the employee who registered the request (bilingual English + Kurdish):
       if (empId != _employeeId) {
+        final kuType = _kurdishRequestType(updatedReq.type);
+
         if (finalStatus == 'Approved') {
           // When request gets final approval
-          final approvedByLabel = hrBy != null ? 'HR Management' : 'your Supervisor';
-          String messageText =
-              'Your request for ${updatedReq.type} on ${updatedReq.date} has been approved by $approvedByLabel.';
+          final approvedByLabelEn = hrBy != null ? 'HR Management' : 'your Supervisor';
+          final approvedByLabelKu = hrBy != null
+              ? 'بەڕێوەبەرایەتی سەرچاوە مرۆییەکان (HR)'
+              : 'سەرپەرشتیارەکەت';
+
+          String enText =
+              'Your request for ${updatedReq.type} on ${updatedReq.date} has been approved by $approvedByLabelEn.';
+          String kuText =
+              'داواکارییەکەت بۆ $kuType لە ڕێکەوتی ${updatedReq.date} لەلایەن $approvedByLabelKu پەسەندکرا.';
+
           if (updatedReq.type == 'Annual Leave') {
             final emp = _employees.where((e) => e.id == empId).firstOrNull;
             if (emp != null) {
-              messageText += ' Remaining annual leave balance: ${emp.annualLeaveBalance.toStringAsFixed(1)} hours.';
+              final bal = emp.annualLeaveBalance.toStringAsFixed(1);
+              enText += ' Remaining annual leave balance: $bal hours.';
+              kuText += ' باڵانسی مۆڵەتی ساڵانەی ماوەت: $bal کاتژمێر.';
             }
           }
+
+          final messageText = '$enText\n\n$kuText';
           await sendChatMessage(empId, messageText);
         } else if (finalStatus == 'Pending HR') {
           // When Supervisor approves and it moves to HR Manager
-          final messageText =
+          final enText =
               'Your request for ${updatedReq.type} on ${updatedReq.date} has been approved by your Supervisor and forwarded to HR Manager for review.';
+          final kuText =
+              'داواکارییەکەت بۆ $kuType لە ڕێکەوتی ${updatedReq.date} لەلایەن سەرپەرشتیارەکەت پەسەندکرا و ڕەوانەی بەڕێوەبەری سەرچاوە مرۆییەکان (HR) کرا بۆ پێداچوونەوە.';
+          final messageText = '$enText\n\n$kuText';
           await sendChatMessage(empId, messageText);
         } else if (finalStatus == 'Rejected') {
-          final rejecter = isHR ? 'HR Management' : 'your Supervisor';
-          final messageText =
-              'Your request for ${updatedReq.type} on ${updatedReq.date} has been rejected by $rejecter.';
+          final rejecterEn = isHR ? 'HR Management' : 'your Supervisor';
+          final rejecterKu = isHR
+              ? 'بەڕێوەبەرایەتی سەرچاوە مرۆییەکان (HR)'
+              : 'سەرپەرشتیارەکەت';
+          final enText =
+              'Your request for ${updatedReq.type} on ${updatedReq.date} has been rejected by $rejecterEn.';
+          final kuText =
+              'داواکارییەکەت بۆ $kuType لە ڕێکەوتی ${updatedReq.date} لەلایەن $rejecterKu ڕەتکرایەوە.';
+          final messageText = '$enText\n\n$kuText';
           await sendChatMessage(empId, messageText);
         }
       }
     }
+  }
+
+  String _kurdishRequestType(String rawType) {
+    switch (rawType.trim()) {
+      case 'Annual Leave':
+        return 'مۆڵەتی ساڵانە';
+      case 'Sick Leave':
+        return 'مۆڵەتی نەخۆشی';
+      case 'Hourly Leave':
+        return 'مۆڵەتی کاتی (کاتژمێری)';
+      case 'Permission':
+        return 'مۆڵەتی کاتی';
+      case 'Overtime Approval':
+      case 'Overtime':
+        return 'کاتی زیادە (ئۆڤەرتایم)';
+      case 'Forgot to Clock Out':
+        return 'لەبیرکردنی تۆماری چوونەدەرەوە';
+      case 'Change Shift':
+        return 'گۆڕینی شێفت';
+      case 'Missing Punch':
+        return 'تۆمارکردنی لەبیرچوو';
+      case 'Expense':
+        return 'خەرجی';
+      default:
+        return rawType;
+    }
+  }
+
+  /// Returns the authorized geographical work zones (coordinates and radius)
+  /// applicable to the employee based on structure or company work locations.
+  List<Map<String, dynamic>> getAllowedZones([CompanyEmployee? targetEmp]) {
+    final emp = targetEmp ?? currentEmployee;
+    if (emp == null) return [];
+
+    final List<Map<String, dynamic>> allowedZones = [];
+
+    // 1. Structure location
+    if (emp.structureId != null) {
+      final struct = _structures.where((s) => s.id == emp.structureId).firstOrNull;
+      if (struct != null &&
+          struct.latitude != null &&
+          struct.longitude != null &&
+          struct.radius != null) {
+        allowedZones.add({
+          'id': struct.id,
+          'lat': struct.latitude!,
+          'lng': struct.longitude!,
+          'radius': struct.radius!,
+          'name': struct.name,
+        });
+      }
+    }
+
+    // 2. Work locations for employee's company
+    final empCompany = emp.companyCode.trim().toLowerCase();
+    final companyLocs = _locations.where((l) {
+      final locComp = l.companyCode.trim().toLowerCase();
+      return locComp == empCompany || (empCompany.isEmpty && (locComp.isEmpty || locComp == 'amada'));
+    }).toList();
+
+    final String? groupId = getGroupIdForDate(emp, DateTime.now()) ?? emp.groupId;
+    final bool anyLocationHasGroups = companyLocs.any((l) => l.groupIds.isNotEmpty);
+
+    for (var loc in companyLocs) {
+      final zoneData = {
+        'id': loc.id,
+        'lat': loc.latitude,
+        'lng': loc.longitude,
+        'radius': loc.radius,
+        'name': loc.name,
+        'wifiBssid': loc.wifiBssid,
+        'wifiSsid': loc.wifiSsid,
+        'requireWifi': loc.requireWifi,
+      };
+      if (groupId != null && groupId.isNotEmpty) {
+        // If employee belongs to a group, they can only access locations explicitly
+        // assigned to their group (or general locations if no group-specific locations exist)
+        if (loc.groupIds.contains(groupId) || (!anyLocationHasGroups && loc.groupIds.isEmpty)) {
+          allowedZones.add(zoneData);
+        }
+      } else {
+        if (!anyLocationHasGroups || loc.groupIds.isEmpty) {
+          allowedZones.add(zoneData);
+        }
+      }
+    }
+
+    return allowedZones;
   }
 
   // Clock & Attendance stubs
@@ -2766,62 +3932,27 @@ class AttendanceProvider with ChangeNotifier {
     final emp = currentEmployee;
     if (emp == null) return 'No employee found.';
 
-    List<Map<String, dynamic>> allowedZones = [];
-
-    // Check structure
-    if (emp.structureId != null) {
-      try {
-        final struct = _structures.firstWhere((s) => s.id == emp.structureId);
-        if (struct.latitude != null &&
-            struct.longitude != null &&
-            struct.radius != null) {
-          allowedZones.add({
-            'lat': struct.latitude!,
-            'lng': struct.longitude!,
-            'radius': struct.radius!,
-            'name': struct.name,
-          });
-        }
-      } catch (_) {}
-    }
-
-    // Check group locations
-    final String? groupId = getGroupIdForDate(emp, DateTime.now());
-    if (groupId != null) {
-      for (var loc in _locations) {
-        if (loc.groupIds.contains(groupId)) {
-          allowedZones.add({
-            'lat': loc.latitude,
-            'lng': loc.longitude,
-            'radius': loc.radius,
-            'name': loc.name,
-          });
-        }
-      }
-    }
+    final allowedZones = getAllowedZones(emp);
 
     if (allowedZones.isEmpty) {
-      return null; // If no zones are configured, skip location verification.
+      return translate('location_outside_range');
     }
 
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      return 'Location services are disabled. Please enable them.';
+      return translate('loc_service_disabled');
     }
 
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        return 'Location permissions are denied';
+        return translate('loc_permission_denied');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      return 'Location permissions are permanently denied, we cannot request permissions.';
+      return translate('loc_permission_denied_forever');
     }
 
     Position position;
@@ -2832,22 +3963,82 @@ class AttendanceProvider with ChangeNotifier {
         ),
       );
     } catch (e) {
-      return 'Failed to get current location: $e';
+      return '${translate('loc_error')}: $e';
     }
+
+    // 1. Anti-Cheat: Reject Fake GPS / Mock Location
+    if (position.isMocked) {
+      return translate('fake_gps_detected');
+    }
+
+    // 2. Read connected Wi-Fi BSSID and SSID (cross-platform)
+    String? currentBssid;
+    String? currentSsid;
+    if (!kIsWeb) {
+      try {
+        final wifiDetails = await WifiDetectorService.detectCurrentWifi();
+        currentBssid = wifiDetails['bssid'];
+        currentSsid = wifiDetails['ssid'];
+      } catch (e) {
+        debugPrint('Error getting Wi-Fi info: $e');
+      }
+    }
+
+    // 3. Verify allowed zones with GPS and Office Wi-Fi BSSID
+    String? wifiMismatchError;
 
     for (var zone in allowedZones) {
       double distanceInMeters = Geolocator.distanceBetween(
         position.latitude,
         position.longitude,
-        zone['lat'],
-        zone['lng'],
+        zone['lat'] as double,
+        zone['lng'] as double,
       );
-      if (distanceInMeters <= zone['radius']) {
-        return null; // Inside an allowed zone
+      final inGpsRadius = distanceInMeters <= (zone['radius'] as double);
+
+      final String? expectedBssid = (zone['wifiBssid'] as String?)?.trim().toLowerCase();
+      final String? expectedSsid = (zone['wifiSsid'] as String?)?.trim();
+      final bool requireWifi = zone['requireWifi'] == true;
+
+      bool wifiMatches = false;
+      if (expectedBssid != null && expectedBssid.isNotEmpty && currentBssid != null) {
+        final allowedList = expectedBssid.split(',').map((b) => b.trim().toLowerCase()).toList();
+        if (allowedList.contains(currentBssid)) {
+          wifiMatches = true;
+        }
+      } else if (expectedSsid != null && expectedSsid.isNotEmpty && currentSsid != null) {
+        if (currentSsid.toLowerCase() == expectedSsid.toLowerCase()) {
+          wifiMatches = true;
+        }
+      }
+
+      if (requireWifi) {
+        // Strict mode: Must be within GPS radius AND connected to the office Wi-Fi
+        if (inGpsRadius && (wifiMatches || kIsWeb)) {
+          return null; // Both GPS & Wi-Fi verified!
+        } else if (inGpsRadius && !wifiMatches) {
+          wifiMismatchError = translate('wifi_not_matched', params: {
+            'wifi': expectedSsid?.isNotEmpty == true ? expectedSsid! : (expectedBssid ?? 'Office Wi-Fi'),
+          });
+        }
+      } else {
+        // Flexible mode: Validated if inside GPS radius OR connected to the office Wi-Fi
+        if (inGpsRadius || (wifiMatches && !position.isMocked)) {
+          return null;
+        }
       }
     }
 
-    return 'You are out of the allowed work zones. Please move closer to clock in/out.';
+    if (wifiMismatchError != null) {
+      return wifiMismatchError;
+    }
+
+    return translate('location_outside_range');
+  }
+
+  /// Helper for HR/Admins to detect the current office Wi-Fi BSSID and SSID
+  Future<Map<String, String?>> getCurrentWifiDetails() async {
+    return await WifiDetectorService.detectCurrentWifi();
   }
 
   Future<String?> clockIn([dynamic a, dynamic b]) async {
@@ -2941,6 +4132,11 @@ class AttendanceProvider with ChangeNotifier {
 
   /// Upsert an AttendanceRecord directly into local state for immediate reactivity
   void upsertRecordLocally(AttendanceRecord record) {
+    if (isMonthClosed(record.checkIn)) {
+      debugPrint('Cannot add or edit attendance record for closed month');
+      return;
+    }
+
     final cleanEmpId = record.employeeId?.trim().toLowerCase();
 
     // 1. Update in _allCompanyRecords
@@ -2982,6 +4178,11 @@ class AttendanceProvider with ChangeNotifier {
     required AttendanceRecord record,
     String? reason,
   }) async {
+    if (isMonthClosed(record.checkIn)) {
+      debugPrint('Cannot delete punch session for closed month');
+      return;
+    }
+
     final cleanEmpId = employeeId.trim().toLowerCase();
 
     // 1. Remove from _allCompanyRecords
@@ -3006,54 +4207,198 @@ class AttendanceProvider with ChangeNotifier {
     recalculateAllStats();
     notifyListeners();
 
-    // 3. Delete from Firebase
+    // 3. Delete from Firebase and persist to deleted_punches
+    recordDeletedPunchSignature(cleanEmpId, record.checkIn);
+    if (record.checkOut != null) {
+      recordDeletedPunchSignature(cleanEmpId, record.checkOut!);
+    }
+
     if (_firebaseService.isAvailable) {
       await _firebaseService.deleteRecord(employeeId, record);
+      try {
+        await _firebaseService.saveDeletedPunch(DeletedPunch(
+          id: '${cleanEmpId}_${record.checkIn.millisecondsSinceEpoch}',
+          employeeId: cleanEmpId,
+          punchTime: record.checkIn,
+          punchType: 'checkIn',
+          reason: reason,
+        ));
+        if (record.checkOut != null) {
+          await _firebaseService.saveDeletedPunch(DeletedPunch(
+            id: '${cleanEmpId}_${record.checkOut!.millisecondsSinceEpoch}',
+            employeeId: cleanEmpId,
+            punchTime: record.checkOut!,
+            punchType: 'checkOut',
+            reason: reason,
+          ));
+        }
+      } catch (e) {
+        debugPrint('Error saving deleted punch tombstone: $e');
+      }
     }
   }
 
   // HR Management
   List<CompanyEmployee> getEmployeesInStructure(dynamic structId) {
-    return _employees.where((e) => e.structureId == structId).toList();
+    return employees.where((e) => e.structureId == structId).toList();
   }
 
-  Future<void> deleteStructure(dynamic id) async =>
-      await _firebaseService.deleteStructure(id);
-  Future<void> updateStructure(dynamic struct) async =>
-      await _firebaseService.saveStructure(struct);
-  Future<void> addStructure(dynamic struct) async =>
-      await _firebaseService.saveStructure(struct);
-
-  Future<void> deleteShift(dynamic id) async =>
-      await _firebaseService.deleteShift(id);
-  Future<void> updateShift(dynamic shift) async =>
-      await _firebaseService.saveShift(shift);
-  Future<void> addShift(dynamic shift) async =>
-      await _firebaseService.saveShift(shift);
-
-  Future<void> deleteGroup(dynamic id) async =>
-      await _firebaseService.deleteGroup(id);
-  Future<void> updateGroup(dynamic group) async =>
-      await _firebaseService.saveGroup(group);
-  Future<void> addGroup(dynamic group) async =>
-      await _firebaseService.saveGroup(group);
-
-  Future<void> deleteEmployee(dynamic id) async {
+  Future<void> deleteStructure(dynamic id) async {
     final strId = id.toString();
-    _employees.removeWhere((e) => e.id == strId);
+    _structures.removeWhere((s) => s.id == strId);
     notifyListeners();
-    await _firebaseService.deleteEmployee(strId);
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteStructure(strId);
+    }
   }
 
-  /// Generates the next sequential numeric user ID ('1', '2', '3', ...).
-  String getNextEmployeeId() {
+  Future<void> addStructure(dynamic struct) async {
+    final OrgStructure item = (struct is OrgStructure)
+        ? (struct.companyCode != _currentCompanyCode
+            ? struct.copyWith(companyCode: _currentCompanyCode)
+            : struct)
+        : struct;
+    final idx = _structures.indexWhere((s) => s.id == item.id);
+    if (idx != -1) {
+      _structures[idx] = item;
+    } else {
+      _structures.add(item);
+    }
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.saveStructure(item);
+    }
+  }
+
+  Future<void> updateStructure(dynamic struct) async => await addStructure(struct);
+
+  Future<void> deleteShift(dynamic id) async {
+    final strId = id.toString();
+    _shifts.removeWhere((s) => s.id == strId);
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteShift(strId);
+    }
+  }
+
+  Future<void> addShift(dynamic shift) async {
+    final WorkShift item = (shift is WorkShift)
+        ? (shift.companyCode != _currentCompanyCode
+            ? shift.copyWith(companyCode: _currentCompanyCode)
+            : shift)
+        : shift;
+    final idx = _shifts.indexWhere((s) => s.id == item.id);
+    if (idx != -1) {
+      _shifts[idx] = item;
+    } else {
+      _shifts.add(item);
+    }
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.saveShift(item);
+    }
+  }
+
+  Future<void> updateShift(dynamic shift) async => await addShift(shift);
+
+  Future<void> deleteGroup(dynamic id) async {
+    final strId = id.toString();
+    _groups.removeWhere((g) => g.id == strId);
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteGroup(strId);
+    }
+  }
+
+  Future<void> addGroup(dynamic group) async {
+    final EmployeeGroup item = (group is EmployeeGroup)
+        ? (group.companyCode != _currentCompanyCode
+            ? group.copyWith(companyCode: _currentCompanyCode)
+            : group)
+        : group;
+    final idx = _groups.indexWhere((g) => g.id == item.id);
+    if (idx != -1) {
+      _groups[idx] = item;
+    } else {
+      _groups.add(item);
+    }
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.saveGroup(item);
+    }
+  }
+
+  Future<void> updateGroup(dynamic group) async => await addGroup(group);
+
+  Future<void> deleteEmployee(dynamic id, {String? companyCode}) async {
+    final strId = id.toString().trim();
+    final targetCode = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
+
+    // Find the employee before removing to determine exact companyCode, email, and ID
+    CompanyEmployee? emp;
+    for (final e in _employees) {
+      if (e.id.trim().toLowerCase() == strId.toLowerCase()) {
+        if (targetCode == 'all' || targetCode.isEmpty || e.companyCode.trim().toLowerCase() == targetCode) {
+          emp = e;
+          break;
+        }
+      }
+    }
+    emp ??= _employees.where((e) => e.id.trim().toLowerCase() == strId.toLowerCase()).firstOrNull;
+
+    final effectiveCode = emp?.companyCode.isNotEmpty == true 
+        ? emp!.companyCode.trim().toLowerCase() 
+        : (targetCode == 'all' ? '' : targetCode);
+
+    _employees.removeWhere((e) =>
+        e.id.trim().toLowerCase() == strId.toLowerCase() &&
+        (effectiveCode.isEmpty || e.companyCode.trim().toLowerCase() == effectiveCode));
+
+    // Clear local attendance records and requests
+    _records.removeWhere((r) => r.employeeId == strId || (emp != null && r.employeeId == emp.id));
+    _allRequestsMap.remove(strId);
+    if (emp != null) _allRequestsMap.remove(emp.id);
+    _allCompanyRequests.removeWhere((r) => r.employeeId == strId || (emp != null && r.employeeId == emp.id));
+
+    notifyListeners();
+    await _firebaseService.deleteEmployee(
+      strId,
+      companyCode: effectiveCode,
+      email: emp?.email,
+    );
+  }
+
+  /// Checks whether an employee ID is already taken in the target company
+  bool isEmployeeIdTaken(String id, {String? companyCode, String? excludeEmpId}) {
+    return getEmployeeConflict(id, companyCode: companyCode, excludeEmpId: excludeEmpId) != null;
+  }
+
+  CompanyEmployee? getEmployeeConflict(String id, {String? companyCode, String? excludeEmpId}) {
+    final cleanId = id.trim().toLowerCase();
+    if (cleanId.isEmpty) return null;
+    final targetCode = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
+    return _employees.where((e) {
+      if (excludeEmpId != null && e.id.trim().toLowerCase() == excludeEmpId.trim().toLowerCase()) {
+        return false;
+      }
+      if (e.id.trim().toLowerCase() != cleanId) return false;
+      if (targetCode == 'all' || targetCode.isEmpty) return true;
+      return e.companyCode.trim().toLowerCase() == targetCode;
+    }).firstOrNull;
+  }
+
+  /// Generates the next sequential numeric user ID ('1', '2', '3', ...) for the target company.
+  String getNextEmployeeId({String? companyCode}) {
+    final target = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
     int maxId = 0;
-    for (final emp in _employees) {
+    final list = (target == 'all' || target.isEmpty)
+        ? _employees
+        : _employees.where((e) => e.companyCode.trim().toLowerCase() == target);
+    for (final emp in list) {
       final cleanId = emp.id.trim();
       // 1. Direct integer parse
       final directNum = int.tryParse(cleanId);
       if (directNum != null) {
-        // Exclude massive timestamp values (e.g. > 1,000,000)
         if (directNum > maxId && directNum < 1000000) {
           maxId = directNum;
         }
@@ -3074,35 +4419,45 @@ class AttendanceProvider with ChangeNotifier {
 
   Future<void> updateEmployee(dynamic emp, {String? oldId}) async {
     if (emp is CompanyEmployee) {
-      final targetOldId = (oldId != null && oldId.trim().isNotEmpty) ? oldId.trim() : emp.id;
-      final isIdChanged = targetOldId != emp.id;
+      var item = emp;
+      if (item.companyCode.trim().isEmpty) {
+        item = item.copyWith(
+          companyCode: _currentCompanyCode == 'all' ? 'amada' : _currentCompanyCode,
+        );
+      }
+      final targetOldId = (oldId != null && oldId.trim().isNotEmpty) ? oldId.trim() : item.id;
+      final isIdChanged = targetOldId != item.id;
 
       if (isIdChanged) {
         // Remove old entry
-        _employees.removeWhere((e) => e.id == targetOldId);
-        final newIndex = _employees.indexWhere((e) => e.id == emp.id);
+        _employees.removeWhere((e) =>
+            e.id == targetOldId &&
+            (e.companyCode.isEmpty || e.companyCode.toLowerCase() == item.companyCode.toLowerCase()));
+        final newIndex = _employees.indexWhere((e) =>
+            e.id == item.id &&
+            (e.companyCode.isEmpty || e.companyCode.toLowerCase() == item.companyCode.toLowerCase()));
         if (newIndex != -1) {
-          _employees[newIndex] = emp;
+          _employees[newIndex] = item;
         } else {
-          _employees.add(emp);
+          _employees.add(item);
         }
 
         // Update current employeeId and avatar if this was the logged-in user
         if (_employeeId == targetOldId) {
-          _employeeId = emp.id;
-          _avatarPath = emp.avatarUrl;
+          _employeeId = item.id;
+          _avatarPath = item.avatarUrl;
         }
 
         // Migrate local requests map
         final oldReqs = _allRequestsMap.remove(targetOldId);
         if (oldReqs != null) {
-          _allRequestsMap[emp.id] = oldReqs.map((r) => r.copyWith(employeeId: emp.id)).toList();
+          _allRequestsMap[item.id] = oldReqs.map((r) => r.copyWith(employeeId: item.id)).toList();
         }
 
         // Migrate local records if active
         final updatedList = _records.map((r) {
           if (r.employeeId == targetOldId) {
-            return r.copyWith(employeeId: emp.id);
+            return r.copyWith(employeeId: item.id);
           }
           return r;
         }).toList();
@@ -3112,44 +4467,61 @@ class AttendanceProvider with ChangeNotifier {
         notifyListeners();
 
         // Migrate remote Firebase data
-        await _firebaseService.migrateEmployeeId(targetOldId, emp.id);
-        await _firebaseService.deleteEmployee(targetOldId);
-        await _firebaseService.saveEmployee(emp);
+        await _firebaseService.migrateEmployeeId(targetOldId, item.id);
+        await _firebaseService.deleteEmployee(targetOldId, companyCode: item.companyCode);
+        await _firebaseService.saveEmployee(item);
       } else {
-        final index = _employees.indexWhere((e) => e.id == emp.id);
+        final index = _employees.indexWhere((e) =>
+            e.id == item.id &&
+            (e.companyCode.isEmpty || e.companyCode.toLowerCase() == item.companyCode.toLowerCase()));
         if (index != -1) {
-          _employees[index] = emp;
+          _employees[index] = item;
         } else {
-          _employees.add(emp);
+          _employees.add(item);
         }
-        if (emp.id == _employeeId) {
-          _avatarPath = emp.avatarUrl;
+        if (item.id == _employeeId) {
+          _avatarPath = item.avatarUrl;
         }
         notifyListeners();
-        await _firebaseService.saveEmployee(emp);
+        await _firebaseService.saveEmployee(item);
       }
     }
   }
 
-  Future<void> addEmployee(dynamic emp) async {
+  Future<bool> addEmployee(dynamic emp) async {
     if (emp is CompanyEmployee) {
       var toAdd = emp;
+      // Ensure companyCode is assigned if not explicitly provided
+      if (toAdd.companyCode.trim().isEmpty) {
+        if (_currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all') {
+          toAdd = toAdd.copyWith(companyCode: _currentCompanyCode);
+        } else {
+          toAdd = toAdd.copyWith(companyCode: 'amada');
+        }
+      }
+
       // If no ID or auto-generated epoch timestamp ID, assign sequential simple number
       if (toAdd.id.trim().isEmpty ||
           (toAdd.id.startsWith('emp_') && toAdd.id.length > 10) ||
           (toAdd.id.startsWith('USR_') && toAdd.id.length > 10)) {
-        toAdd = toAdd.copyWith(id: getNextEmployeeId());
+        toAdd = toAdd.copyWith(id: getNextEmployeeId(companyCode: toAdd.companyCode));
       }
 
-      final index = _employees.indexWhere((e) => e.id == toAdd.id);
-      if (index != -1) {
-        _employees[index] = toAdd;
-      } else {
-        _employees.add(toAdd);
+      // STRICT DUPLICATE CHECK: Never allow duplicate user ID within company
+      final duplicate = getEmployeeConflict(toAdd.id, companyCode: toAdd.companyCode);
+      if (duplicate != null) {
+        debugPrint(
+          'Duplicate employee ID rejected: ID ${toAdd.id} already exists for ${duplicate.name} in company ${toAdd.companyCode}',
+        );
+        return false;
       }
+
+      _employees.add(toAdd);
       notifyListeners();
       await _firebaseService.saveEmployee(toAdd);
+      return true;
     }
+    return false;
   }
 
   /// Re-sequences all employee IDs to simple numbers 1, 2, 3... in sequence.
@@ -3197,19 +4569,63 @@ class AttendanceProvider with ChangeNotifier {
     await addEmployee(superAdmin);
   }
 
-  Future<void> deleteHoliday(dynamic id) async =>
-      await _firebaseService.deleteHoliday(id);
-  Future<void> updateHoliday(dynamic holiday) async =>
-      await _firebaseService.saveHoliday(holiday);
-  Future<void> addHoliday(dynamic holiday) async =>
-      await _firebaseService.saveHoliday(holiday);
+  Future<void> deleteHoliday(dynamic id) async {
+    final strId = id.toString();
+    _holidays.removeWhere((h) => h.id == strId);
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteHoliday(strId);
+    }
+  }
 
-  Future<void> deleteLocation(dynamic id) async =>
-      await _firebaseService.deleteLocation(id);
-  Future<void> updateLocation(dynamic loc) async =>
-      await _firebaseService.saveLocation(loc);
-  Future<void> addLocation(dynamic loc) async =>
-      await _firebaseService.saveLocation(loc);
+  Future<void> updateHoliday(dynamic holiday) async {
+    final Holiday item = (holiday is Holiday)
+        ? (holiday.companyCode != _currentCompanyCode
+            ? holiday.copyWith(companyCode: _currentCompanyCode)
+            : holiday)
+        : holiday;
+    final idx = _holidays.indexWhere((h) => h.id == item.id);
+    if (idx != -1) {
+      _holidays[idx] = item;
+    } else {
+      _holidays.add(item);
+    }
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.saveHoliday(item);
+    }
+  }
+
+  Future<void> addHoliday(dynamic holiday) async => await updateHoliday(holiday);
+
+  Future<void> deleteLocation(dynamic id) async {
+    final strId = id.toString();
+    _locations.removeWhere((l) => l.id == strId);
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteLocation(strId);
+    }
+  }
+
+  Future<void> updateLocation(dynamic loc) async {
+    final WorkLocation item = (loc is WorkLocation)
+        ? (loc.companyCode.isEmpty && _currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all'
+            ? loc.copyWith(companyCode: _currentCompanyCode)
+            : loc)
+        : loc;
+    final idx = _locations.indexWhere((l) => l.id == item.id);
+    if (idx != -1) {
+      _locations[idx] = item;
+    } else {
+      _locations.add(item);
+    }
+    notifyListeners();
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.saveLocation(item);
+    }
+  }
+
+  Future<void> addLocation(dynamic loc) async => await updateLocation(loc);
 
   final FaceRecognitionService _faceService = FaceRecognitionService();
 
@@ -3259,7 +4675,33 @@ class AttendanceProvider with ChangeNotifier {
       await updateEmployee(updated);
     }
   }
-  dynamic getHolidayForEmployee(dynamic emp, dynamic date) => null;
+  Holiday? getHolidayForEmployee(dynamic arg1, dynamic arg2) {
+    DateTime? date;
+    String? groupId;
+    if (arg1 is DateTime) {
+      date = arg1;
+      groupId = arg2?.toString();
+    } else if (arg2 is DateTime) {
+      date = arg2;
+      groupId = arg1?.toString();
+    }
+    if (date == null) return null;
+    try {
+      return _holidays.firstWhere((h) {
+        final isForGroup = h.groupIds.isEmpty || (groupId != null && h.groupIds.contains(groupId));
+        if (!isForGroup) return false;
+        try {
+          final from = DateTime.parse(h.fromDate).subtract(const Duration(days: 1));
+          final to = DateTime.parse(h.toDate).add(const Duration(days: 1));
+          return date!.isAfter(from) && date.isBefore(to);
+        } catch (_) {
+          return false;
+        }
+      });
+    } catch (_) {
+      return null;
+    }
+  }
   dynamic getApprovedLeaveForDate(dynamic date, {dynamic employeeId}) => null;
 
   // Chat implementation
@@ -3361,7 +4803,10 @@ class AttendanceProvider with ChangeNotifier {
     if (msgStr.isEmpty) return;
 
     final rId = receiverId.toString();
-    ensureChatLoaded(rId);
+    final effectiveCompanyCode = (currentEmployee?.companyCode.isNotEmpty == true)
+        ? currentEmployee!.companyCode
+        : _currentCompanyCode;
+    final effectiveSenderName = _userName.isNotEmpty ? _userName : 'Colleague';
 
     final newMsg = ChatMessage(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
@@ -3369,6 +4814,8 @@ class AttendanceProvider with ChangeNotifier {
       receiverId: rId,
       text: msgStr,
       timestamp: DateTime.now(),
+      companyCode: effectiveCompanyCode,
+      senderName: effectiveSenderName,
     );
 
     if (_chatMessagesMap[rId] == null) {
@@ -3464,4 +4911,71 @@ class PayrollReport {
     required this.netEarnings,
     required this.currency,
   });
+}
+
+extension PayrollReportSnapshotExt on PayrollReportSnapshot {
+  PayrollReport toPayrollReport(
+    CompanyEmployee emp, [
+    List<PayrollAdjustment> adjustments = const [],
+  ]) {
+    return PayrollReport(
+      employee: emp,
+      basicSalary: basicSalary,
+      salaryCalcByDay: salaryCalcByDay,
+      workingHours: workingHours,
+      daysWorked: daysWorked,
+      incrementalSalary: incrementalSalary,
+      decrementalSalary: decrementalSalary,
+      overtimeHours: overtimeHours,
+      overtimeValue: overtimeValue,
+      attendanceDeficitHours: attendanceDeficitHours,
+      attendanceDeficit: attendanceDeficit,
+      monthlyPenalties: monthlyPenalties,
+      foodAllowance: foodAllowance,
+      transportationAllowance: transportationAllowance,
+      otherAllowance: otherAllowance,
+      monthlyAdditions: monthlyAdditions,
+      monthlyDeductions: monthlyDeductions,
+      hasInsurance: hasInsurance,
+      insuranceSalary: insuranceSalary,
+      insuranceEmployee: insuranceEmployee,
+      insuranceCompany: insuranceCompany,
+      adjustments: adjustments,
+      netEarnings: netEarnings,
+      currency: currency,
+    );
+  }
+}
+
+extension PayrollReportExt on PayrollReport {
+  PayrollReportSnapshot toSnapshot() {
+    return PayrollReportSnapshot(
+      employeeId: employee.id,
+      employeeName: employee.name,
+      position: employee.position,
+      structureId: employee.structureId,
+      basicSalary: basicSalary,
+      salaryCalcByDay: salaryCalcByDay,
+      workingHours: workingHours,
+      daysWorked: daysWorked,
+      incrementalSalary: incrementalSalary,
+      decrementalSalary: decrementalSalary,
+      overtimeHours: overtimeHours,
+      overtimeValue: overtimeValue,
+      attendanceDeficitHours: attendanceDeficitHours,
+      attendanceDeficit: attendanceDeficit,
+      monthlyPenalties: monthlyPenalties,
+      foodAllowance: foodAllowance,
+      transportationAllowance: transportationAllowance,
+      otherAllowance: otherAllowance,
+      monthlyAdditions: monthlyAdditions,
+      monthlyDeductions: monthlyDeductions,
+      hasInsurance: hasInsurance,
+      insuranceSalary: insuranceSalary,
+      insuranceEmployee: insuranceEmployee,
+      insuranceCompany: insuranceCompany,
+      netEarnings: netEarnings,
+      currency: currency,
+    );
+  }
 }

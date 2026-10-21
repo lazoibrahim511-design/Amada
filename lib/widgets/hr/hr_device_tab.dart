@@ -188,6 +188,11 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final portCtrl = TextEditingController(text: device?.port.toString() ?? '4370');
     final pwdCtrl = TextEditingController(text: device?.password.toString() ?? '0');
     bool isEnabled = device?.isEnabled ?? true;
+    String selectedCompany = (device?.companyCode.isNotEmpty == true)
+        ? device!.companyCode
+        : (provider.currentCompanyCode != 'all'
+            ? provider.currentCompanyCode
+            : (provider.allCompanies.isNotEmpty ? provider.allCompanies.first.companyCode : ''));
 
     bool isTestingModal = false;
     ZkDeviceInfo? testResult;
@@ -255,6 +260,31 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                           isDense: true,
                         ),
                       ),
+                      if (provider.allCompanies.length > 1) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          initialValue: provider.allCompanies.any((c) => c.companyCode.toLowerCase() == selectedCompany.toLowerCase())
+                              ? provider.allCompanies.firstWhere((c) => c.companyCode.toLowerCase() == selectedCompany.toLowerCase()).companyCode
+                              : (provider.allCompanies.isNotEmpty ? provider.allCompanies.first.companyCode : null),
+                          decoration: InputDecoration(
+                            labelText: provider.translate('company'),
+                            prefixIcon: const Icon(Icons.business_outlined, size: 20),
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: provider.allCompanies.map((c) {
+                            return DropdownMenuItem<String>(
+                              value: c.companyCode,
+                              child: Text(c.companyName.isNotEmpty ? c.companyName : c.companyCode),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setDialogState(() => selectedCompany = val);
+                            }
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       TextField(
                         controller: ipCtrl,
@@ -405,6 +435,7 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                                       password: pwd,
                                       isEnabled: isEnabled,
                                       cachedInfo: testResult ?? device.cachedInfo,
+                                      companyCode: selectedCompany.trim().toLowerCase(),
                                     );
                                     await _zkService.updateDevice(updated);
                                   } else {
@@ -416,6 +447,7 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                                       password: pwd,
                                       isEnabled: isEnabled,
                                       cachedInfo: testResult,
+                                      companyCode: selectedCompany.trim().toLowerCase(),
                                     );
                                     await _zkService.addDevice(newDev);
                                   }
@@ -473,7 +505,10 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subtextColor = isDark ? Colors.white60 : const Color(0xFF64748B);
 
-    final devices = _zkService.devices;
+    final currentCompany = provider.currentCompanyCode.trim().toLowerCase();
+    final devices = _zkService.devices
+        .where((d) => d.companyCode.trim().toLowerCase() == currentCompany || d.companyCode.isEmpty)
+        .toList();
     final onlineCount = devices.where((d) => d.cachedInfo?.isConnected == true).length;
 
     return SingleChildScrollView(
@@ -1022,6 +1057,7 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
           isDense: true,
           decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
           items: [
+            DropdownMenuItem(value: 1, child: Text(provider.translate('every_1_min'))),
             DropdownMenuItem(value: 5, child: Text(provider.translate('every_mins', params: {'mins': '5'}))),
             DropdownMenuItem(value: 10, child: Text(provider.translate('every_mins', params: {'mins': '10'}))),
             DropdownMenuItem(value: 15, child: Text('${provider.translate('every_mins', params: {'mins': '15'})} ${provider.translate('default_suffix')}')),
@@ -1247,11 +1283,17 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
               itemBuilder: (context, index) {
                 final u = deviceUsers[index];
                 final matched = employees.cast<CompanyEmployee?>().firstWhere(
-                      (e) =>
-                          e != null &&
-                          (e.id.trim().toLowerCase() == u.userId.trim().toLowerCase() ||
-                              e.name.trim().toLowerCase() == u.name.trim().toLowerCase() ||
-                              e.id.replaceAll(RegExp(r'[^0-9]'), '') == u.userId.replaceAll(RegExp(r'[^0-9]'), '')),
+                      (e) {
+                        if (e == null) return false;
+                        if (e.id.trim().toLowerCase() == u.userId.trim().toLowerCase()) return true;
+                        if (e.name.trim().toLowerCase() == u.name.trim().toLowerCase()) return true;
+                        final eDigits = e.id.replaceAll(RegExp(r'[^0-9]'), '');
+                        final uDigits = u.userId.replaceAll(RegExp(r'[^0-9]'), '');
+                        if (eDigits.isNotEmpty && uDigits.isNotEmpty && int.tryParse(eDigits) == int.tryParse(uDigits)) {
+                          return true;
+                        }
+                        return false;
+                      },
                       orElse: () => null,
                     );
 

@@ -12,6 +12,9 @@ enum NeuButtonVariant {
 
   /// Vibrant Coral/Red capsule for destructive actions (Delete, Reject)
   danger,
+
+  /// Amber / Orange capsule for cautionary actions (Reopen Month, Attention)
+  warning,
 }
 
 /// Premium pill button styled after the reference fitness/dashboard design.
@@ -138,6 +141,19 @@ class _NeuButtonState extends State<NeuButton> {
         borderColor = const Color(0xFFFDA4AF).withValues(alpha: 0.3);
         specularHighlight = Colors.white.withValues(alpha: 0.2);
         break;
+
+      case NeuButtonVariant.warning:
+        // Vibrant Amber / Orange capsule
+        backgroundGradient = const LinearGradient(
+          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+        textColor = Colors.white;
+        glowColor = const Color(0xFFF59E0B).withValues(alpha: 0.38);
+        borderColor = const Color(0xFFFCD34D).withValues(alpha: 0.35);
+        specularHighlight = Colors.white.withValues(alpha: 0.2);
+        break;
     }
 
     final double scale = _isPressed ? 0.96 : (_isHovered ? 1.02 : 1.0);
@@ -215,13 +231,17 @@ class _NeuButtonState extends State<NeuButton> {
                           ),
                           const SizedBox(width: 8),
                         ],
-                        Text(
-                          widget.label,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: widget.fontSize,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
+                        Flexible(
+                          child: Text(
+                            widget.label,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: widget.fontSize,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
                       ],
@@ -339,6 +359,18 @@ class _NeuIconButtonState extends State<NeuIconButton> {
         iconColor = Colors.white;
         glowColor = const Color(0xFFEF4444).withValues(alpha: 0.38);
         borderColor = const Color(0xFFFDA4AF).withValues(alpha: 0.3);
+        specularHighlight = Colors.white.withValues(alpha: 0.2);
+        break;
+
+      case NeuButtonVariant.warning:
+        backgroundGradient = const LinearGradient(
+          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+        iconColor = Colors.white;
+        glowColor = const Color(0xFFF59E0B).withValues(alpha: 0.38);
+        borderColor = const Color(0xFFFCD34D).withValues(alpha: 0.35);
         specularHighlight = Colors.white.withValues(alpha: 0.2);
         break;
     }

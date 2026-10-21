@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:bidi/bidi.dart' as bidi;
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 import '../providers/attendance_provider.dart';
 import '../models/hr_models.dart';
@@ -106,9 +107,15 @@ class ExportService {
       sheet.getRangeByIndex(row, 10).setNumber(r.foodAllowance);
       sheet.getRangeByIndex(row, 11).setNumber(r.transportationAllowance);
       sheet.getRangeByIndex(row, 12).setNumber(r.otherAllowance);
-      sheet.getRangeByIndex(row, 13).setNumber(r.hasInsurance ? r.insuranceSalary : 0.0);
-      sheet.getRangeByIndex(row, 14).setNumber(r.hasInsurance ? r.insuranceEmployee : 0.0);
-      sheet.getRangeByIndex(row, 15).setNumber(r.hasInsurance ? r.insuranceCompany : 0.0);
+      sheet
+          .getRangeByIndex(row, 13)
+          .setNumber(r.hasInsurance ? r.insuranceSalary : 0.0);
+      sheet
+          .getRangeByIndex(row, 14)
+          .setNumber(r.hasInsurance ? r.insuranceEmployee : 0.0);
+      sheet
+          .getRangeByIndex(row, 15)
+          .setNumber(r.hasInsurance ? r.insuranceCompany : 0.0);
       sheet.getRangeByIndex(row, 16).setNumber(r.monthlyAdditions);
       sheet.getRangeByIndex(row, 17).setNumber(r.monthlyPenalties);
       sheet.getRangeByIndex(row, 18).setNumber(r.monthlyDeductions);
@@ -121,26 +128,82 @@ class ExportService {
     // Total row
     if (reports.isNotEmpty) {
       final totalRow = rowOffset + reports.length + 1;
-      final totalBasicSalary = reports.fold(0.0, (sum, r) => sum + r.basicSalary);
-      final totalSalaryCalcByDay = reports.fold(0.0, (sum, r) => sum + r.salaryCalcByDay);
+      final totalBasicSalary = reports.fold(
+        0.0,
+        (sum, r) => sum + r.basicSalary,
+      );
+      final totalSalaryCalcByDay = reports.fold(
+        0.0,
+        (sum, r) => sum + r.salaryCalcByDay,
+      );
       final totalDaysWorked = reports.fold(0, (sum, r) => sum + r.daysWorked);
-      final totalWorkingHours = reports.fold(0.0, (sum, r) => sum + r.workingHours);
-      final totalOvertimeHours = reports.fold(0.0, (sum, r) => sum + r.overtimeHours);
-      final totalOvertimeValue = reports.fold(0.0, (sum, r) => sum + r.overtimeValue);
-      final totalDeficitHours = reports.fold(0.0, (sum, r) => sum + r.attendanceDeficitHours);
-      final totalDeficitValue = reports.fold(0.0, (sum, r) => sum + r.attendanceDeficit);
-      final totalMonthlyAdditions = reports.fold(0.0, (sum, r) => sum + r.monthlyAdditions);
-      final totalMonthlyDeductions = reports.fold(0.0, (sum, r) => sum + r.monthlyDeductions);
-      final totalFoodAllowance = reports.fold(0.0, (sum, r) => sum + r.foodAllowance);
-      final totalTransportationAllowance = reports.fold(0.0, (sum, r) => sum + r.transportationAllowance);
-      final totalOtherAllowance = reports.fold(0.0, (sum, r) => sum + r.otherAllowance);
-      final totalInsuranceSalary = reports.where((r) => r.hasInsurance).fold(0.0, (sum, r) => sum + r.insuranceSalary);
-      final totalInsurance5 = reports.fold(0.0, (sum, r) => sum + r.insuranceEmployee);
-      final totalInsurance12 = reports.fold(0.0, (sum, r) => sum + r.insuranceCompany);
-      final totalPenalties = reports.fold(0.0, (sum, r) => sum + r.monthlyPenalties);
-      final totalGrossSalary = reports.fold(0.0, (sum, r) => sum + r.incrementalSalary);
-      final totalDeductions = reports.fold(0.0, (sum, r) => sum + r.decrementalSalary);
-      final totalNetEarnings = reports.fold(0.0, (sum, r) => sum + r.netEarnings);
+      final totalWorkingHours = reports.fold(
+        0.0,
+        (sum, r) => sum + r.workingHours,
+      );
+      final totalOvertimeHours = reports.fold(
+        0.0,
+        (sum, r) => sum + r.overtimeHours,
+      );
+      final totalOvertimeValue = reports.fold(
+        0.0,
+        (sum, r) => sum + r.overtimeValue,
+      );
+      final totalDeficitHours = reports.fold(
+        0.0,
+        (sum, r) => sum + r.attendanceDeficitHours,
+      );
+      final totalDeficitValue = reports.fold(
+        0.0,
+        (sum, r) => sum + r.attendanceDeficit,
+      );
+      final totalMonthlyAdditions = reports.fold(
+        0.0,
+        (sum, r) => sum + r.monthlyAdditions,
+      );
+      final totalMonthlyDeductions = reports.fold(
+        0.0,
+        (sum, r) => sum + r.monthlyDeductions,
+      );
+      final totalFoodAllowance = reports.fold(
+        0.0,
+        (sum, r) => sum + r.foodAllowance,
+      );
+      final totalTransportationAllowance = reports.fold(
+        0.0,
+        (sum, r) => sum + r.transportationAllowance,
+      );
+      final totalOtherAllowance = reports.fold(
+        0.0,
+        (sum, r) => sum + r.otherAllowance,
+      );
+      final totalInsuranceSalary = reports
+          .where((r) => r.hasInsurance)
+          .fold(0.0, (sum, r) => sum + r.insuranceSalary);
+      final totalInsurance5 = reports.fold(
+        0.0,
+        (sum, r) => sum + r.insuranceEmployee,
+      );
+      final totalInsurance12 = reports.fold(
+        0.0,
+        (sum, r) => sum + r.insuranceCompany,
+      );
+      final totalPenalties = reports.fold(
+        0.0,
+        (sum, r) => sum + r.monthlyPenalties,
+      );
+      final totalGrossSalary = reports.fold(
+        0.0,
+        (sum, r) => sum + r.incrementalSalary,
+      );
+      final totalDeductions = reports.fold(
+        0.0,
+        (sum, r) => sum + r.decrementalSalary,
+      );
+      final totalNetEarnings = reports.fold(
+        0.0,
+        (sum, r) => sum + r.netEarnings,
+      );
 
       sheet.getRangeByIndex(totalRow, 1).setText('Total');
       sheet.getRangeByIndex(totalRow, 2).setNumber(totalBasicSalary);
@@ -152,7 +215,9 @@ class ExportService {
       sheet.getRangeByIndex(totalRow, 8).setNumber(totalDeficitHours);
       sheet.getRangeByIndex(totalRow, 9).setNumber(totalDeficitValue);
       sheet.getRangeByIndex(totalRow, 10).setNumber(totalFoodAllowance);
-      sheet.getRangeByIndex(totalRow, 11).setNumber(totalTransportationAllowance);
+      sheet
+          .getRangeByIndex(totalRow, 11)
+          .setNumber(totalTransportationAllowance);
       sheet.getRangeByIndex(totalRow, 12).setNumber(totalOtherAllowance);
       sheet.getRangeByIndex(totalRow, 13).setNumber(totalInsuranceSalary);
       sheet.getRangeByIndex(totalRow, 14).setNumber(totalInsurance5);
@@ -185,12 +250,21 @@ class ExportService {
   static Future<void> exportPayrollToPdf(
     List<PayrollReport> reports,
     DateTime month,
-    CompanyProfile? profile,
-  ) async {
-    final fonts = await _loadPdfFonts();
+    CompanyProfile? profile, [
+    String? languageCode,
+  ]) async {
+    final lang = languageCode ?? 'en';
+    final fonts = await _loadPdfFonts(lang);
+    final pw.Font? baseFont = fonts['base'];
+    final pw.Font? boldFont = fonts['bold'];
+    final List<pw.Font> fallbacks = List<pw.Font>.from(
+      fonts['fallbacks'] ?? [],
+    );
+
     final pdfTheme = pw.ThemeData.withFont(
-      base: fonts['base'] ?? pw.Font.helvetica(),
-      bold: fonts['bold'] ?? fonts['base'] ?? pw.Font.helveticaBold(),
+      base: baseFont ?? pw.Font.helvetica(),
+      bold: boldFont ?? baseFont ?? pw.Font.helveticaBold(),
+      fontFallback: fallbacks,
     );
     final pdf = pw.Document(theme: pdfTheme);
 
@@ -268,26 +342,85 @@ class ExportService {
               .toList();
 
           if (reports.isNotEmpty) {
-            final totalBasicSalary = reports.fold(0.0, (sum, r) => sum + r.basicSalary);
-            final totalSalaryCalcByDay = reports.fold(0.0, (sum, r) => sum + r.salaryCalcByDay);
-            final totalDaysWorked = reports.fold(0, (sum, r) => sum + r.daysWorked);
-            final totalWorkingHours = reports.fold(0.0, (sum, r) => sum + r.workingHours);
-            final totalOvertimeHours = reports.fold(0.0, (sum, r) => sum + r.overtimeHours);
-            final totalOvertimeValue = reports.fold(0.0, (sum, r) => sum + r.overtimeValue);
-            final totalDeficitHours = reports.fold(0.0, (sum, r) => sum + r.attendanceDeficitHours);
-            final totalDeficitValue = reports.fold(0.0, (sum, r) => sum + r.attendanceDeficit);
-            final totalMonthlyAdditions = reports.fold(0.0, (sum, r) => sum + r.monthlyAdditions);
-            final totalMonthlyDeductions = reports.fold(0.0, (sum, r) => sum + r.monthlyDeductions);
-            final totalFoodAllowance = reports.fold(0.0, (sum, r) => sum + r.foodAllowance);
-            final totalTransportationAllowance = reports.fold(0.0, (sum, r) => sum + r.transportationAllowance);
-            final totalOtherAllowance = reports.fold(0.0, (sum, r) => sum + r.otherAllowance);
-            final totalInsuranceSalary = reports.where((r) => r.hasInsurance).fold(0.0, (sum, r) => sum + r.insuranceSalary);
-            final totalInsurance5 = reports.fold(0.0, (sum, r) => sum + r.insuranceEmployee);
-            final totalInsurance12 = reports.fold(0.0, (sum, r) => sum + r.insuranceCompany);
-            final totalPenalties = reports.fold(0.0, (sum, r) => sum + r.monthlyPenalties);
-            final totalGrossSalary = reports.fold(0.0, (sum, r) => sum + r.incrementalSalary);
-            final totalDeductions = reports.fold(0.0, (sum, r) => sum + r.decrementalSalary);
-            final totalNetEarnings = reports.fold(0.0, (sum, r) => sum + r.netEarnings);
+            final totalBasicSalary = reports.fold(
+              0.0,
+              (sum, r) => sum + r.basicSalary,
+            );
+            final totalSalaryCalcByDay = reports.fold(
+              0.0,
+              (sum, r) => sum + r.salaryCalcByDay,
+            );
+            final totalDaysWorked = reports.fold(
+              0,
+              (sum, r) => sum + r.daysWorked,
+            );
+            final totalWorkingHours = reports.fold(
+              0.0,
+              (sum, r) => sum + r.workingHours,
+            );
+            final totalOvertimeHours = reports.fold(
+              0.0,
+              (sum, r) => sum + r.overtimeHours,
+            );
+            final totalOvertimeValue = reports.fold(
+              0.0,
+              (sum, r) => sum + r.overtimeValue,
+            );
+            final totalDeficitHours = reports.fold(
+              0.0,
+              (sum, r) => sum + r.attendanceDeficitHours,
+            );
+            final totalDeficitValue = reports.fold(
+              0.0,
+              (sum, r) => sum + r.attendanceDeficit,
+            );
+            final totalMonthlyAdditions = reports.fold(
+              0.0,
+              (sum, r) => sum + r.monthlyAdditions,
+            );
+            final totalMonthlyDeductions = reports.fold(
+              0.0,
+              (sum, r) => sum + r.monthlyDeductions,
+            );
+            final totalFoodAllowance = reports.fold(
+              0.0,
+              (sum, r) => sum + r.foodAllowance,
+            );
+            final totalTransportationAllowance = reports.fold(
+              0.0,
+              (sum, r) => sum + r.transportationAllowance,
+            );
+            final totalOtherAllowance = reports.fold(
+              0.0,
+              (sum, r) => sum + r.otherAllowance,
+            );
+            final totalInsuranceSalary = reports
+                .where((r) => r.hasInsurance)
+                .fold(0.0, (sum, r) => sum + r.insuranceSalary);
+            final totalInsurance5 = reports.fold(
+              0.0,
+              (sum, r) => sum + r.insuranceEmployee,
+            );
+            final totalInsurance12 = reports.fold(
+              0.0,
+              (sum, r) => sum + r.insuranceCompany,
+            );
+            final totalPenalties = reports.fold(
+              0.0,
+              (sum, r) => sum + r.monthlyPenalties,
+            );
+            final totalGrossSalary = reports.fold(
+              0.0,
+              (sum, r) => sum + r.incrementalSalary,
+            );
+            final totalDeductions = reports.fold(
+              0.0,
+              (sum, r) => sum + r.decrementalSalary,
+            );
+            final totalNetEarnings = reports.fold(
+              0.0,
+              (sum, r) => sum + r.netEarnings,
+            );
 
             tableData.add([
               'Total',
@@ -413,8 +546,22 @@ class ExportService {
     required CompanyEmployee employee,
     required DateTime month,
     required CompanyProfile? profile,
+    String? languageCode,
   }) async {
-    final pdf = pw.Document();
+    final lang = languageCode ?? 'en';
+    final fonts = await _loadPdfFonts(lang);
+    final pw.Font? baseFont = fonts['base'];
+    final pw.Font? boldFont = fonts['bold'];
+    final List<pw.Font> fallbacks = List<pw.Font>.from(
+      fonts['fallbacks'] ?? [],
+    );
+
+    final pdfTheme = pw.ThemeData.withFont(
+      base: baseFont ?? pw.Font.helvetica(),
+      bold: boldFont ?? baseFont ?? pw.Font.helveticaBold(),
+      fontFallback: fallbacks,
+    );
+    final pdf = pw.Document(theme: pdfTheme);
 
     final headers = [
       'Date',
@@ -542,8 +689,8 @@ class ExportService {
                 final shiftWorkHours = (r['shiftWorkHours'] as String?) ?? '';
                 final shiftCell = shiftName.isNotEmpty
                     ? (shiftWorkHours.isNotEmpty
-                        ? '$shiftName\n($shiftWorkHours)'
-                        : shiftName)
+                          ? '$shiftName\n($shiftWorkHours)'
+                          : shiftName)
                     : '-';
 
                 return [
@@ -567,8 +714,13 @@ class ExportService {
                 fontSize: 8.5,
               ),
               cellStyle: const pw.TextStyle(fontSize: 8),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 2.8),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey100,
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 2.5,
+                vertical: 2.8,
+              ),
               cellAlignment: pw.Alignment.center,
               columnWidths: {
                 0: const pw.FlexColumnWidth(1.1), // Date
@@ -614,8 +766,22 @@ class ExportService {
     required List<Map<String, dynamic>> records,
     required DateTime date,
     required CompanyProfile? profile,
+    String? languageCode,
   }) async {
-    final pdf = pw.Document();
+    final lang = languageCode ?? 'en';
+    final fonts = await _loadPdfFonts(lang);
+    final pw.Font? baseFont = fonts['base'];
+    final pw.Font? boldFont = fonts['bold'];
+    final List<pw.Font> fallbacks = List<pw.Font>.from(
+      fonts['fallbacks'] ?? [],
+    );
+
+    final pdfTheme = pw.ThemeData.withFont(
+      base: baseFont ?? pw.Font.helvetica(),
+      bold: boldFont ?? baseFont ?? pw.Font.helveticaBold(),
+      fontFallback: fallbacks,
+    );
+    final pdf = pw.Document(theme: pdfTheme);
 
     final headers = [
       'Employee',
@@ -742,8 +908,13 @@ class ExportService {
                 fontSize: 8,
               ),
               cellStyle: const pw.TextStyle(fontSize: 7.5),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+              ),
+              cellPadding: const pw.EdgeInsets.symmetric(
+                horizontal: 4,
+                vertical: 3.5,
+              ),
               cellAlignment: pw.Alignment.center,
             ),
           ];
@@ -752,7 +923,8 @@ class ExportService {
     );
 
     final bytes = await pdf.save();
-    final fileName = 'Daily_Report_${DateFormat('yyyy_MM_dd').format(date)}.pdf';
+    final fileName =
+        'Daily_Report_${DateFormat('yyyy_MM_dd').format(date)}.pdf';
 
     await FileSaver.instance.saveFile(
       name: fileName,
@@ -779,7 +951,11 @@ class ExportService {
       row++;
     }
 
-    sheet.getRangeByIndex(row, 1).setText('Daily Attendance Report - ${DateFormat('yyyy-MM-dd').format(date)}');
+    sheet
+        .getRangeByIndex(row, 1)
+        .setText(
+          'Daily Attendance Report - ${DateFormat('yyyy-MM-dd').format(date)}',
+        );
     sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
     sheet.getRangeByIndex(row, 1).cellStyle.fontSize = 11;
     row += 2;
@@ -810,15 +986,29 @@ class ExportService {
       final emp = r['employee'] as CompanyEmployee;
       sheet.getRangeByIndex(row, 1).setText(emp.name);
       sheet.getRangeByIndex(row, 2).setText(emp.position);
-      sheet.getRangeByIndex(row, 3).setText(r['structureName']?.toString() ?? '-');
+      sheet
+          .getRangeByIndex(row, 3)
+          .setText(r['structureName']?.toString() ?? '-');
       sheet.getRangeByIndex(row, 4).setText(r['shiftName']?.toString() ?? '-');
       sheet.getRangeByIndex(row, 5).setText(r['groupName']?.toString() ?? '-');
-      sheet.getRangeByIndex(row, 6).setText(r['clockTime']?.toString().replaceAll('\n', ' / ') ?? '-');
-      sheet.getRangeByIndex(row, 7).setNumber((r['attendance'] as int? ?? 0).toDouble());
-      sheet.getRangeByIndex(row, 8).setNumber((r['duty'] as int? ?? 0).toDouble());
-      sheet.getRangeByIndex(row, 9).setNumber((r['delay'] as int? ?? 0).toDouble());
-      sheet.getRangeByIndex(row, 10).setNumber((r['earlyExit'] as int? ?? 0).toDouble());
-      sheet.getRangeByIndex(row, 11).setNumber((r['overtime'] as int? ?? 0).toDouble());
+      sheet
+          .getRangeByIndex(row, 6)
+          .setText(r['clockTime']?.toString().replaceAll('\n', ' / ') ?? '-');
+      sheet
+          .getRangeByIndex(row, 7)
+          .setNumber((r['attendance'] as int? ?? 0).toDouble());
+      sheet
+          .getRangeByIndex(row, 8)
+          .setNumber((r['duty'] as int? ?? 0).toDouble());
+      sheet
+          .getRangeByIndex(row, 9)
+          .setNumber((r['delay'] as int? ?? 0).toDouble());
+      sheet
+          .getRangeByIndex(row, 10)
+          .setNumber((r['earlyExit'] as int? ?? 0).toDouble());
+      sheet
+          .getRangeByIndex(row, 11)
+          .setNumber((r['overtime'] as int? ?? 0).toDouble());
       sheet.getRangeByIndex(row, 12).setText(r['status']?.toString() ?? '-');
       row++;
     }
@@ -826,7 +1016,8 @@ class ExportService {
     final List<int> bytes = workbook.saveAsStream();
     workbook.dispose();
 
-    final fileName = 'Daily_Report_${DateFormat('yyyy_MM_dd').format(date)}.xlsx';
+    final fileName =
+        'Daily_Report_${DateFormat('yyyy_MM_dd').format(date)}.xlsx';
     await FileSaver.instance.saveFile(
       name: fileName,
       bytes: Uint8List.fromList(bytes),
@@ -835,18 +1026,95 @@ class ExportService {
     );
   }
 
-  static Future<Map<String, pw.Font?>> _loadPdfFonts() async {
+  static Future<Map<String, dynamic>> _loadPdfFonts([String? languageCode]) async {
     pw.Font? baseFont;
     pw.Font? boldFont;
+    final List<pw.Font> fallbacks = [];
+    final bool isKurdish = languageCode == 'ku';
+
     try {
-      final fontDataUni = await rootBundle.load('assets/fonts/UniQAIDAR_NewsHeadLine_025.ttf');
-      final uniFont = pw.Font.ttf(fontDataUni);
-      baseFont = uniFont;
-      boldFont = uniFont;
+      if (isKurdish) {
+        // Authentic Kurdish typography: UniQaidar as primary base & bold font
+        final fontDataUni = await rootBundle.load(
+          'assets/fonts/UniQAIDAR_NewsHeadLine_025.ttf',
+        );
+        final uniFont = pw.Font.ttf(fontDataUni);
+        baseFont = uniFont;
+        boldFont = uniFont;
+
+        // Classic Kurdish secondary fallback: Speda
+        try {
+          final fontDataSpeda = await rootBundle.load(
+            'assets/fonts/Speda.ttf',
+          );
+          fallbacks.add(pw.Font.ttf(fontDataSpeda));
+        } catch (_) {}
+
+        // Fallbacks for Arabic Presentation Forms and Latin characters
+        final fontDataArabic = await rootBundle.load(
+          'assets/fonts/NotoSansArabic-Regular.ttf',
+        );
+        final fontDataArabicBold = await rootBundle.load(
+          'assets/fonts/NotoSansArabic-Bold.ttf',
+        );
+        fallbacks.add(pw.Font.ttf(fontDataArabic));
+        fallbacks.add(pw.Font.ttf(fontDataArabicBold));
+
+        final fontDataLatin = await rootBundle.load(
+          'assets/fonts/NotoSans-Regular.ttf',
+        );
+        final fontDataLatinBold = await rootBundle.load(
+          'assets/fonts/NotoSans-Bold.ttf',
+        );
+        fallbacks.add(pw.Font.ttf(fontDataLatin));
+        fallbacks.add(pw.Font.ttf(fontDataLatinBold));
+      } else {
+        final fontDataArabic = await rootBundle.load(
+          'assets/fonts/NotoSansArabic-Regular.ttf',
+        );
+        final fontDataArabicBold = await rootBundle.load(
+          'assets/fonts/NotoSansArabic-Bold.ttf',
+        );
+        baseFont = pw.Font.ttf(fontDataArabic);
+        boldFont = pw.Font.ttf(fontDataArabicBold);
+
+        try {
+          final fontDataUni = await rootBundle.load(
+            'assets/fonts/UniQAIDAR_NewsHeadLine_025.ttf',
+          );
+          fallbacks.add(pw.Font.ttf(fontDataUni));
+        } catch (_) {}
+
+        try {
+          final fontDataSpeda = await rootBundle.load(
+            'assets/fonts/Speda.ttf',
+          );
+          fallbacks.add(pw.Font.ttf(fontDataSpeda));
+        } catch (_) {}
+
+        final fontDataLatin = await rootBundle.load(
+          'assets/fonts/NotoSans-Regular.ttf',
+        );
+        final fontDataLatinBold = await rootBundle.load(
+          'assets/fonts/NotoSans-Bold.ttf',
+        );
+        fallbacks.add(pw.Font.ttf(fontDataLatin));
+        fallbacks.add(pw.Font.ttf(fontDataLatinBold));
+      }
     } catch (e) {
-      debugPrint('Could not load custom fonts for PDF: $e');
+      debugPrint(
+        'Could not load custom fonts for PDF: $e',
+      );
+      try {
+        final fontDataUni = await rootBundle.load(
+          'assets/fonts/UniQAIDAR_NewsHeadLine_025.ttf',
+        );
+        final uniFont = pw.Font.ttf(fontDataUni);
+        baseFont ??= uniFont;
+        boldFont ??= uniFont;
+      } catch (_) {}
     }
-    return {'base': baseFont, 'bold': boldFont};
+    return {'base': baseFont, 'bold': boldFont, 'fallbacks': fallbacks};
   }
 
   static Future<void> exportSinglePayslipToPdf({
@@ -859,13 +1127,17 @@ class ExportService {
   }) async {
     final lang = languageCode ?? 'en';
     final bool isRtl = lang == 'ar' || lang == 'ku';
-    final fonts = await _loadPdfFonts();
-    final baseFont = fonts['base'];
-    final boldFont = fonts['bold'];
+    final fonts = await _loadPdfFonts(lang);
+    final pw.Font? baseFont = fonts['base'];
+    final pw.Font? boldFont = fonts['bold'];
+    final List<pw.Font> fallbacks = List<pw.Font>.from(
+      fonts['fallbacks'] ?? [],
+    );
 
     final pdfTheme = pw.ThemeData.withFont(
       base: baseFont ?? pw.Font.helvetica(),
       bold: boldFont ?? baseFont ?? pw.Font.helveticaBold(),
+      fontFallback: fallbacks,
     );
     final pdf = pw.Document(theme: pdfTheme);
 
@@ -894,8 +1166,12 @@ class ExportService {
     );
 
     final bytes = await pdf.save();
-    final cleanName = report.employee.name.trim().replaceAll(RegExp(r'\s+'), '_');
-    final fileName = 'Payslip_${cleanName}_${DateFormat('MM_yyyy').format(month)}.pdf';
+    final cleanName = report.employee.name.trim().replaceAll(
+      RegExp(r'\s+'),
+      '_',
+    );
+    final fileName =
+        'Payslip_${cleanName}_${DateFormat('MM_yyyy').format(month)}.pdf';
 
     await FileSaver.instance.saveFile(
       name: fileName,
@@ -915,19 +1191,27 @@ class ExportService {
   }) async {
     final lang = languageCode ?? 'en';
     final bool isRtl = lang == 'ar' || lang == 'ku';
-    final fonts = await _loadPdfFonts();
-    final baseFont = fonts['base'];
-    final boldFont = fonts['bold'];
+    final fonts = await _loadPdfFonts(lang);
+    final pw.Font? baseFont = fonts['base'];
+    final pw.Font? boldFont = fonts['bold'];
+    final List<pw.Font> fallbacks = List<pw.Font>.from(
+      fonts['fallbacks'] ?? [],
+    );
 
     final pdfTheme = pw.ThemeData.withFont(
       base: baseFont ?? pw.Font.helvetica(),
       bold: boldFont ?? baseFont ?? pw.Font.helveticaBold(),
+      fontFallback: fallbacks,
     );
     final pdf = pw.Document(theme: pdfTheme);
 
     for (final report in reports) {
-      final struct = structures.where((s) => s.id == report.employee.structureId).firstOrNull;
-      final group = groups.where((g) => g.id == report.employee.groupId).firstOrNull;
+      final struct = structures
+          .where((s) => s.id == report.employee.structureId)
+          .firstOrNull;
+      final group = groups
+          .where((g) => g.id == report.employee.groupId)
+          .firstOrNull;
 
       pdf.addPage(
         pw.Page(
@@ -937,7 +1221,9 @@ class ExportService {
           theme: pdfTheme,
           build: (pw.Context context) {
             return pw.Directionality(
-              textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+              textDirection: isRtl
+                  ? pw.TextDirection.rtl
+                  : pw.TextDirection.ltr,
               child: _buildPayslipPdfPage(
                 report: report,
                 month: month,
@@ -977,12 +1263,17 @@ class ExportService {
   }) {
     final lang = languageCode ?? 'en';
     final bool isRtl = lang == 'ar' || lang == 'ku';
-    final dict = TranslationKeys.translations[lang] ?? TranslationKeys.translations['en']!;
+    final dict =
+        TranslationKeys.translations[lang] ??
+        TranslationKeys.translations['en']!;
     String t(String key, [String fallback = '']) {
       return dict[key] ?? TranslationKeys.translations['en']?[key] ?? fallback;
     }
 
-    final monthName = t('month_${month.month}', DateFormat('MMMM').format(month));
+    final monthName = t(
+      'month_${month.month}',
+      DateFormat('MMMM').format(month),
+    );
     final monthStr = '$monthName ${month.year}';
 
     String formatPdfAmount(double amount, String currency) {
@@ -1003,13 +1294,90 @@ class ExportService {
       }
     }
 
-    pw.Widget buildTableRow(String label, String value, {bool isBold = false, PdfColor? color}) {
+    bool hasArabicOrKurdish(String text) {
+      for (final rune in text.runes) {
+        if ((rune >= 0x0600 && rune <= 0x06FF) ||
+            (rune >= 0x0750 && rune <= 0x077F) ||
+            (rune >= 0x08A0 && rune <= 0x08FF) ||
+            (rune >= 0xFB50 && rune <= 0xFDFF) ||
+            (rune >= 0xFE70 && rune <= 0xFEFF)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    String toVisualRtl(String input) {
+      if (input.isEmpty) return input;
+      final b = bidi.BidiString.fromLogical(input);
+      final buffer = StringBuffer();
+      for (final p in b.paragraphs) {
+        final endsWithNewLine = p.separator == 10;
+        final endIndex = p.bidiText.length - (endsWithNewLine ? 1 : 0);
+        buffer.write(String.fromCharCodes(p.bidiText, 0, endIndex));
+        if (endsWithNewLine) buffer.writeln();
+      }
+      return buffer.toString();
+    }
+
+    pw.Widget smartText(
+      String text, {
+      pw.TextStyle? style,
+      pw.TextAlign? textAlign,
+      pw.TextDirection? textDirection,
+      int? maxLines,
+      pw.TextOverflow? overflow,
+    }) {
+      if (text.isEmpty) return pw.SizedBox();
+
+      final bool isExplicitLtr = textDirection == pw.TextDirection.ltr;
+      if (isExplicitLtr) {
+        return pw.Text(
+          text,
+          style: style,
+          textAlign: textAlign ?? pw.TextAlign.left,
+          textDirection: pw.TextDirection.ltr,
+          maxLines: maxLines,
+          overflow: overflow,
+        );
+      }
+
+      if (hasArabicOrKurdish(text)) {
+        final visualText = toVisualRtl(text);
+        return pw.Text(
+          visualText,
+          style: style,
+          textAlign:
+              textAlign ?? (isRtl ? pw.TextAlign.right : pw.TextAlign.left),
+          textDirection: pw.TextDirection.ltr,
+          maxLines: maxLines,
+          overflow: overflow,
+        );
+      }
+
+      return pw.Text(
+        text,
+        style: style,
+        textAlign:
+            textAlign ?? (isRtl ? pw.TextAlign.right : pw.TextAlign.left),
+        textDirection: pw.TextDirection.ltr,
+        maxLines: maxLines,
+        overflow: overflow,
+      );
+    }
+
+    pw.Widget buildTableRow(
+      String label,
+      String value, {
+      bool isBold = false,
+      PdfColor? color,
+    }) {
       return pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text(
+            smartText(
               label,
               style: pw.TextStyle(
                 fontSize: 8.5,
@@ -1017,8 +1385,9 @@ class ExportService {
                 fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
               ),
             ),
-            pw.Text(
+            smartText(
               value,
+              textDirection: pw.TextDirection.ltr,
               style: pw.TextStyle(
                 fontSize: 8.5,
                 color: color ?? (isBold ? PdfColors.black : PdfColors.grey900),
@@ -1041,15 +1410,16 @@ class ExportService {
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                if (logoWidget != null) ...[
-                  logoWidget,
-                  pw.SizedBox(width: 10),
-                ],
+                if (logoWidget != null) ...[logoWidget, pw.SizedBox(width: 10)],
                 pw.Column(
-                  crossAxisAlignment: isRtl ? pw.CrossAxisAlignment.end : pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: isRtl
+                      ? pw.CrossAxisAlignment.end
+                      : pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
-                      profile?.name.isNotEmpty == true ? profile!.name : t('app_title', 'COMPANY NAME'),
+                    smartText(
+                      profile?.name.isNotEmpty == true
+                          ? profile!.name
+                          : t('app_title', 'COMPANY NAME'),
                       style: pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
@@ -1057,35 +1427,78 @@ class ExportService {
                       ),
                     ),
                     if (profile?.address.isNotEmpty == true)
-                      pw.Text(
+                      smartText(
                         profile!.address,
-                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        style: const pw.TextStyle(
+                          fontSize: 8,
+                          color: PdfColors.grey700,
+                        ),
                       ),
                     if (profile?.email != null && profile!.email!.isNotEmpty)
-                      pw.Text(
-                        '${t('email', 'Email')}: ${profile.email}',
-                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                      pw.Row(
+                        mainAxisSize: pw.MainAxisSize.min,
+                        children: [
+                          smartText(
+                            '${t('email', 'Email')}: ',
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                          smartText(
+                            profile.email!,
+                            textDirection: pw.TextDirection.ltr,
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ],
                       ),
                     if (profile?.phone != null && profile!.phone!.isNotEmpty)
-                      pw.Text(
-                        'Phone: ${profile.phone}',
-                        style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                      pw.Row(
+                        mainAxisSize: pw.MainAxisSize.min,
+                        children: [
+                          smartText(
+                            '${t('phone', 'Phone')}: ',
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                          smartText(
+                            profile.phone!,
+                            textDirection: pw.TextDirection.ltr,
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ],
                       ),
                   ],
                 ),
               ],
             ),
             pw.Container(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const pw.EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 8,
+              ),
               decoration: pw.BoxDecoration(
                 color: PdfColor.fromHex('#F8FAFC'),
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-                border: pw.Border.all(color: PdfColor.fromHex('#CBD5E1'), width: 1),
+                border: pw.Border.all(
+                  color: PdfColor.fromHex('#CBD5E1'),
+                  width: 1,
+                ),
               ),
               child: pw.Column(
-                crossAxisAlignment: isRtl ? pw.CrossAxisAlignment.start : pw.CrossAxisAlignment.end,
+                crossAxisAlignment: isRtl
+                    ? pw.CrossAxisAlignment.start
+                    : pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text(
+                  smartText(
                     t('salary_payslip', 'PAYSLIP'),
                     style: pw.TextStyle(
                       fontSize: 12,
@@ -1094,20 +1507,46 @@ class ExportService {
                     ),
                   ),
                   pw.SizedBox(height: 2),
-                  pw.Text(
-                    '${t('pay_period', 'Period')}: $monthStr',
-                    style: pw.TextStyle(
-                      fontSize: 8.5,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.black,
-                    ),
+                  pw.Row(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      smartText(
+                        '${t('pay_period', 'Period')}: ',
+                        style: pw.TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.black,
+                        ),
+                      ),
+                      smartText(
+                        monthStr,
+                        style: pw.TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.black,
+                        ),
+                      ),
+                    ],
                   ),
-                  pw.Text(
-                    '${t('payment_date', 'Date')}: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
-                    style: const pw.TextStyle(
-                      fontSize: 7.5,
-                      color: PdfColors.grey600,
-                    ),
+                  pw.Row(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      smartText(
+                        '${t('payment_date', 'Date')}: ',
+                        style: const pw.TextStyle(
+                          fontSize: 7.5,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                      smartText(
+                        DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                        textDirection: pw.TextDirection.ltr,
+                        style: const pw.TextStyle(
+                          fontSize: 7.5,
+                          color: PdfColors.grey600,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1134,30 +1573,107 @@ class ExportService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
+                    smartText(
                       t('employee_details', 'EMPLOYEE DETAILS'),
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#64748B')),
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex('#64748B'),
+                      ),
                     ),
                     pw.SizedBox(height: 4),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 80, child: pw.Text('${t('name_label', 'Name')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text(report.employee.name, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 80,
+                          child: smartText(
+                            '${t('name_label', 'Name')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: smartText(
+                            report.employee.name,
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     pw.SizedBox(height: 2),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 80, child: pw.Text('${t('id_label', 'Employee ID')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text(report.employee.id, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 80,
+                          child: smartText(
+                            '${t('id_label', 'Employee ID')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: smartText(
+                            report.employee.id,
+                            textDirection: pw.TextDirection.ltr,
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     pw.SizedBox(height: 2),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 80, child: pw.Text('${t('position', 'Position')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text(report.employee.position.isNotEmpty ? report.employee.position : '-', style: const pw.TextStyle(fontSize: 8.5))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 80,
+                          child: smartText(
+                            '${t('position', 'Position')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: smartText(
+                            report.employee.position.isNotEmpty
+                                ? report.employee.position
+                                : '-',
+                            style: const pw.TextStyle(fontSize: 8.5),
+                          ),
+                        ),
+                      ],
+                    ),
                     pw.SizedBox(height: 2),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 80, child: pw.Text('${t('department', 'Department')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text(structureName ?? '-', style: const pw.TextStyle(fontSize: 8.5))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 80,
+                          child: smartText(
+                            '${t('department', 'Department')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: smartText(
+                            structureName ?? '-',
+                            style: const pw.TextStyle(fontSize: 8.5),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -1166,30 +1682,188 @@ class ExportService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
+                    smartText(
                       t('attendance_summary', 'ATTENDANCE & SUMMARY'),
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#64748B')),
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColor.fromHex('#64748B'),
+                      ),
                     ),
                     pw.SizedBox(height: 4),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 85, child: pw.Text('${t('group', 'Group')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text(groupName ?? '-', style: const pw.TextStyle(fontSize: 8.5))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 85,
+                          child: smartText(
+                            '${t('group', 'Group')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: smartText(
+                            groupName ?? '-',
+                            style: const pw.TextStyle(fontSize: 8.5),
+                          ),
+                        ),
+                      ],
+                    ),
                     pw.SizedBox(height: 2),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 85, child: pw.Text('${t('currency_label', 'Currency')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text(report.currency, style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 85,
+                          child: smartText(
+                            '${t('currency_label', 'Currency')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: smartText(
+                            report.currency,
+                            textDirection: pw.TextDirection.ltr,
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     pw.SizedBox(height: 2),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 85, child: pw.Text('${t('days_worked', 'Days Worked')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text('${report.daysWorked} ${t('unit_days', 'days')}', style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold))),
-                    ]),
+                    pw.Row(
+                      children: [
+                        pw.SizedBox(
+                          width: 85,
+                          child: smartText(
+                            '${t('days_worked', 'Days Worked')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: pw.Row(
+                            mainAxisSize: pw.MainAxisSize.min,
+                            children: [
+                              smartText(
+                                '${report.daysWorked} ',
+                                textDirection: pw.TextDirection.ltr,
+                                style: pw.TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                              smartText(
+                                t('unit_days', 'days'),
+                                style: pw.TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                     pw.SizedBox(height: 2),
-                    pw.Row(children: [
-                      pw.SizedBox(width: 85, child: pw.Text('${t('working_hrs', 'Hours')}:', style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700))),
-                      pw.Expanded(child: pw.Text('${report.workingHours.toStringAsFixed(1)} ${t('unit_hrs', 'h')} (${t('overtime', 'OT')}: ${report.overtimeHours.toStringAsFixed(1)} | ${t('deficit', 'Def')}: ${report.attendanceDeficitHours.toStringAsFixed(1)})', style: const pw.TextStyle(fontSize: 8.5))),
-                    ]),
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.SizedBox(
+                          width: 85,
+                          child: smartText(
+                            '${t('working_hrs', 'Hours')}:',
+                            style: const pw.TextStyle(
+                              fontSize: 8.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: isRtl
+                                ? pw.CrossAxisAlignment.end
+                                : pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Row(
+                                mainAxisSize: pw.MainAxisSize.min,
+                                children: [
+                                  smartText(
+                                    '${report.workingHours.toStringAsFixed(1)} ',
+                                    textDirection: pw.TextDirection.ltr,
+                                    style: pw.TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                  ),
+                                  smartText(
+                                    t('unit_hrs', 'h'),
+                                    style: pw.TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (report.overtimeHours > 0 ||
+                                  report.attendanceDeficitHours > 0) ...[
+                                pw.SizedBox(height: 1),
+                                pw.Row(
+                                  mainAxisSize: pw.MainAxisSize.min,
+                                  children: [
+                                    smartText(
+                                      '${t('overtime', 'OT')}: ',
+                                      style: const pw.TextStyle(
+                                        fontSize: 7.5,
+                                        color: PdfColors.grey600,
+                                      ),
+                                    ),
+                                    smartText(
+                                      '${report.overtimeHours.toStringAsFixed(1)}h',
+                                      textDirection: pw.TextDirection.ltr,
+                                      style: const pw.TextStyle(
+                                        fontSize: 7.5,
+                                        color: PdfColors.grey600,
+                                      ),
+                                    ),
+                                    smartText(
+                                      '  |  ',
+                                      style: const pw.TextStyle(
+                                        fontSize: 7.5,
+                                        color: PdfColors.grey400,
+                                      ),
+                                    ),
+                                    smartText(
+                                      '${t('deficit', 'Def')}: ',
+                                      style: const pw.TextStyle(
+                                        fontSize: 7.5,
+                                        color: PdfColors.grey600,
+                                      ),
+                                    ),
+                                    smartText(
+                                      '${report.attendanceDeficitHours.toStringAsFixed(1)}h',
+                                      textDirection: pw.TextDirection.ltr,
+                                      style: const pw.TextStyle(
+                                        fontSize: 7.5,
+                                        color: PdfColors.grey600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -1208,13 +1882,18 @@ class ExportService {
               child: pw.Container(
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColor.fromHex('#CBD5E1')),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(8),
+                  ),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                   children: [
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: pw.BoxDecoration(
                         color: PdfColor.fromHex('#F1F5F9'),
                         borderRadius: const pw.BorderRadius.only(
@@ -1222,7 +1901,7 @@ class ExportService {
                           topRight: pw.Radius.circular(7),
                         ),
                       ),
-                      child: pw.Text(
+                      child: smartText(
                         t('earnings', 'EARNINGS & ADDITIONS'),
                         style: pw.TextStyle(
                           fontSize: 9,
@@ -1235,16 +1914,84 @@ class ExportService {
                       padding: const pw.EdgeInsets.all(10),
                       child: pw.Column(
                         children: [
-                          buildTableRow(t('base_salary_calc_by_day', 'Base Salary / Calc by Day'), formatPdfAmount(report.salaryCalcByDay > 0 ? report.salaryCalcByDay : report.basicSalary, report.currency)),
-                          buildTableRow(t('overtime_pay', 'Overtime Pay'), report.overtimeValue > 0 ? formatPdfAmount(report.overtimeValue, report.currency) : '-'),
-                          buildTableRow(t('food_allowance', 'Food Allowance'), report.foodAllowance > 0 ? formatPdfAmount(report.foodAllowance, report.currency) : '-'),
-                          buildTableRow(t('transportation_allowance', 'Transportation Allowance'), report.transportationAllowance > 0 ? formatPdfAmount(report.transportationAllowance, report.currency) : '-'),
-                          buildTableRow(t('other_allowance', 'Other Allowance'), report.otherAllowance > 0 ? formatPdfAmount(report.otherAllowance, report.currency) : '-'),
-                          buildTableRow(t('monthly_additions_bonuses', 'Monthly Additions / Bonuses'), report.monthlyAdditions > 0 ? formatPdfAmount(report.monthlyAdditions, report.currency) : '-'),
+                          buildTableRow(
+                            t(
+                              'base_salary_calc_by_day',
+                              'Base Salary / Calc by Day',
+                            ),
+                            formatPdfAmount(
+                              report.salaryCalcByDay > 0
+                                  ? report.salaryCalcByDay
+                                  : report.basicSalary,
+                              report.currency,
+                            ),
+                          ),
+                          buildTableRow(
+                            t('overtime_pay', 'Overtime Pay'),
+                            report.overtimeValue > 0
+                                ? formatPdfAmount(
+                                    report.overtimeValue,
+                                    report.currency,
+                                  )
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t('food_allowance', 'Food Allowance'),
+                            report.foodAllowance > 0
+                                ? formatPdfAmount(
+                                    report.foodAllowance,
+                                    report.currency,
+                                  )
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t(
+                              'transportation_allowance',
+                              'Transportation Allowance',
+                            ),
+                            report.transportationAllowance > 0
+                                ? formatPdfAmount(
+                                    report.transportationAllowance,
+                                    report.currency,
+                                  )
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t('other_allowance', 'Other Allowance'),
+                            report.otherAllowance > 0
+                                ? formatPdfAmount(
+                                    report.otherAllowance,
+                                    report.currency,
+                                  )
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t(
+                              'monthly_additions_bonuses',
+                              'Monthly Additions / Bonuses',
+                            ),
+                            report.monthlyAdditions > 0
+                                ? formatPdfAmount(
+                                    report.monthlyAdditions,
+                                    report.currency,
+                                  )
+                                : '-',
+                          ),
                           pw.SizedBox(height: 6),
-                          pw.Divider(thickness: 0.8, color: PdfColor.fromHex('#E2E8F0')),
+                          pw.Divider(
+                            thickness: 0.8,
+                            color: PdfColor.fromHex('#E2E8F0'),
+                          ),
                           pw.SizedBox(height: 4),
-                          buildTableRow(t('total_gross_earnings', 'TOTAL GROSS EARNINGS'), formatPdfAmount(report.incrementalSalary, report.currency), isBold: true, color: PdfColor.fromHex('#059669')),
+                          buildTableRow(
+                            t('total_gross_earnings', 'TOTAL GROSS EARNINGS'),
+                            formatPdfAmount(
+                              report.incrementalSalary,
+                              report.currency,
+                            ),
+                            isBold: true,
+                            color: PdfColor.fromHex('#059669'),
+                          ),
                         ],
                       ),
                     ),
@@ -1260,13 +2007,18 @@ class ExportService {
               child: pw.Container(
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColor.fromHex('#CBD5E1')),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(8),
+                  ),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                   children: [
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: pw.BoxDecoration(
                         color: PdfColor.fromHex('#F1F5F9'),
                         borderRadius: const pw.BorderRadius.only(
@@ -1274,7 +2026,7 @@ class ExportService {
                           topRight: pw.Radius.circular(7),
                         ),
                       ),
-                      child: pw.Text(
+                      child: smartText(
                         t('deductions_title', 'DEDUCTIONS'),
                         style: pw.TextStyle(
                           fontSize: 9,
@@ -1287,18 +2039,57 @@ class ExportService {
                       padding: const pw.EdgeInsets.all(10),
                       child: pw.Column(
                         children: [
-                          buildTableRow(t('attendance_deficit_deduction', 'Attendance Deficit'), report.attendanceDeficit > 0 ? '-${formatPdfAmount(report.attendanceDeficit, report.currency)}' : '-'),
-                          buildTableRow(t('penalties_delay_early_exit', 'Penalties (Delay/Early Exit)'), report.monthlyPenalties > 0 ? '-${formatPdfAmount(report.monthlyPenalties, report.currency)}' : '-'),
-                          buildTableRow(t('loans_other_deductions', 'Loans / Other Deductions'), report.monthlyDeductions > 0 ? '-${formatPdfAmount(report.monthlyDeductions, report.currency)}' : '-'),
                           buildTableRow(
-                            t('social_insurance_5_employee', 'Social Insurance (5% Employee)'),
-                            report.hasInsurance ? '-${formatPdfAmount(report.insuranceEmployee, report.currency)}' : '-',
-                            color: report.hasInsurance ? PdfColor.fromHex('#DC2626') : null,
+                            t(
+                              'attendance_deficit_deduction',
+                              'Attendance Deficit',
+                            ),
+                            report.attendanceDeficit > 0
+                                ? '-${formatPdfAmount(report.attendanceDeficit, report.currency)}'
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t(
+                              'penalties_delay_early_exit',
+                              'Penalties (Delay/Early Exit)',
+                            ),
+                            report.monthlyPenalties > 0
+                                ? '-${formatPdfAmount(report.monthlyPenalties, report.currency)}'
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t(
+                              'loans_other_deductions',
+                              'Loans / Other Deductions',
+                            ),
+                            report.monthlyDeductions > 0
+                                ? '-${formatPdfAmount(report.monthlyDeductions, report.currency)}'
+                                : '-',
+                          ),
+                          buildTableRow(
+                            t(
+                              'social_insurance_5_employee',
+                              'Social Insurance (5% Employee)',
+                            ),
+                            report.hasInsurance
+                                ? '-${formatPdfAmount(report.insuranceEmployee, report.currency)}'
+                                : '-',
+                            color: report.hasInsurance
+                                ? PdfColor.fromHex('#DC2626')
+                                : null,
                           ),
                           pw.SizedBox(height: 6),
-                          pw.Divider(thickness: 0.8, color: PdfColor.fromHex('#E2E8F0')),
+                          pw.Divider(
+                            thickness: 0.8,
+                            color: PdfColor.fromHex('#E2E8F0'),
+                          ),
                           pw.SizedBox(height: 4),
-                          buildTableRow(t('total_deductions', 'TOTAL DEDUCTIONS'), '-${formatPdfAmount(report.decrementalSalary, report.currency)}', isBold: true, color: PdfColor.fromHex('#DC2626')),
+                          buildTableRow(
+                            t('total_deductions', 'TOTAL DEDUCTIONS'),
+                            '-${formatPdfAmount(report.decrementalSalary, report.currency)}',
+                            isBold: true,
+                            color: PdfColor.fromHex('#DC2626'),
+                          ),
                         ],
                       ),
                     ),
@@ -1317,7 +2108,10 @@ class ExportService {
             decoration: pw.BoxDecoration(
               color: PdfColor.fromHex('#F0F9FF'),
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-              border: pw.Border.all(color: PdfColor.fromHex('#BAE6FD'), width: 1),
+              border: pw.Border.all(
+                color: PdfColor.fromHex('#BAE6FD'),
+                width: 1,
+              ),
             ),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1325,21 +2119,41 @@ class ExportService {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text(
-                      t('social_insurance_box_title', 'SOCIAL INSURANCE (SOCIAL SECURITY)'),
+                    smartText(
+                      t(
+                        'social_insurance_box_title',
+                        'SOCIAL INSURANCE (SOCIAL SECURITY)',
+                      ),
                       style: pw.TextStyle(
                         fontSize: 8.5,
                         fontWeight: pw.FontWeight.bold,
                         color: PdfColor.fromHex('#0369A1'),
                       ),
                     ),
-                    pw.Text(
-                      '${t('ins_base_label', 'Ins. Base')}: ${formatPdfAmount(report.insuranceSalary, report.currency)}',
-                      style: pw.TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColor.fromHex('#0369A1'),
-                      ),
+                    pw.Row(
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        smartText(
+                          '${t('ins_base_label', 'Ins. Base')}: ',
+                          style: pw.TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColor.fromHex('#0369A1'),
+                          ),
+                        ),
+                        smartText(
+                          formatPdfAmount(
+                            report.insuranceSalary,
+                            report.currency,
+                          ),
+                          textDirection: pw.TextDirection.ltr,
+                          style: pw.TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColor.fromHex('#0369A1'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1347,13 +2161,51 @@ class ExportService {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text(
-                      '• ${t('ins_emp_contrib_5_desc', 'Employee Contribution (5%): Deducted from salary')}: -${formatPdfAmount(report.insuranceEmployee, report.currency)}',
-                      style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
+                    pw.Row(
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        smartText(
+                          '• ${t('ins_emp_contrib_5_desc', 'Employee Contribution (5%): Deducted from salary')}: ',
+                          style: const pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey800,
+                          ),
+                        ),
+                        smartText(
+                          '-${formatPdfAmount(report.insuranceEmployee, report.currency)}',
+                          textDirection: pw.TextDirection.ltr,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColors.grey800,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                    pw.Text(
-                      '• ${t('ins_comp_contrib_12_desc', 'Company Contribution (12%): Employer Paid (Informational)')}: ${formatPdfAmount(report.insuranceCompany, report.currency)}',
-                      style: pw.TextStyle(fontSize: 8, color: PdfColor.fromHex('#0284C7'), fontWeight: pw.FontWeight.bold),
+                    pw.Row(
+                      mainAxisSize: pw.MainAxisSize.min,
+                      children: [
+                        smartText(
+                          '• ${t('ins_comp_contrib_12_desc', 'Company Contribution (12%): Employer Paid (Informational)')}: ',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColor.fromHex('#0284C7'),
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        smartText(
+                          formatPdfAmount(
+                            report.insuranceCompany,
+                            report.currency,
+                          ),
+                          textDirection: pw.TextDirection.ltr,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfColor.fromHex('#0284C7'),
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1370,7 +2222,10 @@ class ExportService {
           decoration: pw.BoxDecoration(
             color: PdfColor.fromHex('#ECFDF5'),
             borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-            border: pw.Border.all(color: PdfColor.fromHex('#10B981'), width: 1.2),
+            border: pw.Border.all(
+              color: PdfColor.fromHex('#10B981'),
+              width: 1.2,
+            ),
           ),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1379,7 +2234,7 @@ class ExportService {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text(
+                  smartText(
                     t('net_payable_salary', 'NET PAYABLE SALARY'),
                     style: pw.TextStyle(
                       fontSize: 11,
@@ -1387,14 +2242,21 @@ class ExportService {
                       color: PdfColor.fromHex('#047857'),
                     ),
                   ),
-                  pw.Text(
-                    t('gross_minus_deductions_desc', 'Gross Earnings - Total Deductions'),
-                    style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                  smartText(
+                    t(
+                      'gross_minus_deductions_desc',
+                      'Gross Earnings - Total Deductions',
+                    ),
+                    style: const pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.grey700,
+                    ),
                   ),
                 ],
               ),
-              pw.Text(
+              smartText(
                 formatPdfAmount(report.netEarnings, report.currency),
+                textDirection: pw.TextDirection.ltr,
                 style: pw.TextStyle(
                   fontSize: 18,
                   fontWeight: pw.FontWeight.bold,
@@ -1414,21 +2276,47 @@ class ExportService {
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(t('employee_signature', 'Employee Signature'), style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                smartText(
+                  t('employee_signature', 'Employee Signature'),
+                  style: const pw.TextStyle(
+                    fontSize: 8.5,
+                    color: PdfColors.grey700,
+                  ),
+                ),
                 pw.SizedBox(height: 30),
                 pw.Container(width: 140, height: 1, color: PdfColors.grey400),
                 pw.SizedBox(height: 3),
-                pw.Text(report.employee.name, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                smartText(
+                  report.employee.name,
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Text(t('official_stamp_title', 'Authorized HR / Management Stamp'), style: const pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700)),
+                smartText(
+                  t('official_stamp_title', 'Authorized HR / Management Stamp'),
+                  style: const pw.TextStyle(
+                    fontSize: 8.5,
+                    color: PdfColors.grey700,
+                  ),
+                ),
                 pw.SizedBox(height: 30),
                 pw.Container(width: 160, height: 1, color: PdfColors.grey400),
                 pw.SizedBox(height: 3),
-                pw.Text(profile?.name.isNotEmpty == true ? profile!.name : t('administration_title', 'Administration'), style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                smartText(
+                  profile?.name.isNotEmpty == true
+                      ? profile!.name
+                      : t('administration_title', 'Administration'),
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ],
@@ -1438,12 +2326,767 @@ class ExportService {
 
         // Footer note
         pw.Center(
-          child: pw.Text(
-            '${t('computer_generated_note', 'This is an official computer-generated payslip.')} - ${DateFormat('yyyy-MM-dd - hh:mm a').format(DateTime.now())}',
-            style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500),
+          child: pw.Row(
+            mainAxisSize: pw.MainAxisSize.min,
+            children: [
+              smartText(
+                '${t('computer_generated_note', 'This is an official computer-generated payslip.')} - ',
+                style: const pw.TextStyle(
+                  fontSize: 7,
+                  color: PdfColors.grey500,
+                ),
+              ),
+              smartText(
+                DateFormat('yyyy-MM-dd - hh:mm a').format(DateTime.now()),
+                textDirection: pw.TextDirection.ltr,
+                style: const pw.TextStyle(
+                  fontSize: 7,
+                  color: PdfColors.grey500,
+                ),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  static Future<void> exportPeriodicReportToExcel({
+    required List<PeriodicReportRow> rows,
+    required DateTime startDate,
+    required DateTime endDate,
+    required CompanyProfile? profile,
+    String? languageCode,
+  }) async {
+    final lang = languageCode ?? 'en';
+    final bool isRtl = lang == 'ar' || lang == 'ku';
+    final dict =
+        TranslationKeys.translations[lang] ??
+        TranslationKeys.translations['en']!;
+    String t(String key, [String fallback = '']) => dict[key] ?? fallback;
+
+    final xlsio.Workbook workbook = xlsio.Workbook();
+    final xlsio.Worksheet sheet = workbook.worksheets[0];
+    sheet.name = t('periodic_report', 'Periodic Report');
+    if (isRtl) {
+      sheet.isRightToLeft = true;
+    }
+
+    int row = 1;
+    if (profile != null && profile.name.isNotEmpty) {
+      sheet.getRangeByIndex(row, 1).setText(profile.name);
+      sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
+      sheet.getRangeByIndex(row, 1).cellStyle.fontSize = 14;
+      row++;
+    }
+
+    final startStr = DateFormat('yyyy-MM-dd').format(startDate);
+    final endStr = DateFormat('yyyy-MM-dd').format(endDate);
+    final reportTitle = t(
+      'periodic_report_title',
+      'Periodic Attendance & Deficit Report',
+    );
+    final toWord = t('date_to', isRtl ? (lang == 'ku' ? 'بۆ' : 'إلى') : 'to');
+    sheet.getRangeByIndex(row, 1).setText('$reportTitle: $startStr $toWord $endStr');
+    sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
+    sheet.getRangeByIndex(row, 1).cellStyle.fontSize = 11;
+    row += 2;
+
+    final countStr = t('count_col', lang == 'ar' ? 'العدد' : lang == 'ku' ? 'ژمارە' : 'Count');
+    final headers = [
+      t('id_label', 'ID'),
+      t('employee_col', 'Employee Name'),
+      t('dept_col', 'Department'),
+      t('group_policy_col', 'Group Policy'),
+      t('req_hrs_col', 'Required (Hrs)'),
+      t('actual_hrs_col', 'Actual (Hrs)'),
+      t('deficit_shortage_col', 'Deficit (Hrs)'),
+      t('delay_m_col', 'Delay (Mins)'),
+      '${t('delay_col', 'Delay')} ($countStr)',
+      t('early_exit_m_col', 'Early Exit (Mins)'),
+      '${t('early_exit_col', 'Early Exit')} ($countStr)',
+      t('penalties_col', 'Penalties'),
+      t('overtime_hrs_col', 'Overtime (Hrs)'),
+      t('daily_leaves_col', 'Daily Leaves'),
+      t('hourly_perm_col', 'Hourly Leaves (Hrs)'),
+      t('remaining_annual_col', 'Remaining Annual (Days)'),
+      t('absences_col', 'Absences'),
+      t('present_days_col', isRtl ? (lang == 'ku' ? 'ڕۆژانی ئامادەبوون' : 'أيام الحضور') : 'Present Days'),
+    ];
+
+    for (int col = 0; col < headers.length; col++) {
+      final cell = sheet.getRangeByIndex(row, col + 1);
+      cell.setText(headers[col]);
+      cell.cellStyle.bold = true;
+      cell.cellStyle.backColor = '#1E293B';
+      cell.cellStyle.fontColor = '#FFFFFF';
+    }
+    row++;
+
+    double totalReq = 0;
+    double totalAct = 0;
+    double totalDef = 0;
+    int totalDelM = 0;
+    int totalDelC = 0;
+    int totalEarM = 0;
+    int totalEarC = 0;
+    double totalPen = 0;
+    double totalOt = 0;
+    int totalDailyL = 0;
+    double totalHourL = 0;
+    int totalAbs = 0;
+    int totalPres = 0;
+
+    for (var r in rows) {
+      sheet.getRangeByIndex(row, 1).setText(r.employee.id);
+      sheet.getRangeByIndex(row, 2).setText(r.employee.name);
+      sheet.getRangeByIndex(row, 3).setText(r.structureName);
+      sheet.getRangeByIndex(row, 4).setText(r.groupName);
+      sheet
+          .getRangeByIndex(row, 5)
+          .setNumber(double.parse(r.requiredHours.toStringAsFixed(1)));
+      sheet
+          .getRangeByIndex(row, 6)
+          .setNumber(double.parse(r.actualWorkedHours.toStringAsFixed(1)));
+      sheet
+          .getRangeByIndex(row, 7)
+          .setNumber(double.parse(r.deficitHours.toStringAsFixed(1)));
+      sheet.getRangeByIndex(row, 8).setNumber(r.delayMinutes.toDouble());
+      sheet.getRangeByIndex(row, 9).setNumber(r.delayCount.toDouble());
+      sheet.getRangeByIndex(row, 10).setNumber(r.earlyExitMinutes.toDouble());
+      sheet.getRangeByIndex(row, 11).setNumber(r.earlyExitCount.toDouble());
+      sheet
+          .getRangeByIndex(row, 12)
+          .setNumber(double.parse(r.penaltyDeductions.toStringAsFixed(1)));
+      sheet
+          .getRangeByIndex(row, 13)
+          .setNumber(double.parse(r.totalOvertimeHours.toStringAsFixed(1)));
+      sheet.getRangeByIndex(row, 14).setNumber(r.dailyLeaveDays.toDouble());
+      sheet
+          .getRangeByIndex(row, 15)
+          .setNumber(double.parse(r.hourlyLeaveHours.toStringAsFixed(1)));
+      sheet
+          .getRangeByIndex(row, 16)
+          .setNumber(double.parse(r.remainingAnnualDays.toStringAsFixed(1)));
+      sheet.getRangeByIndex(row, 17).setNumber(r.absentDays.toDouble());
+      sheet.getRangeByIndex(row, 18).setNumber(r.presentDays.toDouble());
+
+      totalReq += r.requiredHours;
+      totalAct += r.actualWorkedHours;
+      totalDef += r.deficitHours;
+      totalDelM += r.delayMinutes;
+      totalDelC += r.delayCount;
+      totalEarM += r.earlyExitMinutes;
+      totalEarC += r.earlyExitCount;
+      totalPen += r.penaltyDeductions;
+      totalOt += r.totalOvertimeHours;
+      totalDailyL += r.dailyLeaveDays;
+      totalHourL += r.hourlyLeaveHours;
+      totalAbs += r.absentDays;
+      totalPres += r.presentDays;
+
+      row++;
+    }
+
+    // Totals row
+    sheet.getRangeByIndex(row, 1).setText(t('total', 'TOTAL'));
+    sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
+    sheet
+        .getRangeByIndex(row, 5)
+        .setNumber(double.parse(totalReq.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 5).cellStyle.bold = true;
+    sheet
+        .getRangeByIndex(row, 6)
+        .setNumber(double.parse(totalAct.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 6).cellStyle.bold = true;
+    sheet
+        .getRangeByIndex(row, 7)
+        .setNumber(double.parse(totalDef.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 7).cellStyle.bold = true;
+    sheet.getRangeByIndex(row, 8).setNumber(totalDelM.toDouble());
+    sheet.getRangeByIndex(row, 9).setNumber(totalDelC.toDouble());
+    sheet.getRangeByIndex(row, 10).setNumber(totalEarM.toDouble());
+    sheet.getRangeByIndex(row, 11).setNumber(totalEarC.toDouble());
+    sheet
+        .getRangeByIndex(row, 12)
+        .setNumber(double.parse(totalPen.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 12).cellStyle.bold = true;
+    sheet
+        .getRangeByIndex(row, 13)
+        .setNumber(double.parse(totalOt.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 13).cellStyle.bold = true;
+    sheet.getRangeByIndex(row, 14).setNumber(totalDailyL.toDouble());
+    sheet
+        .getRangeByIndex(row, 15)
+        .setNumber(double.parse(totalHourL.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 17).setNumber(totalAbs.toDouble());
+    sheet.getRangeByIndex(row, 17).cellStyle.bold = true;
+    sheet.getRangeByIndex(row, 18).setNumber(totalPres.toDouble());
+    sheet.getRangeByIndex(row, 18).cellStyle.bold = true;
+
+    for (int col = 1; col <= headers.length; col++) {
+      sheet.autoFitColumn(col);
+    }
+
+    final List<int> bytes = workbook.saveAsStream();
+    workbook.dispose();
+
+    final fileName = 'Periodic_Report_${startStr}_to_$endStr.xlsx';
+    await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: Uint8List.fromList(bytes),
+      fileExtension: 'xlsx',
+      mimeType: MimeType.microsoftExcel,
+    );
+  }
+
+  static Future<void> exportPeriodicReportToPdf({
+    required List<PeriodicReportRow> rows,
+    required DateTime startDate,
+    required DateTime endDate,
+    required CompanyProfile? profile,
+    String? languageCode,
+  }) async {
+    final lang = languageCode ?? 'en';
+    final bool isRtl = lang == 'ar' || lang == 'ku';
+    final dict =
+        TranslationKeys.translations[lang] ??
+        TranslationKeys.translations['en']!;
+    String t(String key, [String fallback = '']) => dict[key] ?? fallback;
+
+    final startStr = DateFormat('yyyy-MM-dd').format(startDate);
+    final endStr = DateFormat('yyyy-MM-dd').format(endDate);
+
+    final fontMap = await _loadPdfFonts(lang);
+    final pw.Font? arabicFont = fontMap['base'];
+    final pw.Font? boldArabicFont = fontMap['bold'];
+    final List<pw.Font> fontFallbacks = List<pw.Font>.from(fontMap['fallbacks'] ?? []);
+
+    final pdfTheme = pw.ThemeData.withFont(
+      base: arabicFont ?? pw.Font.helvetica(),
+      bold: boldArabicFont ?? arabicFont ?? pw.Font.helveticaBold(),
+      fontFallback: fontFallbacks,
+    );
+    final pdf = pw.Document(theme: pdfTheme);
+
+    bool hasArabicOrKurdish(String text) {
+      for (final rune in text.runes) {
+        if ((rune >= 0x0600 && rune <= 0x06FF) ||
+            (rune >= 0x0750 && rune <= 0x077F) ||
+            (rune >= 0x08A0 && rune <= 0x08FF) ||
+            (rune >= 0xFB50 && rune <= 0xFDFF) ||
+            (rune >= 0xFE70 && rune <= 0xFEFF)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    String toVisualRtl(String input) {
+      if (input.isEmpty) return input;
+      final b = bidi.BidiString.fromLogical(input);
+      final buffer = StringBuffer();
+      for (final p in b.paragraphs) {
+        final endsWithNewLine = p.separator == 10;
+        final endIndex = p.bidiText.length - (endsWithNewLine ? 1 : 0);
+        buffer.write(String.fromCharCodes(p.bidiText, 0, endIndex));
+        if (endsWithNewLine) buffer.writeln();
+      }
+      return buffer.toString();
+    }
+
+    pw.Widget smartText(
+      String text, {
+      pw.TextStyle? style,
+      pw.TextAlign? textAlign,
+      pw.TextDirection? textDirection,
+      int? maxLines,
+      pw.TextOverflow? overflow,
+    }) {
+      if (text.isEmpty) return pw.SizedBox();
+
+      final bool isExplicitLtr = textDirection == pw.TextDirection.ltr;
+      if (isExplicitLtr) {
+        return pw.Text(
+          text,
+          style: style,
+          textAlign: textAlign ?? pw.TextAlign.left,
+          textDirection: pw.TextDirection.ltr,
+          maxLines: maxLines,
+          overflow: overflow,
+        );
+      }
+
+      final hasRtl = hasArabicOrKurdish(text);
+      if (hasRtl) {
+        final processedText = toVisualRtl(text);
+        return pw.Text(
+          processedText,
+          textAlign: textAlign ?? pw.TextAlign.left,
+          textDirection: pw.TextDirection.ltr,
+          style: style,
+          maxLines: maxLines,
+          overflow: overflow,
+        );
+      }
+
+      return pw.Text(
+        text,
+        style: style,
+        textAlign: textAlign ?? pw.TextAlign.left,
+        textDirection: pw.TextDirection.ltr,
+        maxLines: maxLines,
+        overflow: overflow,
+      );
+    }
+
+    pw.Widget? logoWidget;
+    if (profile?.logoBase64 != null && profile!.logoBase64!.isNotEmpty) {
+      try {
+        final image = pw.MemoryImage(base64Decode(profile.logoBase64!));
+        logoWidget = pw.Image(image, width: 36, height: 36);
+      } catch (_) {}
+    }
+
+    final toWord = t('date_to', isRtl ? (lang == 'ku' ? 'بۆ' : 'إلى') : 'to');
+    final reportTitle = t(
+      'periodic_report_title',
+      'Periodic Attendance & Deficit Report',
+    );
+    final genDateStr = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
+    final genLabel = t('generated_date', isRtl ? (lang == 'ku' ? 'بەرواری دەرچوون' : 'تاريخ الإنشاء') : 'Generated');
+
+    final headers = [
+      t('id_label', 'Employee ID'),
+      t('employee_col', 'Employee'),
+      t('dept_col', 'Department'),
+      t('req_hrs_col', 'Req. (hrs)'),
+      t('actual_hrs_col', 'Actual (hrs)'),
+      t('deficit_shortage_col', 'Deficit (Shortage)'),
+      t('delay_m_col', 'Delay (m)'),
+      t('early_exit_m_col', 'Early Exit (m)'),
+      t('penalties_col', 'Penalties'),
+      t('overtime_hrs_col', 'Overtime (hrs)'),
+      t('leaves_filter', 'Leaves'),
+      t('absences_col', 'Absences'),
+    ];
+
+    final columnWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FlexColumnWidth(1.2), // ID
+      1: const pw.FlexColumnWidth(2.2), // Name
+      2: const pw.FlexColumnWidth(1.6), // Dept
+      3: const pw.FlexColumnWidth(1.1), // Req
+      4: const pw.FlexColumnWidth(1.1), // Act
+      5: const pw.FlexColumnWidth(1.1), // Deficit
+      6: const pw.FlexColumnWidth(1.2), // Delay
+      7: const pw.FlexColumnWidth(1.2), // Early
+      8: const pw.FlexColumnWidth(1.0), // Penalties
+      9: const pw.FlexColumnWidth(1.1), // OT
+      10: const pw.FlexColumnWidth(1.0), // Leaves
+      11: const pw.FlexColumnWidth(1.0), // Absences
+    };
+
+    double totalReq = 0;
+    double totalAct = 0;
+    double totalDef = 0;
+    int totalDelM = 0;
+    int totalDelC = 0;
+    int totalEarM = 0;
+    int totalEarC = 0;
+    double totalPen = 0;
+    double totalOt = 0;
+    int totalDailyL = 0;
+    int totalAbs = 0;
+
+    for (final r in rows) {
+      totalReq += r.requiredHours;
+      totalAct += r.actualWorkedHours;
+      totalDef += r.deficitHours;
+      totalDelM += r.delayMinutes;
+      totalDelC += r.delayCount;
+      totalEarM += r.earlyExitMinutes;
+      totalEarC += r.earlyExitCount;
+      totalPen += r.penaltyDeductions;
+      totalOt += r.totalOvertimeHours;
+      totalDailyL += r.dailyLeaveDays;
+      totalAbs += r.absentDays;
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape.copyWith(
+          marginLeft: 16,
+          marginRight: 16,
+          marginTop: 14,
+          marginBottom: 14,
+        ),
+        textDirection: pw.TextDirection.ltr,
+        theme: pdfTheme,
+        build: (pw.Context context) {
+          return [
+            // Top Header: Company Info (Left) & Generated Info (Right)
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    if (logoWidget != null) ...[
+                      logoWidget,
+                      pw.SizedBox(width: 8),
+                    ],
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        smartText(
+                          profile?.name.isNotEmpty == true ? profile!.name : 'Amada',
+                          style: pw.TextStyle(
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.blueGrey800,
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        smartText(
+                          '$reportTitle ($startStr $toWord $endStr)',
+                          style: const pw.TextStyle(
+                            fontSize: 9.5,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                smartText(
+                  '$genLabel: $genDateStr',
+                  style: const pw.TextStyle(
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+
+            // Report Table
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              columnWidths: columnWidths,
+              children: [
+                // Header Row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.blueGrey900,
+                  ),
+                  children: headers
+                      .map(
+                        (h) => pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          child: smartText(
+                            h,
+                            textAlign: pw.TextAlign.center,
+                            style: pw.TextStyle(
+                              fontSize: 7.5,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+
+                // Data Rows
+                ...rows.map(
+                  (r) => pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: rows.indexOf(r) % 2 == 0
+                          ? PdfColors.white
+                          : PdfColors.grey100,
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.employee.id,
+                          textAlign: pw.TextAlign.center,
+                          textDirection: pw.TextDirection.ltr,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.employee.name,
+                          textAlign: pw.TextAlign.left,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.structureName,
+                          textAlign: pw.TextAlign.left,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.requiredHours.toStringAsFixed(1),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.actualWorkedHours.toStringAsFixed(1),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.deficitHours > 0
+                              ? '-${r.deficitHours.toStringAsFixed(1)}'
+                              : '0.0',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            color: r.deficitHours > 0
+                                ? PdfColors.red800
+                                : PdfColors.green800,
+                            fontWeight: r.deficitHours > 0 ? pw.FontWeight.bold : pw.FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.delayMinutes > 0 ? '${r.delayMinutes} (${r.delayCount})' : '-',
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.earlyExitMinutes > 0 ? '${r.earlyExitMinutes} (${r.earlyExitCount})' : '-',
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.penaltyDeductions > 0
+                              ? r.penaltyDeductions.toStringAsFixed(1)
+                              : '0',
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.totalOvertimeHours > 0 ? r.totalOvertimeHours.toStringAsFixed(1) : '0.0',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            fontWeight: r.totalOvertimeHours > 0 ? pw.FontWeight.bold : pw.FontWeight.normal,
+                            color: r.totalOvertimeHours > 0 ? PdfColors.blue800 : PdfColors.black,
+                          ),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.dailyLeaveDays > 0 ? '${r.dailyLeaveDays}' : '0',
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
+                          r.absentDays > 0 ? '${r.absentDays}' : '0',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            color: r.absentDays > 0
+                                ? PdfColors.red900
+                                : PdfColors.grey700,
+                            fontWeight: r.absentDays > 0 ? pw.FontWeight.bold : pw.FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Totals Row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.blueGrey100,
+                  ),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        t('total', 'TOTAL'),
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 7.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blueGrey900,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText('-', textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText('-', textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalReq.toStringAsFixed(1),
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalAct.toStringAsFixed(1),
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalDef > 0 ? '-${totalDef.toStringAsFixed(1)}' : '0.0',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 7.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: totalDef > 0 ? PdfColors.red800 : PdfColors.green800,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalDelM > 0 ? '$totalDelM ($totalDelC)' : '-',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalEarM > 0 ? '$totalEarM ($totalEarC)' : '-',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalPen > 0 ? totalPen.toStringAsFixed(1) : '0',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalOt > 0 ? totalOt.toStringAsFixed(1) : '0.0',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 7.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue800,
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalDailyL > 0 ? '$totalDailyL' : '0',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalAbs > 0 ? '$totalAbs' : '0',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 7.5,
+                          fontWeight: pw.FontWeight.bold,
+                          color: totalAbs > 0 ? PdfColors.red900 : PdfColors.grey700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 18),
+
+            // Signatures Section
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    smartText(
+                      '${t('prepared_by_label', 'Prepared By')}: ___________________',
+                      style: const pw.TextStyle(fontSize: 8),
+                    ),
+                    pw.SizedBox(height: 4),
+                    smartText(
+                      t('hr_department_label', 'HR Department'),
+                      style: const pw.TextStyle(
+                        fontSize: 7.5,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    smartText(
+                      '${t('approved_by_label', 'Approved By')}: ___________________',
+                      style: const pw.TextStyle(fontSize: 8),
+                    ),
+                    pw.SizedBox(height: 4),
+                    smartText(
+                      t('general_manager_label', 'General Manager'),
+                      style: const pw.TextStyle(
+                        fontSize: 7.5,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    final List<int> bytes = await pdf.save();
+    final fileName = 'Periodic_Report_${startStr}_to_$endStr.pdf';
+    await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: Uint8List.fromList(bytes),
+      fileExtension: 'pdf',
+      mimeType: MimeType.pdf,
     );
   }
 }

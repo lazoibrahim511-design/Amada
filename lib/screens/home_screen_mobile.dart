@@ -12,6 +12,7 @@ import 'hr_management_screen.dart';
 import 'chat_list_screen.dart';
 import 'face_auth_screen.dart';
 import '../widgets/company_settings_dialog.dart';
+import 'super_admin_screen.dart';
 
 class HomeScreenMobile extends StatelessWidget {
   const HomeScreenMobile({super.key});
@@ -65,6 +66,17 @@ class HomeScreenMobile extends StatelessWidget {
                   // Header Buttons
                   Row(
                     children: [
+                      if (provider.isSuperAdmin) ...[
+                        _buildHeaderButton(
+                          context,
+                          icon: provider.currentCompanyCode == 'all'
+                              ? Icons.public
+                              : Icons.domain,
+                          onTap: () =>
+                              _showMobileCompanySwitcher(context, provider),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       if (provider.canEditCompanyInfo) ...[
                         _buildHeaderButton(context, 
                           icon: Icons.settings_outlined,
@@ -281,6 +293,32 @@ class HomeScreenMobile extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  Builder(
+                    builder: (context) {
+                      final zones = provider.getAllowedZones();
+                      if (zones.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.location_off_outlined, size: 14, color: Colors.redAccent),
+                              const SizedBox(width: 4),
+                              Text(
+                                provider.translate('location_outside_range'),
+                                style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
                 ],
               ),
               // Clock Icon container
@@ -408,13 +446,20 @@ class HomeScreenMobile extends StatelessWidget {
                                 valueColor: AlwaysStoppedAnimation<Color>(txtColor),
                               ),
                             )
-                          : Text(
-                              label,
-                              style: TextStyle(
-                                color: txtColor,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                child: Text(
+                                  label,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    color: txtColor,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
                               ),
                             ),
                     ),
@@ -542,10 +587,10 @@ class HomeScreenMobile extends StatelessWidget {
                         );
                       } else if (result == 'missed_checkin') {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Clocked out successfully, but check-in was missed! Please submit a Missing Punch.'),
-                            backgroundColor: Color(0xFFFFA726), // Orange warning
-                            duration: Duration(seconds: 4),
+                          SnackBar(
+                            content: Text(provider.translate('missed_check_in_msg')),
+                            backgroundColor: const Color(0xFFFFA726), // Orange warning
+                            duration: const Duration(seconds: 4),
                           ),
                         );
                       } else {
@@ -565,6 +610,200 @@ class HomeScreenMobile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showMobileCompanySwitcher(
+    BuildContext context,
+    AttendanceProvider provider,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAll = provider.currentCompanyCode == 'all';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Icon(Icons.hub, color: Color(0xFF8B5CF6), size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        provider.translate('switch_company'),
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Master Network View
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.public, color: Color(0xFF8B5CF6)),
+                    ),
+                    title: Text(
+                      provider.translate('all_companies_master'),
+                      style: TextStyle(
+                        fontWeight: isAll ? FontWeight.bold : FontWeight.w600,
+                        color: isAll
+                            ? const Color(0xFF8B5CF6)
+                            : (isDark ? Colors.white : Colors.black87),
+                      ),
+                    ),
+                    subtitle: Text(
+                      provider.translate('master_network_view'),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    trailing: isAll
+                        ? const Icon(Icons.check_circle_rounded,
+                            color: Color(0xFF8B5CF6))
+                        : null,
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await provider.setCompanyCode('all');
+                    },
+                  ),
+                  const Divider(),
+                  // Companies
+                  if (provider.allCompanies.isEmpty)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00E5CE).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.domain, color: Color(0xFF00E5CE)),
+                      ),
+                      title: const Text('Amada Trading (amada)'),
+                      trailing: provider.currentCompanyCode == 'amada'
+                          ? const Icon(Icons.check_circle_rounded,
+                              color: Color(0xFF00E5CE))
+                          : null,
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        await provider.setCompanyCode('amada');
+                      },
+                    )
+                  else
+                    ...provider.allCompanies.map((lic) {
+                      final isCurrent = lic.companyCode.toLowerCase() ==
+                          provider.currentCompanyCode.toLowerCase();
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isCurrent
+                                ? const Color(0xFF00E5CE).withValues(alpha: 0.15)
+                                : (isDark ? Colors.white10 : const Color(0xFFF1F5F9)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.domain,
+                            color: isCurrent
+                                ? const Color(0xFF00E5CE)
+                                : (isDark ? Colors.white70 : Colors.black54),
+                          ),
+                        ),
+                        title: Text(
+                          lic.companyName.isNotEmpty
+                              ? lic.companyName
+                              : lic.companyCode.toUpperCase(),
+                          style: TextStyle(
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                            color: isCurrent
+                                ? const Color(0xFF00E5CE)
+                                : (isDark ? Colors.white : Colors.black87),
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Code: ${lic.companyCode} • ${lic.planName.toUpperCase()}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        trailing: isCurrent
+                            ? const Icon(Icons.check_circle_rounded,
+                                color: Color(0xFF00E5CE))
+                            : null,
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          await provider.setCompanyCode(lic.companyCode);
+                        },
+                      );
+                    }),
+                  const Divider(),
+                  // SaaS portal link
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.admin_panel_settings_rounded,
+                          color: Color(0xFFF59E0B)),
+                    ),
+                    title: Text(
+                      provider.translate('super_admin_portal'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFF59E0B),
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded,
+                        color: Color(0xFFF59E0B)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const SuperAdminScreen()),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

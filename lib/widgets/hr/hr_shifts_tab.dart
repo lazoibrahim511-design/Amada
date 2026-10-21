@@ -67,7 +67,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
-            childAspectRatio: crossAxisCount == 2 ? 1.6 : 1.75,
+            childAspectRatio: crossAxisCount >= 3 ? 1.38 : (crossAxisCount == 2 ? 1.35 : 1.7),
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
           ),
@@ -115,7 +115,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
     }
 
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -158,20 +158,16 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 6,
-                      runSpacing: 4,
+                      runSpacing: 3,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: shift.isRotation
-                                ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
-                                : const Color(0xFF10B981).withValues(alpha: 0.12),
+                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: shift.isRotation
-                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
-                                  : const Color(0xFF10B981).withValues(alpha: 0.3),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
                             ),
                           ),
                           child: Text(
@@ -180,12 +176,10 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                                     ? 'Weekly Rotation'
                                     : '${shift.rotationDays}-Day Rotation')
                                 : 'Fixed Schedule',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
-                              color: shift.isRotation
-                                  ? const Color(0xFF8B5CF6)
-                                  : const Color(0xFF10B981),
+                              color: Color(0xFF10B981),
                             ),
                           ),
                         ),
@@ -193,10 +187,10 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                                color: const Color(0xFF10B981).withValues(alpha: 0.3),
                               ),
                             ),
                             child: Text(
@@ -204,7 +198,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF60A5FA),
+                                color: Color(0xFF10B981),
                               ),
                             ),
                           ),
@@ -340,7 +334,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
 
           // Divider
           Divider(
-            height: 14,
+            height: 10,
             thickness: 1,
             color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
           ),
@@ -372,7 +366,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               // Row 2: Break & Grace
               Row(
                 children: [
@@ -401,7 +395,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 5),
               // Row 3: Working Days Indicators
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -447,7 +441,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(11),
                                         color: isWork
-                                            ? const Color(0xFF8B5CF6)
+                                            ? const Color(0xFF10B981)
                                             : (isDark
                                                 ? Colors.white.withValues(alpha: 0.08)
                                                 : Colors.grey.shade300),
@@ -475,7 +469,7 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: isWorkDay
-                                          ? const Color(0xFF2E65FF)
+                                          ? const Color(0xFF10B981)
                                           : (isDark
                                               ? Colors.white.withValues(alpha: 0.08)
                                               : Colors.grey.shade300),
@@ -499,20 +493,17 @@ class _HrShiftsTabState extends State<HrShiftsTab> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: (shift.isRotation ? const Color(0xFF8B5CF6) : const Color(0xFF2E65FF))
-                            .withValues(alpha: 0.12),
+                        color: const Color(0xFF10B981).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         shift.isRotation
                             ? '$activeDaysCount/${shift.rotationDays > 0 ? shift.rotationDays : 7} Days'
                             : '$activeDaysCount Days/Wk',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
-                          color: shift.isRotation
-                              ? const Color(0xFF8B5CF6)
-                              : const Color(0xFF2E65FF),
+                          color: Color(0xFF10B981),
                         ),
                       ),
                     ),
@@ -762,6 +753,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
         ? provider.translate('update_all_shift_timings')
         : provider.translate('define_shift_working_hours'),
     icon: Icons.access_time_rounded,
+    iconBackgroundColor: const [Color(0xFF10B981)],
     content: StatefulBuilder(
       builder: (context, setDialogState) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -796,8 +788,8 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade100,
-                  border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                  color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
+                  border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,11 +814,11 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
                                 color: !isSpecialShift
-                                    ? const Color(0xFF2E65FF)
+                                    ? const Color(0xFF10B981)
                                     : (isDark ? Colors.white10 : Colors.white),
                                 border: Border.all(
                                   color: !isSpecialShift
-                                      ? const Color(0xFF2E65FF)
+                                      ? const Color(0xFF10B981)
                                       : (isDark ? Colors.white12 : Colors.grey.shade300),
                                 ),
                               ),
@@ -927,7 +919,8 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white12),
+                  color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
+                  border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
                   children: [
@@ -950,7 +943,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                     const SizedBox(width: 8),
                     Switch(
                       value: isRotation,
-                      activeThumbColor: const Color(0xFF8B5CF6),
+                      activeThumbColor: const Color(0xFF10B981),
                       onChanged: (val) {
                         setDialogState(() {
                           isRotation = val;
@@ -967,7 +960,8 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white12),
+                  color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
+                  border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
                 ),
                 child: Row(
                   children: [
@@ -1057,7 +1051,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                   title: Text(provider.translate('overnight_shift'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                   subtitle: Text(provider.translate('overnight_shift_desc'), style: const TextStyle(fontSize: 11)),
                   value: isOvernight,
-                  activeThumbColor: const Color(0xFF8B5CF6),
+                  activeThumbColor: const Color(0xFF10B981),
                   onChanged: (val) {
                     setDialogState(() {
                       isOvernight = val;
@@ -1107,7 +1101,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                     return FilterChip(
                       label: Text(dayMap['label'] as String),
                       selected: isSelected,
-                      selectedColor: const Color(0xFF2E65FF),
+                      selectedColor: const Color(0xFF10B981),
                       checkmarkColor: Colors.white,
                       labelStyle: TextStyle(
                         color: isSelected ? Colors.white : null,
@@ -1186,9 +1180,9 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1202,7 +1196,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                           const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.sync_rounded, color: Color(0xFF8B5CF6), size: 18),
+                              Icon(Icons.sync_rounded, color: Color(0xFF10B981), size: 18),
                               SizedBox(width: 8),
                               Text(
                                 'Rotation Cycle Length',
@@ -1213,7 +1207,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -1221,7 +1215,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                               style: const TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF8B5CF6),
+                                color: Color(0xFF10B981),
                               ),
                             ),
                           ),
@@ -1241,7 +1235,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                               return ChoiceChip(
                                 label: Text('$days Days'),
                                 selected: isSelected,
-                                selectedColor: const Color(0xFF8B5CF6),
+                                selectedColor: const Color(0xFF10B981),
                                 backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
                                 labelStyle: TextStyle(
                                   fontSize: 11.5,
@@ -1345,7 +1339,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF8B5CF6)),
+                              const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF10B981)),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Column(
@@ -1399,7 +1393,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: config.isWorkingDay
-                            ? const Color(0xFF8B5CF6).withValues(alpha: 0.35)
+                            ? const Color(0xFF10B981).withValues(alpha: 0.35)
                             : (isDark ? Colors.white12 : Colors.grey.shade300),
                       ),
                     ),
@@ -1411,7 +1405,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
                                 color: config.isWorkingDay
-                                    ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
                                     : Colors.grey.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -1421,7 +1415,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                   color: config.isWorkingDay
-                                      ? const Color(0xFF8B5CF6)
+                                      ? const Color(0xFF10B981)
                                       : Colors.grey,
                                 ),
                               ),
@@ -1429,7 +1423,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                             const SizedBox(width: 8),
                             Switch(
                               value: config.isWorkingDay,
-                              activeThumbColor: const Color(0xFF8B5CF6),
+                              activeThumbColor: const Color(0xFF10B981),
                               onChanged: (val) {
                                 setDialogState(() {
                                   rotationSchedule[dayIndex] = DayShiftConfig(
@@ -1563,14 +1557,14 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                               Icon(
                                 config.startTime == config.endTime ? Icons.all_inclusive_rounded : Icons.nightlight_round,
                                 size: 13,
-                                color: const Color(0xFF818CF8),
+                                color: const Color(0xFF10B981),
                               ),
                               const SizedBox(width: 5),
                               Text(
                                 config.startTime == config.endTime
                                     ? '24-Hour Shift (Ends next day at ${config.endTime})'
                                     : 'Continues to next day (+1d)',
-                                style: const TextStyle(fontSize: 11, color: Color(0xFF818CF8), fontWeight: FontWeight.w600),
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
                               ),
                               const Spacer(),
                               InkWell(
@@ -1604,13 +1598,13 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.5)),
+                                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
                                   ),
                                   child: Tooltip(
                                     message: 'Checkouts before this cutoff calculate to Day $dayIndex',
                                     child: Text(
                                       'Cutoff: ${config.crossMidnightCutoff.isNotEmpty ? config.crossMidnightCutoff : WorkShift.calculateDefaultCutoff(config.endTime)}',
-                                      style: const TextStyle(fontSize: 10, color: Color(0xFF818CF8), fontWeight: FontWeight.bold),
+                                      style: const TextStyle(fontSize: 10, color: Color(0xFF10B981), fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ),

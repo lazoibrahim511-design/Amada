@@ -1,3 +1,4 @@
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +20,13 @@ class PayrollScreen extends StatefulWidget {
 
 class _PayrollScreenState extends State<PayrollScreen> {
   String? _selectedStructureId;
+  final ScrollController _tableHorizontalScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _tableHorizontalScrollController.dispose();
+    super.dispose();
+  }
 
   bool _matchesStructure(
     String? empStructureId,
@@ -101,7 +109,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final bool isHrOrAdmin = currentUser != null && (
       currentUser.role == 'hr' ||
       currentUser.role == 'admin' ||
-      currentUser.email == 'admin@company.com'
+      currentUser.email == 'admin@company.com' ||
+      currentUser.position.toLowerCase().contains('hr') ||
+      provider.isHRManager
     );
 
     return Scaffold(
@@ -121,23 +131,26 @@ class _PayrollScreenState extends State<PayrollScreen> {
                         Expanded(
                           child: Align(
                             alignment: AlignmentDirectional.centerStart,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  provider.translate('payroll_details'),
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: -0.5,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    provider.translate('payroll_details'),
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: -0.5,
+                                    ),
                                   ),
-                                ),
-                                if (isHrOrAdmin) ...[
-                                  const SizedBox(width: 14),
-                                  _buildStructureFilter(context, provider),
+                                  if (isHrOrAdmin) ...[
+                                    const SizedBox(width: 14),
+                                    _buildStructureFilter(context, provider),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -145,15 +158,20 @@ class _PayrollScreenState extends State<PayrollScreen> {
                         Expanded(
                           child: Align(
                             alignment: AlignmentDirectional.centerEnd,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (isHrOrAdmin) ...[
-                                  _buildAdjustmentButtons(context, provider),
-                                  const SizedBox(width: 10),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isHrOrAdmin) ...[
+                                    _buildCloseMonthButton(context, provider),
+                                    const SizedBox(width: 10),
+                                    _buildAdjustmentButtons(context, provider),
+                                    const SizedBox(width: 10),
+                                  ],
+                                  _buildExportButton(context, provider),
                                 ],
-                                _buildExportButton(context, provider),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -191,6 +209,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                             alignment: WrapAlignment.center,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
+                              _buildCloseMonthButton(context, provider),
                               _buildStructureFilter(context, provider),
                               _buildAdjustmentButtons(context, provider),
                             ],
@@ -680,11 +699,13 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final bool isHrOrAdmin = currentUser != null && (
       currentUser.role == 'hr' ||
       currentUser.role == 'admin' ||
-      currentUser.email == 'admin@company.com'
+      currentUser.email == 'admin@company.com' ||
+      currentUser.position.toLowerCase().contains('hr') ||
+      provider.isHRManager
     );
 
     if (currentUser != null) {
-      if (currentUser.role == 'hr' || currentUser.role == 'admin') {
+      if (isHrOrAdmin) {
         visibleEmployees = provider.employees;
       } else if (currentUser.role == 'supervisor') {
         visibleEmployees = [currentUser, ...provider.getSubordinates(currentUser)];
@@ -803,14 +824,38 @@ class _PayrollScreenState extends State<PayrollScreen> {
         padding: EdgeInsets.zero,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Theme(
-              data: (isDark ? ThemeData.dark() : ThemeData.light()).copyWith(
-                dividerColor: dividerColor,
-              ),
-              child: DataTable(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+
+              ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                    PointerDeviceKind.stylus,
+                    PointerDeviceKind.invertedStylus,
+                  },
+                ),
+                child: Scrollbar(
+                  controller: _tableHorizontalScrollController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  thickness: 8,
+                  radius: const Radius.circular(4),
+                  notificationPredicate: (notification) => notification.depth == 0,
+                  child: SingleChildScrollView(
+                    controller: _tableHorizontalScrollController,
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Theme(
+                        data: (isDark ? ThemeData.dark() : ThemeData.light()).copyWith(
+                          dividerColor: dividerColor,
+                        ),
+                        child: DataTable(
                 columnSpacing: 22,
                 headingRowColor: WidgetStateProperty.all(
                   isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
@@ -1185,6 +1230,11 @@ class _PayrollScreenState extends State<PayrollScreen> {
           ),
         ),
       ),
+    ),
+  ],
+),
+        ),
+      ),
     );
   }
 
@@ -1208,7 +1258,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
         ),
         const SizedBox(width: 14),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.75) : Colors.white.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(50),
@@ -1246,6 +1296,426 @@ class _PayrollScreenState extends State<PayrollScreen> {
         ),
       ],
     );
+  }
+
+
+  Widget _buildCloseMonthButton(BuildContext context, AttendanceProvider provider) {
+    final isClosed = provider.isMonthClosed(provider.selectedMonth);
+    if (!isClosed) {
+      return NeuButton(
+        onPressed: () => _showCloseMonthDialog(context, provider),
+        variant: NeuButtonVariant.primary,
+        height: 38,
+        fontSize: 12.5,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        icon: const Icon(Icons.lock_clock_rounded, size: 15),
+        label: provider.translate('close_month'),
+      );
+    } else {
+      return NeuButton(
+        onPressed: () => _showReopenMonthDialog(context, provider),
+        variant: NeuButtonVariant.warning,
+        height: 38,
+        fontSize: 12.5,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        icon: const Icon(Icons.lock_open_rounded, size: 15),
+        label: provider.translate('reopen_month'),
+      );
+    }
+  }
+
+  Future<void> _showCloseMonthDialog(BuildContext context, AttendanceProvider provider) async {
+    final ym = DateFormat('yyyy-MM').format(provider.selectedMonth);
+    final monthName = provider.translate('month_${provider.selectedMonth.month}');
+    final monthStr = '$monthName ${provider.selectedMonth.year}';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 1. Calculate pre-closing checks
+    final pendingRequests = provider.allCompanyRequests.where((req) {
+      if (req.status != 'Pending Supervisor' && req.status != 'Pending HR') return false;
+      final clean = req.date.split(' - ').first.trim();
+      final d = DateTime.tryParse(clean);
+      if (d == null) return false;
+      return DateFormat('yyyy-MM').format(d) == ym;
+    }).toList();
+
+    final openPunches = provider.allCompanyRecords.where((r) {
+      if (r.checkOut != null) return false;
+      return DateFormat('yyyy-MM').format(r.checkIn) == ym;
+    }).toList();
+
+    // Calculate total net payroll
+    double totalPayout = 0.0;
+    String currency = 'USD';
+    for (var emp in provider.employees) {
+      final rep = provider.generatePayrollReport(emp, provider.selectedMonth, bypassSnapshot: true);
+      totalPayout += rep.netEarnings;
+      currency = rep.currency;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_outline_rounded, color: Color(0xFF10B981), size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${provider.translate('confirm_close_month_title')} ($monthStr)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    provider.translate('confirm_close_month_desc'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Summary Card
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              provider.translate('total_payroll_payout'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              currency == 'USD'
+                                  ? '\$${totalPayout.toStringAsFixed(2)}'
+                                  : '${totalPayout.toStringAsFixed(0)} $currency',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF10B981),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              provider.translate('employees'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              '${provider.employees.length}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Checklist item: Pending Requests
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: pendingRequests.isEmpty
+                          ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                          : const Color(0xFFEF4444).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: pendingRequests.isEmpty
+                            ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                            : const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          pendingRequests.isEmpty ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                          color: pendingRequests.isEmpty ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            pendingRequests.isEmpty
+                                ? provider.translate('no_pending_requests')
+                                : provider.translate('pending_requests_warning').replaceAll('{count}', '${pendingRequests.length}'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: pendingRequests.isEmpty
+                                  ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
+                                  : (isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Checklist item: Open Punches
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: openPunches.isEmpty
+                          ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                          : const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: openPunches.isEmpty
+                            ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                            : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          openPunches.isEmpty ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                          color: openPunches.isEmpty ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            openPunches.isEmpty
+                                ? provider.translate('all_punches_completed')
+                                : provider.translate('open_punches_warning').replaceAll('{count}', '${openPunches.length}'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: openPunches.isEmpty
+                                  ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
+                                  : (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(
+                provider.translate('cancel'),
+                style: TextStyle(
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+            NeuButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              variant: NeuButtonVariant.primary,
+              height: 40,
+              icon: const Icon(Icons.lock_rounded, size: 16),
+              label: provider.translate('lock_period_btn'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      final success = await provider.closeMonth(
+        month: provider.selectedMonth,
+        closedBy: provider.currentEmployee?.name ?? 'HR Manager',
+        closedByEmail: provider.currentEmployee?.email,
+      );
+      if (context.mounted && success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            content: Text(provider.translate('month_closed_success')),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showReopenMonthDialog(BuildContext context, AttendanceProvider provider) async {
+    final monthName = provider.translate('month_${provider.selectedMonth.month}');
+    final monthStr = '$monthName ${provider.selectedMonth.year}';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final reasonController = TextEditingController();
+    String? errorText;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.lock_open_rounded, color: Color(0xFFF59E0B), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${provider.translate('confirm_reopen_month_title')} ($monthStr)',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      provider.translate('confirm_reopen_month_desc'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: reasonController,
+                      maxLines: 3,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: provider.translate('reopen_reason_hint'),
+                        hintStyle: TextStyle(
+                          color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                          fontSize: 13,
+                        ),
+                        errorText: errorText,
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: Text(
+                    provider.translate('cancel'),
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+                NeuButton(
+                  onPressed: () {
+                    if (reasonController.text.trim().isEmpty) {
+                      setState(() {
+                        errorText = provider.translate('reopen_reason_required');
+                      });
+                      return;
+                    }
+                    Navigator.of(ctx).pop(true);
+                  },
+                  variant: NeuButtonVariant.warning,
+                  height: 40,
+                  icon: const Icon(Icons.lock_open_rounded, size: 16),
+                  label: provider.translate('unlock_period_btn'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == true && reasonController.text.trim().isNotEmpty) {
+      final success = await provider.reopenMonth(
+        month: provider.selectedMonth,
+        reopenedBy: provider.currentEmployee?.name ?? 'HR Manager',
+        reason: reasonController.text.trim(),
+      );
+      if (context.mounted && success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            content: Text(provider.translate('month_reopened_success')),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildExportButton(BuildContext context, AttendanceProvider provider) {
@@ -1305,11 +1775,13 @@ class _PayrollScreenState extends State<PayrollScreen> {
           final bool isHrOrAdmin = currentUser != null && (
             currentUser.role == 'hr' ||
             currentUser.role == 'admin' ||
-            currentUser.email == 'admin@company.com'
+            currentUser.email == 'admin@company.com' ||
+            currentUser.position.toLowerCase().contains('hr') ||
+            provider.isHRManager
           );
           List<CompanyEmployee> visibleEmployees = [];
           if (currentUser != null) {
-            if (currentUser.role == 'hr' || currentUser.role == 'admin') {
+            if (isHrOrAdmin) {
               visibleEmployees = provider.employees;
             } else if (currentUser.role == 'supervisor') {
               visibleEmployees = [currentUser, ...provider.getSubordinates(currentUser)];
@@ -1346,6 +1818,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                 reports,
                 provider.selectedMonth,
                 provider.companyProfile,
+                provider.currentLanguage,
               );
             } else if (value == 'all_payslips') {
               await ExportService.exportAllPayslipsToPdf(
@@ -1496,6 +1969,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
   Widget _buildAdjustmentButtons(BuildContext context, AttendanceProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final targetMonthStr = DateFormat('yyyy-MM').format(provider.selectedMonth);
+    final isClosed = provider.isMonthClosed(provider.selectedMonth);
     final count = provider.payrollAdjustments.where((adj) {
       return adj.month == targetMonthStr ||
           (adj.date.length >= 7 && adj.date.substring(0, 7) == targetMonthStr);
@@ -1592,36 +2066,58 @@ class _PayrollScreenState extends State<PayrollScreen> {
           ),
         ),
 
-        // + Addition Button (Radiant Cyan-Aqua capsule hero button)
+        // + Addition Button
         Tooltip(
-          message: provider.translate('add_bonus_addition'),
+          message: isClosed
+              ? provider.translate('cannot_modify_closed_month')
+              : provider.translate('add_bonus_addition'),
           child: NeuButton(
-            onPressed: () => showPayrollAdjustmentDialog(
-              context: context,
-              initialType: 'addition',
-              initialMonth: provider.selectedMonth,
-            ),
+            onPressed: isClosed
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(provider.translate('cannot_modify_closed_month')),
+                        backgroundColor: Colors.amber.shade800,
+                      ),
+                    );
+                  }
+                : () => showPayrollAdjustmentDialog(
+                    context: context,
+                    initialType: 'addition',
+                    initialMonth: provider.selectedMonth,
+                  ),
             icon: const Icon(Icons.add_circle_outline_rounded, size: 15),
             label: provider.translate('addition'),
-            variant: NeuButtonVariant.primary,
+            variant: isClosed ? NeuButtonVariant.whitePill : NeuButtonVariant.primary,
             height: 38,
             fontSize: 12.5,
             padding: const EdgeInsets.symmetric(horizontal: 14),
           ),
         ),
 
-        // - Deduction Button (Coral Red capsule hero button)
+        // - Deduction Button
         Tooltip(
-          message: provider.translate('add_loan_deduction'),
+          message: isClosed
+              ? provider.translate('cannot_modify_closed_month')
+              : provider.translate('add_loan_deduction'),
           child: NeuButton(
-            onPressed: () => showPayrollAdjustmentDialog(
-              context: context,
-              initialType: 'deduction',
-              initialMonth: provider.selectedMonth,
-            ),
+            onPressed: isClosed
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(provider.translate('cannot_modify_closed_month')),
+                        backgroundColor: Colors.amber.shade800,
+                      ),
+                    );
+                  }
+                : () => showPayrollAdjustmentDialog(
+                    context: context,
+                    initialType: 'deduction',
+                    initialMonth: provider.selectedMonth,
+                  ),
             icon: const Icon(Icons.remove_circle_outline_rounded, size: 15),
             label: provider.translate('deduction'),
-            variant: NeuButtonVariant.danger,
+            variant: isClosed ? NeuButtonVariant.whitePill : NeuButtonVariant.danger,
             height: 38,
             fontSize: 12.5,
             padding: const EdgeInsets.symmetric(horizontal: 14),

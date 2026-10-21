@@ -8,6 +8,7 @@ import '../widgets/glass_dialog.dart';
 import '../widgets/neu_button.dart';
 import '../widgets/avatar_image_helper.dart';
 import 'map_picker_screen.dart';
+import '../widgets/picker_theme.dart';
 
 import 'hr_management_screen.dart';
 import '../widgets/hr/hr_structures_tab.dart';
@@ -17,6 +18,7 @@ import '../widgets/hr/hr_locations_tab.dart';
 import '../widgets/hr/hr_holidays_tab.dart';
 import '../widgets/hr/hr_employees_tab.dart';
 import '../widgets/hr/hr_daily_report_tab.dart';
+import '../widgets/hr/hr_periodic_report_tab.dart';
 import '../widgets/hr/hr_device_tab.dart';
 
 
@@ -57,149 +59,6 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
     super.dispose();
   }
 
-  String _getTabTitle(HrTab tab, AttendanceProvider provider) {
-    switch (tab) {
-      case HrTab.structures:
-        return provider.translate('structures');
-      case HrTab.shifts:
-        return provider.translate('shifts');
-      case HrTab.groups:
-        return provider.translate('groups');
-      case HrTab.employees:
-        return provider.translate('employees');
-      case HrTab.holidays:
-        return provider.translate('holidays');
-      case HrTab.locations:
-        return provider.translate('locations');
-      case HrTab.payroll:
-        return provider.translate('payroll');
-      case HrTab.dailyReport:
-        return provider.translate('daily_report');
-      case HrTab.device:
-        return provider.translate('device');
-    }
-  }
-
-  String _getTabSubtitle(HrTab tab, AttendanceProvider provider) {
-    switch (tab) {
-      case HrTab.structures:
-        return provider.translate('structures_subtitle');
-      case HrTab.shifts:
-        return provider.translate('shifts_subtitle');
-      case HrTab.groups:
-        return provider.translate('groups_subtitle');
-      case HrTab.employees:
-        return provider.translate('employees_subtitle');
-      case HrTab.holidays:
-        return provider.translate('holidays_subtitle');
-      case HrTab.locations:
-        return provider.translate('locations_subtitle');
-      case HrTab.payroll:
-        return provider.translate('payroll_subtitle');
-      case HrTab.dailyReport:
-        return provider.translate('daily_report_subtitle');
-      case HrTab.device:
-        return provider.translate('device_subtitle');
-    }
-  }
-
-  int _getTabItemCount(HrTab tab, AttendanceProvider provider) {
-    switch (tab) {
-      case HrTab.structures:
-        return provider.structures.length;
-      case HrTab.shifts:
-        return provider.shifts.length;
-      case HrTab.groups:
-        return provider.groups.length;
-      case HrTab.employees:
-        return provider.employees.length;
-      case HrTab.holidays:
-        return provider.holidays.length;
-      case HrTab.locations:
-        return provider.locations.length;
-      case HrTab.payroll:
-        return provider.employees.length;
-      case HrTab.dailyReport:
-        return 0;
-      case HrTab.device:
-        return 1;
-    }
-  }
-
-  Widget _buildWebHeroHeader(AttendanceProvider provider) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final title = _getTabTitle(_activeTab, provider);
-    final subtitle = _getTabSubtitle(_activeTab, provider);
-    final count = _getTabItemCount(_activeTab, provider);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (!widget.isEmbedded) ...[
-            _buildBackButton(),
-            const SizedBox(width: 16),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    if (count > 0) ...[
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3B82F6).withValues(alpha: isDark ? 0.2 : 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF3B82F6).withValues(alpha: isDark ? 0.4 : 0.2),
-                          ),
-                        ),
-                        child: Text(
-                          '$count',
-                          style: const TextStyle(
-                            color: Color(0xFF3B82F6),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          _buildAddNewButton(provider),
-        ],
-      ),
-    );
-  }
 
   Widget _buildWebTabBar(AttendanceProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -212,90 +71,102 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
       (HrTab.locations, Icons.place_outlined, provider.translate('locations')),
       (HrTab.payroll, Icons.monetization_on_outlined, provider.translate('payroll')),
       (HrTab.dailyReport, Icons.analytics_outlined, provider.translate('daily_report')),
+      (HrTab.periodicReport, Icons.assessment_outlined, provider.translate('periodic_report')),
       (HrTab.device, Icons.fingerprint_outlined, provider.translate('device')),
     ];
 
     return Container(
-      height: 48,
-      margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        itemCount: tabs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final (tab, icon, label) = tabs[index];
-          final isActive = _activeTab == tab;
+      height: 46,
+      margin: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (!widget.isEmbedded) ...[
+            _buildBackButton(),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: tabs.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final (tab, icon, label) = tabs[index];
+                final isActive = _activeTab == tab;
 
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              setState(() {
-                if (_activeTab != tab) {
-                  _activeTab = tab;
-                  _searchQuery = '';
-                  _searchController.clear();
-                }
-              });
-              if (tab == HrTab.dailyReport) {
-                _loadDailyReportData();
-              }
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? const Color(0xFF3B82F6)
-                    : (isDark ? const Color(0xFF1E293B) : Colors.white),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isActive
-                      ? const Color(0xFF3B82F6)
-                      : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
-                  width: 1,
-                ),
-                boxShadow: [
-                  if (isActive)
-                    BoxShadow(
-                      color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    )
-                  else if (!isDark)
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    size: 18,
-                    color: isActive
-                        ? Colors.white
-                        : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    setState(() {
+                      if (_activeTab != tab) {
+                        _activeTab = tab;
+                        _searchQuery = '';
+                        _searchController.clear();
+                      }
+                    });
+                    if (tab == HrTab.dailyReport) {
+                      _loadDailyReportData();
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
                       color: isActive
-                          ? Colors.white
-                          : (isDark ? Colors.white : const Color(0xFF0F172A)),
-                      fontSize: 13.5,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                          ? const Color(0xFF3B82F6)
+                          : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isActive
+                            ? const Color(0xFF3B82F6)
+                            : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        if (isActive)
+                          BoxShadow(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          )
+                        else if (!isDark)
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          icon,
+                          size: 18,
+                          color: isActive
+                              ? Colors.white
+                              : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: isActive
+                                ? Colors.white
+                                : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                            fontSize: 13.5,
+                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -309,9 +180,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
       textDirection: provider.currentLanguageDirection,
       child: Column(
         children: [
-          _buildWebHeroHeader(provider),
           _buildWebTabBar(provider),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Expanded(child: _buildActiveList(provider)),
         ],
       ),
@@ -359,7 +229,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
   }
 
   Widget _buildAddNewButton(AttendanceProvider provider) {
-    if (_activeTab == HrTab.payroll || _activeTab == HrTab.dailyReport || _activeTab == HrTab.device)
+    if (_activeTab == HrTab.payroll || _activeTab == HrTab.dailyReport || _activeTab == HrTab.periodicReport || _activeTab == HrTab.device)
       // ignore: curly_braces_in_flow_control_structures
       return const SizedBox.shrink();
     String label = '';
@@ -384,82 +254,111 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         break;
       case HrTab.payroll:
       case HrTab.dailyReport:
+      case HrTab.periodicReport:
       case HrTab.device:
         break;
     }
 
     return NeuButton(
-      onPressed: () => _showAddEditDialog(),
-      icon: const Icon(Icons.add_rounded, size: 16),
+      onPressed: () {
+        if (_activeTab == HrTab.employees) {
+          if (!provider.canAddActiveEmployee) {
+            HrEmployeesTab.showLicenseLimitDialog(context, provider);
+          } else {
+            HrEmployeesTab.showEmployeeFormDialog(context: context, provider: provider);
+          }
+        } else {
+          _showAddEditDialog();
+        }
+      },
+      icon: const Icon(Icons.add_rounded, size: 18),
       label: label,
       variant: NeuButtonVariant.primary,
-      height: 38,
-      fontSize: 13,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      height: 42,
+      fontSize: 13.5,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
     );
   }
 
   Widget _buildSearchBar(String hint) {
+    final provider = Provider.of<AttendanceProvider>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasAddButton = _activeTab != HrTab.payroll &&
+        _activeTab != HrTab.dailyReport &&
+        _activeTab != HrTab.periodicReport &&
+        _activeTab != HrTab.device;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
-          borderRadius: BorderRadius.circular(12.0),
-          border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-            width: 1,
-          ),
-          boxShadow: [
-            if (!isDark)
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 42,
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(12.0),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+                boxShadow: [
+                  if (!isDark)
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                ],
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              alignment: Alignment.center,
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                  hintText: hint,
+                  hintStyle: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF94A3B8),
+                  ),
+                  border: InputBorder.none,
+                  icon: Icon(
+                    Icons.search,
+                    size: 20,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          color: isDark ? Colors.white60 : Colors.black54,
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
+            ),
+          ),
+          if (hasAddButton) ...[
+            const SizedBox(width: 12),
+            _buildAddNewButton(provider),
           ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: TextField(
-          controller: _searchController,
-          style: TextStyle(
-            fontSize: 14,
-            color: isDark ? Colors.white : const Color(0xFF0F172A),
-          ),
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(vertical: 12),
-            hintText: hint,
-            hintStyle: TextStyle(
-              fontSize: 14,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF94A3B8),
-            ),
-            border: InputBorder.none,
-            icon: Icon(
-              Icons.search,
-              size: 20,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-            ),
-            suffixIcon: _searchQuery.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.close, size: 16),
-                    color: isDark ? Colors.white60 : Colors.black54,
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() {
-                        _searchQuery = '';
-                      });
-                    },
-                  )
-                : null,
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-        ),
+        ],
       ),
     );
   }
@@ -544,8 +443,11 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
             Expanded(
               child: HrEmployeesTab(
                 searchQuery: _searchQuery,
-                onEdit: (employee) => _showAddEditDialog(employee: employee),
-                onDelete: (id) => provider.deleteEmployee(id),
+                onEdit: (employee) => HrEmployeesTab.showEmployeeFormDialog(
+                  context: context,
+                  provider: provider,
+                  employee: employee,
+                ),
               ),
             ),
           ],
@@ -583,6 +485,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         return _buildPayrollList(provider);
       case HrTab.dailyReport:
         return HrDailyReportTab(searchQuery: _searchQuery);
+      case HrTab.periodicReport:
+        return HrPeriodicReportTab(searchQuery: _searchQuery);
       case HrTab.device:
         return const HrDeviceTab();
     }
@@ -714,6 +618,15 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         TextEditingController(); // missedPunchLimitPerMonth (groups only)
     final annualLeaveDeadlineController =
         TextEditingController(); // annualLeaveRequestDeadlineDays (groups only)
+    final annualLeaveMinNoticeController =
+        TextEditingController(); // annualLeaveMinNoticeDays (groups only)
+    final annualLeaveMaxRequestsController =
+        TextEditingController(); // annualLeaveMaxRequestsPerPeriod (groups only)
+    final hourlyLeaveMinDurationController =
+        TextEditingController(); // e.g. "01:30" (groups only)
+    final hourlyLeaveMaxDurationController =
+        TextEditingController(); // e.g. "04:00" (groups only)
+    String annualLeavePeriodTypeValue = 'Month';
 
     // Employee extended controllers
     final phoneController = TextEditingController();
@@ -781,9 +694,12 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
     String? selectedParentId; // structures only
     String? selectedSupervisorId; // structures only
     bool overtimeAllowedValue = false; // groups only
-    bool canEditCompanyInfoValue = false; // groups only
     double holidayOvertimeRatioValue = 1.5; // groups only
     double weekendOvertimeRatioValue = 1.5; // groups only
+    bool nightOvertimeAllowedValue = false; // groups only
+    final nightOvertimeStartController = TextEditingController(text: '22:00');
+    final nightOvertimeEndController = TextEditingController(text: '06:00');
+    double nightOvertimeRatioValue = 1.5; // groups only
     bool delayPenaltiesEnabledValue = true; // groups only
     bool earlyExitPenaltiesEnabledValue = true; // groups only
     String annualLeaveAdditionTypeValue = 'None'; // groups only
@@ -792,26 +708,38 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
     final delayT1MinController = TextEditingController();
     final delayT1MaxController = TextEditingController();
     final delayT1PenaltyController = TextEditingController();
+    final delayT1ForgivenessController = TextEditingController();
     final delayT2MinController = TextEditingController();
     final delayT2MaxController = TextEditingController();
     final delayT2PenaltyController = TextEditingController();
+    final delayT2ForgivenessController = TextEditingController();
     final delayT3MinController = TextEditingController();
     final delayT3PenaltyController = TextEditingController();
+    final delayT3ForgivenessController = TextEditingController();
 
     // Early Exit Penalty controllers
     final earlyExitT1MinController = TextEditingController();
     final earlyExitT1MaxController = TextEditingController();
     final earlyExitT1PenaltyController = TextEditingController();
+    final earlyExitT1ForgivenessController = TextEditingController();
     final earlyExitT2MinController = TextEditingController();
     final earlyExitT2MaxController = TextEditingController();
     final earlyExitT2PenaltyController = TextEditingController();
+    final earlyExitT2ForgivenessController = TextEditingController();
     final earlyExitT3MinController = TextEditingController();
     final earlyExitT3PenaltyController = TextEditingController();
+    final earlyExitT3ForgivenessController = TextEditingController();
 
     // Map Settings for Structure
     double? selectedLatitude;
     double? selectedLongitude;
     double? selectedRadius;
+
+    // Wi-Fi Verification controllers
+    final wifiBssidController = TextEditingController();
+    final wifiSsidController = TextEditingController();
+    bool requireWifiValue = false;
+    bool isDetectingWifi = false;
 
     // Populate controllers if editing
     if (isEditing) {
@@ -846,7 +774,6 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
       } else if (group != null) {
         nameController.text = group.name;
         selectedShiftId = group.shiftId.isNotEmpty ? group.shiftId : null;
-        canEditCompanyInfoValue = group.canEditCompanyInfo;
         annualLeaveAdditionTypeValue = group.annualLeaveAdditionType;
         annualLeaveAdditionHoursController.text =
             group.annualLeaveAdditionHours > 0
@@ -857,6 +784,19 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         annualLeaveDeadlineController.text = group
             .annualLeaveRequestDeadlineDays
             .toString();
+        annualLeaveMinNoticeController.text = group
+            .annualLeaveMinNoticeDays
+            .toString();
+        annualLeaveMaxRequestsController.text = group
+            .annualLeaveMaxRequestsPerPeriod
+            .toString();
+        hourlyLeaveMinDurationController.text =
+            group.hourlyLeaveMinDurationFormatted;
+        hourlyLeaveMaxDurationController.text =
+            group.hourlyLeaveMaxDurationFormatted;
+        annualLeavePeriodTypeValue = group.annualLeavePeriodType.isNotEmpty
+            ? group.annualLeavePeriodType
+            : 'Month';
         overtimeAllowedValue = group.overtimeAllowed;
         minOvertimeController.text = group.minOvertimeMinutes > 0
             ? group.minOvertimeMinutes.toString()
@@ -866,6 +806,10 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
             : '';
         holidayOvertimeRatioValue = group.holidayOvertimeRatio;
         weekendOvertimeRatioValue = group.weekendOvertimeRatio;
+        nightOvertimeAllowedValue = group.nightOvertimeAllowed;
+        nightOvertimeStartController.text = group.nightOvertimeStart.isNotEmpty ? group.nightOvertimeStart : '22:00';
+        nightOvertimeEndController.text = group.nightOvertimeEnd.isNotEmpty ? group.nightOvertimeEnd : '06:00';
+        nightOvertimeRatioValue = group.nightOvertimeRatio;
         delayPenaltiesEnabledValue = group.delayPenaltiesEnabled;
         earlyExitPenaltiesEnabledValue = group.earlyExitPenaltiesEnabled;
 
@@ -879,6 +823,9 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         delayT1PenaltyController.text = group.delayTier1Penalty > 0
             ? group.delayTier1Penalty.toStringAsFixed(0)
             : '';
+        delayT1ForgivenessController.text = group.delayTier1Forgiveness > 0
+            ? group.delayTier1Forgiveness.toString()
+            : '';
         delayT2MinController.text = group.delayTier2Min > 0
             ? group.delayTier2Min.toString()
             : '';
@@ -888,11 +835,17 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         delayT2PenaltyController.text = group.delayTier2Penalty > 0
             ? group.delayTier2Penalty.toStringAsFixed(0)
             : '';
+        delayT2ForgivenessController.text = group.delayTier2Forgiveness > 0
+            ? group.delayTier2Forgiveness.toString()
+            : '';
         delayT3MinController.text = group.delayTier3Min > 0
             ? group.delayTier3Min.toString()
             : '';
         delayT3PenaltyController.text = group.delayTier3Penalty > 0
             ? group.delayTier3Penalty.toStringAsFixed(0)
+            : '';
+        delayT3ForgivenessController.text = group.delayTier3Forgiveness > 0
+            ? group.delayTier3Forgiveness.toString()
             : '';
 
         // Populate Early Exit Penalties
@@ -905,6 +858,9 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         earlyExitT1PenaltyController.text = group.earlyExitTier1Penalty > 0
             ? group.earlyExitTier1Penalty.toStringAsFixed(0)
             : '';
+        earlyExitT1ForgivenessController.text = group.earlyExitTier1Forgiveness > 0
+            ? group.earlyExitTier1Forgiveness.toString()
+            : '';
         earlyExitT2MinController.text = group.earlyExitTier2Min > 0
             ? group.earlyExitTier2Min.toString()
             : '';
@@ -914,11 +870,17 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         earlyExitT2PenaltyController.text = group.earlyExitTier2Penalty > 0
             ? group.earlyExitTier2Penalty.toStringAsFixed(0)
             : '';
+        earlyExitT2ForgivenessController.text = group.earlyExitTier2Forgiveness > 0
+            ? group.earlyExitTier2Forgiveness.toString()
+            : '';
         earlyExitT3MinController.text = group.earlyExitTier3Min > 0
             ? group.earlyExitTier3Min.toString()
             : '';
         earlyExitT3PenaltyController.text = group.earlyExitTier3Penalty > 0
             ? group.earlyExitTier3Penalty.toStringAsFixed(0)
+            : '';
+        earlyExitT3ForgivenessController.text = group.earlyExitTier3Forgiveness > 0
+            ? group.earlyExitTier3Forgiveness.toString()
             : '';
       } else if (employee != null) {
         nameController.text = employee.name;
@@ -962,6 +924,9 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         selectedLongitude = location.longitude;
         selectedRadius = location.radius;
         selectedLocationGroupIds = List<String>.from(location.groupIds);
+        wifiBssidController.text = location.wifiBssid ?? '';
+        wifiSsidController.text = location.wifiSsid ?? '';
+        requireWifiValue = location.requireWifi;
       }
     } else {
       // Default pre-fills for adding
@@ -980,15 +945,23 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
           selectedShiftId = provider.shifts.first.id;
         }
         overtimeAllowedValue = false;
-        canEditCompanyInfoValue = false;
         minOvertimeController.text = '60';
         maxOvertimeController.text = '240';
         holidayOvertimeRatioValue = 1.5;
         weekendOvertimeRatioValue = 1.5;
+        nightOvertimeAllowedValue = false;
+        nightOvertimeStartController.text = '22:00';
+        nightOvertimeEndController.text = '06:00';
+        nightOvertimeRatioValue = 1.5;
         annualLeaveAdditionTypeValue = 'None';
         annualLeaveAdditionHoursController.text = '';
         missedPunchLimitController.text = '3';
         annualLeaveDeadlineController.text = '0';
+        annualLeaveMinNoticeController.text = '0';
+        annualLeaveMaxRequestsController.text = '0';
+        annualLeavePeriodTypeValue = 'Month';
+        hourlyLeaveMinDurationController.text = '';
+        hourlyLeaveMaxDurationController.text = '';
 
         // Default penalties (1-5m, 6-30m, 31m+)
         delayT1MinController.text = '1';
@@ -1158,12 +1131,12 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                    color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: selectedLatitude != null
                           ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                          : (isDark ? Colors.white10 : Colors.black12),
+                          : (isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
                     ),
                   ),
                   child: Column(
@@ -1322,7 +1295,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                     ),
                   ),
                   value: isRotationValue,
-                  activeThumbColor: const Color(0xFFC084FC),
+                  activeThumbColor: const Color(0xFF10B981),
                   onChanged: (val) {
                     setDialogState(() {
                       isRotationValue = val;
@@ -1396,7 +1369,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           ),
                         ),
                         value: isOvernightValue,
-                        activeThumbColor: const Color(0xFF8B5CF6),
+                        activeThumbColor: const Color(0xFF10B981),
                         onChanged: (val) {
                           setDialogState(() {
                             isOvernightValue = val;
@@ -1464,7 +1437,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                                   ),
                                 ),
                                 selected: isSelected,
-                                selectedColor: const Color(0xFF2E65FF),
+                                selectedColor: const Color(0xFF10B981),
                                 backgroundColor: isDark
                                     ? Colors.white.withValues(alpha: 0.1)
                                     : const Color(0xFFE2E8F0),
@@ -1519,7 +1492,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                                 ),
                                 Switch(
                                   value: config.isWorkingDay,
-                                  activeThumbColor: const Color(0xFFC084FC),
+                                  activeThumbColor: const Color(0xFF10B981),
                                   onChanged: (val) {
                                     setDialogState(() {
                                       weeklyScheduleValue[dayIndex] =
@@ -2025,7 +1998,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                                                     const OutlineInputBorder(
                                                       borderSide: BorderSide(
                                                         color: Color(
-                                                          0xFFC084FC,
+                                                          0xFF10B981,
                                                         ),
                                                       ),
                                                     ),
@@ -2232,53 +2205,158 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                 _buildGroupedContainer(
                   title: provider.translate('annual_leave_settings'),
                   children: [
-                    _buildDropdownField(
-                      label: provider.translate('annual_leave_addition_type'),
-                      value: annualLeaveAdditionTypeValue,
-                      items: [
-                        DropdownMenuItem(value: 'None', child: Text(provider.translate('opt_none'))),
-                        DropdownMenuItem(
-                          value: 'Monthly',
-                          child: Text(provider.translate('opt_monthly')),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Yearly',
-                          child: Text(provider.translate('opt_yearly')),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        setDialogState(() {
-                          annualLeaveAdditionTypeValue = val!;
-                        });
-                      },
-                    ),
-                    if (annualLeaveAdditionTypeValue != 'None') ...[
-                      const SizedBox(height: 12),
-                      _buildDialogField(
-                        provider.translate('annual_leave_addition_hours'),
-                        annualLeaveAdditionHoursController,
-                        keyboardType: TextInputType.number,
-                        hintText: 'e.g., 160',
+                    if (annualLeaveAdditionTypeValue != 'None')
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildDropdownField(
+                              label: provider.translate('annual_leave_addition_type'),
+                              value: annualLeaveAdditionTypeValue,
+                              items: [
+                                DropdownMenuItem(value: 'None', child: Text(provider.translate('opt_none'))),
+                                DropdownMenuItem(
+                                  value: 'Monthly',
+                                  child: Text(provider.translate('opt_monthly')),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Yearly',
+                                  child: Text(provider.translate('opt_yearly')),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  annualLeaveAdditionTypeValue = val!;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('annual_leave_addition_hours'),
+                              annualLeaveAdditionHoursController,
+                              keyboardType: TextInputType.number,
+                              hintText: 'e.g., 160',
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      _buildDropdownField(
+                        label: provider.translate('annual_leave_addition_type'),
+                        value: annualLeaveAdditionTypeValue,
+                        items: [
+                          DropdownMenuItem(value: 'None', child: Text(provider.translate('opt_none'))),
+                          DropdownMenuItem(
+                            value: 'Monthly',
+                            child: Text(provider.translate('opt_monthly')),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Yearly',
+                            child: Text(provider.translate('opt_yearly')),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          setDialogState(() {
+                            annualLeaveAdditionTypeValue = val!;
+                          });
+                        },
                       ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 16),
                 _buildGroupedContainer(
                   title: provider.translate('form_rules'),
                   children: [
-                    _buildDialogField(
-                      provider.translate('missed_punch_limit_per_month'),
-                      missedPunchLimitController,
-                      keyboardType: TextInputType.number,
-                      hintText: 'e.g., 3',
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('missed_punch_limit_per_month'),
+                            missedPunchLimitController,
+                            keyboardType: TextInputType.number,
+                            hintText: 'e.g., 3',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('annual_leave_deadline_days'),
+                            annualLeaveDeadlineController,
+                            keyboardType: TextInputType.number,
+                            hintText: 'e.g., 2',
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    _buildDialogField(
-                      provider.translate('annual_leave_deadline_days'),
-                      annualLeaveDeadlineController,
-                      keyboardType: TextInputType.number,
-                      hintText: 'e.g., 2',
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('annual_leave_min_notice_days'),
+                            annualLeaveMinNoticeController,
+                            keyboardType: TextInputType.number,
+                            hintText: 'e.g., 2 (0 = none)',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('annual_leave_max_requests_per_month'),
+                            annualLeaveMaxRequestsController,
+                            keyboardType: TextInputType.number,
+                            hintText: 'e.g., 1 (0 = unlimited)',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Divider(color: isDark ? Colors.white10 : Colors.black12),
+                    const SizedBox(height: 8),
+                    Text(
+                      provider.translate('hourly_leave_rules'),
+                      style: TextStyle(
+                        color: subtextColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('hourly_leave_min_duration'),
+                            hourlyLeaveMinDurationController,
+                            suffixIcon: Icons.access_time,
+                            onSuffixTap: () => _selectTime(
+                              context,
+                              hourlyLeaveMinDurationController,
+                              () => setDialogState(() {}),
+                            ),
+                            hintText: '00:00 (e.g. 01:30)',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('hourly_leave_max_duration'),
+                            hourlyLeaveMaxDurationController,
+                            suffixIcon: Icons.access_time,
+                            onSuffixTap: () => _selectTime(
+                              context,
+                              hourlyLeaveMaxDurationController,
+                              () => setDialogState(() {}),
+                            ),
+                            hintText: '00:00 (e.g. 04:00)',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2308,29 +2386,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          provider.translate('can_edit_company_info'),
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Switch(
-                          value: canEditCompanyInfoValue,
-                          activeThumbColor: const Color(0xFF34D399),
-                          onChanged: (val) {
-                            setDialogState(() {
-                              canEditCompanyInfoValue = val;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
+
                     if (overtimeAllowedValue) ...[
                       const SizedBox(height: 12),
                       Divider(color: isDark ? Colors.white10 : Colors.black12),
@@ -2385,6 +2441,75 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           });
                         },
                       ),
+                      const SizedBox(height: 12),
+                      Divider(color: isDark ? Colors.white10 : Colors.black12),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            provider.translate('enable_night_overtime'),
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Switch(
+                            value: nightOvertimeAllowedValue,
+                            activeThumbColor: const Color(0xFF34D399),
+                            onChanged: (val) {
+                              setDialogState(() {
+                                nightOvertimeAllowedValue = val;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      if (nightOvertimeAllowedValue) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildDialogField(
+                                provider.translate('night_start_time'),
+                                nightOvertimeStartController,
+                                suffixIcon: Icons.access_time,
+                                onSuffixTap: () => _selectTime(
+                                  context,
+                                  nightOvertimeStartController,
+                                  () => setDialogState(() {}),
+                                ),
+                                hintText: '22:00',
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildDialogField(
+                                provider.translate('night_end_time'),
+                                nightOvertimeEndController,
+                                suffixIcon: Icons.access_time,
+                                onSuffixTap: () => _selectTime(
+                                  context,
+                                  nightOvertimeEndController,
+                                  () => setDialogState(() {}),
+                                ),
+                                hintText: '06:00',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _buildRatioSelector(
+                          label: provider.translate('night_overtime_multiplier'),
+                          currentValue: nightOvertimeRatioValue,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              nightOvertimeRatioValue = val;
+                            });
+                          },
+                        ),
+                      ],
                     ],
                   ],
                 ),
@@ -2452,6 +2577,15 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               keyboardType: TextInputType.number,
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('forgiveness_times'),
+                              delayT1ForgivenessController,
+                              keyboardType: TextInputType.number,
+                              hintText: '0',
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -2489,6 +2623,15 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               provider.translate('penalty_iqd'),
                               delayT2PenaltyController,
                               keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('forgiveness_times'),
+                              delayT2ForgivenessController,
+                              keyboardType: TextInputType.number,
+                              hintText: '0',
                             ),
                           ),
                         ],
@@ -2546,6 +2689,15 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               keyboardType: TextInputType.number,
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('forgiveness_times'),
+                              delayT3ForgivenessController,
+                              keyboardType: TextInputType.number,
+                              hintText: '0',
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -2553,13 +2705,13 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                 ),
                 const SizedBox(height: 16),
                 _buildGroupedContainer(
-                  title: 'Early Exit Penalties (3 Levels)',
+                  title: provider.translate('early_exit_penalties_levels'),
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Enable Early Exit Penalties',
+                          provider.translate('enable_early_exit_penalties'),
                           style: TextStyle(
                             color: textColor,
                             fontSize: 14,
@@ -2582,7 +2734,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                       Divider(color: isDark ? Colors.white10 : Colors.black12),
                       const SizedBox(height: 8),
                       Text(
-                        'Level 1 Penalty',
+                        provider.translate('level_1_penalty'),
                         style: TextStyle(
                           color: subtextColor,
                           fontSize: 12,
@@ -2594,7 +2746,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         children: [
                           Expanded(
                             child: _buildDialogField(
-                              'Min min',
+                              provider.translate('min_min'),
                               earlyExitT1MinController,
                               keyboardType: TextInputType.number,
                             ),
@@ -2602,7 +2754,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildDialogField(
-                              'Max min',
+                              provider.translate('max_min'),
                               earlyExitT1MaxController,
                               keyboardType: TextInputType.number,
                             ),
@@ -2610,9 +2762,18 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildDialogField(
-                              'Penalty (IQD)',
+                              provider.translate('penalty_iqd'),
                               earlyExitT1PenaltyController,
                               keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('forgiveness_times'),
+                              earlyExitT1ForgivenessController,
+                              keyboardType: TextInputType.number,
+                              hintText: '0',
                             ),
                           ),
                         ],
@@ -2621,7 +2782,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                       Divider(color: isDark ? Colors.white10 : Colors.black12),
                       const SizedBox(height: 8),
                       Text(
-                        'Level 2 Penalty',
+                        provider.translate('level_2_penalty'),
                         style: TextStyle(
                           color: subtextColor,
                           fontSize: 12,
@@ -2633,7 +2794,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         children: [
                           Expanded(
                             child: _buildDialogField(
-                              'Min min',
+                              provider.translate('min_min'),
                               earlyExitT2MinController,
                               keyboardType: TextInputType.number,
                             ),
@@ -2641,7 +2802,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildDialogField(
-                              'Max min',
+                              provider.translate('max_min'),
                               earlyExitT2MaxController,
                               keyboardType: TextInputType.number,
                             ),
@@ -2649,9 +2810,18 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildDialogField(
-                              'Penalty (IQD)',
+                              provider.translate('penalty_iqd'),
                               earlyExitT2PenaltyController,
                               keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('forgiveness_times'),
+                              earlyExitT2ForgivenessController,
+                              keyboardType: TextInputType.number,
+                              hintText: '0',
                             ),
                           ),
                         ],
@@ -2660,7 +2830,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                       Divider(color: isDark ? Colors.white10 : Colors.black12),
                       const SizedBox(height: 8),
                       Text(
-                        'Level 3 Penalty',
+                        provider.translate('level_3_penalty'),
                         style: TextStyle(
                           color: subtextColor,
                           fontSize: 12,
@@ -2672,7 +2842,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         children: [
                           Expanded(
                             child: _buildDialogField(
-                              'Min min',
+                              provider.translate('min_min'),
                               earlyExitT3MinController,
                               keyboardType: TextInputType.number,
                             ),
@@ -2683,7 +2853,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Max min',
+                                  provider.translate('max_min'),
                                   style: TextStyle(
                                     color: mutedColor,
                                     fontSize: 12,
@@ -2692,7 +2862,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  'and more',
+                                  '+',
                                   style: TextStyle(
                                     color: subtextColor,
                                     fontSize: 14,
@@ -2704,9 +2874,18 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildDialogField(
-                              'Penalty (IQD)',
+                              provider.translate('penalty_iqd'),
                               earlyExitT3PenaltyController,
                               keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDialogField(
+                              provider.translate('forgiveness_times'),
+                              earlyExitT3ForgivenessController,
+                              keyboardType: TextInputType.number,
+                              hintText: '0',
                             ),
                           ),
                         ],
@@ -3201,6 +3380,120 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                _buildGroupedContainer(
+                  title: provider.translate('office_wifi_verification'),
+                  children: [
+                    Text(
+                      provider.translate('wifi_bssid_help'),
+                      style: TextStyle(color: mutedColor, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('wifi_ssid'),
+                            wifiSsidController,
+                            hintText: 'e.g. Office_WiFi',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDialogField(
+                            provider.translate('wifi_bssid'),
+                            wifiBssidController,
+                            hintText: 'e.g. 00:11:22:33:44:55',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        NeuButton(
+                          variant: NeuButtonVariant.primary,
+                          isLoading: isDetectingWifi,
+                          icon: const Icon(Icons.wifi_find_rounded, size: 16),
+                          label: provider.translate('detect_current_wifi'),
+                          height: 34,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          onPressed: isDetectingWifi
+                              ? null
+                              : () async {
+                                  setDialogState(() => isDetectingWifi = true);
+                                  try {
+                                    final wifi = await provider.getCurrentWifiDetails();
+                                    setDialogState(() {
+                                      isDetectingWifi = false;
+                                      if (wifi['bssid'] != null) wifiBssidController.text = wifi['bssid']!;
+                                      if (wifi['ssid'] != null) wifiSsidController.text = wifi['ssid']!;
+                                    });
+                                    if (context.mounted) {
+                                      if (wifi['bssid'] != null || wifi['ssid'] != null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              provider.translate('wifi_detected', params: {
+                                                'ssid': wifi['ssid'] ?? 'Wi-Fi',
+                                                'bssid': wifi['bssid'] ?? '',
+                                              }),
+                                            ),
+                                            backgroundColor: const Color(0xFF00CBB4),
+                                            duration: const Duration(seconds: 3),
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(wifi['error'] ?? provider.translate('no_wifi_detected')),
+                                            backgroundColor: Colors.redAccent,
+                                            duration: const Duration(seconds: 4),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isDetectingWifi = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                        ),
+                        const Spacer(),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: requireWifiValue,
+                              activeThumbColor: const Color(0xFF00CBB4),
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  requireWifiValue = val;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              provider.translate('require_wifi'),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ],
               if (dialogErrorMessage != null) ...[
                 const SizedBox(height: 16),
@@ -3371,6 +3664,45 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         final annualLeaveDeadline =
                             int.tryParse(annualLeaveDeadlineController.text) ??
                             0;
+                        final annualLeaveMinNotice =
+                            int.tryParse(annualLeaveMinNoticeController.text) ??
+                            0;
+                        final annualLeaveMaxRequests =
+                            int.tryParse(annualLeaveMaxRequestsController.text) ??
+                            0;
+                        int hourlyLeaveMinHours = 0;
+                        int hourlyLeaveMinMinutes = 0;
+                        final minDurStr =
+                            hourlyLeaveMinDurationController.text.trim();
+                        if (minDurStr.isNotEmpty) {
+                          final parts = minDurStr.split(':');
+                          if (parts.length == 2) {
+                            hourlyLeaveMinHours = int.tryParse(parts[0]) ?? 0;
+                            hourlyLeaveMinMinutes = int.tryParse(parts[1]) ?? 0;
+                          } else {
+                            final mins =
+                                parseHourlyLeaveDurationMinutes(minDurStr);
+                            hourlyLeaveMinHours = mins ~/ 60;
+                            hourlyLeaveMinMinutes = mins % 60;
+                          }
+                        }
+
+                        int hourlyLeaveMaxHours = 0;
+                        int hourlyLeaveMaxMinutes = 0;
+                        final maxDurStr =
+                            hourlyLeaveMaxDurationController.text.trim();
+                        if (maxDurStr.isNotEmpty) {
+                          final parts = maxDurStr.split(':');
+                          if (parts.length == 2) {
+                            hourlyLeaveMaxHours = int.tryParse(parts[0]) ?? 0;
+                            hourlyLeaveMaxMinutes = int.tryParse(parts[1]) ?? 0;
+                          } else {
+                            final mins =
+                                parseHourlyLeaveDurationMinutes(maxDurStr);
+                            hourlyLeaveMaxHours = mins ~/ 60;
+                            hourlyLeaveMaxMinutes = mins % 60;
+                          }
+                        }
 
                         final d1Min =
                             int.tryParse(delayT1MinController.text) ?? 0;
@@ -3379,6 +3711,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         final d1Pen =
                             double.tryParse(delayT1PenaltyController.text) ??
                             0.0;
+                        final d1Forgive =
+                            int.tryParse(delayT1ForgivenessController.text) ?? 0;
                         final d2Min =
                             int.tryParse(delayT2MinController.text) ?? 0;
                         final d2Max =
@@ -3386,11 +3720,15 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                         final d2Pen =
                             double.tryParse(delayT2PenaltyController.text) ??
                             0.0;
+                        final d2Forgive =
+                            int.tryParse(delayT2ForgivenessController.text) ?? 0;
                         final d3Min =
                             int.tryParse(delayT3MinController.text) ?? 0;
                         final d3Pen =
                             double.tryParse(delayT3PenaltyController.text) ??
                             0.0;
+                        final d3Forgive =
+                            int.tryParse(delayT3ForgivenessController.text) ?? 0;
 
                         final e1Min =
                             int.tryParse(earlyExitT1MinController.text) ?? 0;
@@ -3401,6 +3739,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               earlyExitT1PenaltyController.text,
                             ) ??
                             0.0;
+                        final e1Forgive =
+                            int.tryParse(earlyExitT1ForgivenessController.text) ?? 0;
                         final e2Min =
                             int.tryParse(earlyExitT2MinController.text) ?? 0;
                         final e2Max =
@@ -3410,6 +3750,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               earlyExitT2PenaltyController.text,
                             ) ??
                             0.0;
+                        final e2Forgive =
+                            int.tryParse(earlyExitT2ForgivenessController.text) ?? 0;
                         final e3Min =
                             int.tryParse(earlyExitT3MinController.text) ?? 0;
                         final e3Pen =
@@ -3417,6 +3759,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               earlyExitT3PenaltyController.text,
                             ) ??
                             0.0;
+                        final e3Forgive =
+                            int.tryParse(earlyExitT3ForgivenessController.text) ?? 0;
 
                         if (isEditing && group != null) {
                           provider.updateGroup(
@@ -3429,30 +3773,51 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               missedPunchLimitPerMonth: missedPunchLimit,
                               annualLeaveRequestDeadlineDays:
                                   annualLeaveDeadline,
+                              annualLeaveMinNoticeDays: annualLeaveMinNotice,
+                              annualLeaveMaxRequestsPerPeriod: annualLeaveMaxRequests,
+                              annualLeavePeriodType: annualLeavePeriodTypeValue,
+                              hourlyLeaveMinHours: hourlyLeaveMinHours,
+                              hourlyLeaveMinMinutes: hourlyLeaveMinMinutes,
+                              hourlyLeaveMaxHours: hourlyLeaveMaxHours,
+                              hourlyLeaveMaxMinutes: hourlyLeaveMaxMinutes,
                               overtimeAllowed: overtimeAllowedValue,
                               minOvertimeMinutes: minOt,
                               maxOvertimeMinutes: maxOt,
                               holidayOvertimeRatio: holidayOvertimeRatioValue,
                               weekendOvertimeRatio: weekendOvertimeRatioValue,
+                              nightOvertimeAllowed: nightOvertimeAllowedValue,
+                              nightOvertimeStart: nightOvertimeStartController.text.trim().isNotEmpty
+                                  ? nightOvertimeStartController.text.trim()
+                                  : '22:00',
+                              nightOvertimeEnd: nightOvertimeEndController.text.trim().isNotEmpty
+                                  ? nightOvertimeEndController.text.trim()
+                                  : '06:00',
+                              nightOvertimeRatio: nightOvertimeRatioValue,
                               delayPenaltiesEnabled: delayPenaltiesEnabledValue,
                               earlyExitPenaltiesEnabled:
                                   earlyExitPenaltiesEnabledValue,
                               delayTier1Min: d1Min,
                               delayTier1Max: d1Max,
                               delayTier1Penalty: d1Pen,
+                              delayTier1Forgiveness: d1Forgive,
                               delayTier2Min: d2Min,
                               delayTier2Max: d2Max,
                               delayTier2Penalty: d2Pen,
+                              delayTier2Forgiveness: d2Forgive,
                               delayTier3Min: d3Min,
                               delayTier3Penalty: d3Pen,
+                              delayTier3Forgiveness: d3Forgive,
                               earlyExitTier1Min: e1Min,
                               earlyExitTier1Max: e1Max,
                               earlyExitTier1Penalty: e1Pen,
+                              earlyExitTier1Forgiveness: e1Forgive,
                               earlyExitTier2Min: e2Min,
                               earlyExitTier2Max: e2Max,
                               earlyExitTier2Penalty: e2Pen,
+                              earlyExitTier2Forgiveness: e2Forgive,
                               earlyExitTier3Min: e3Min,
                               earlyExitTier3Penalty: e3Pen,
+                              earlyExitTier3Forgiveness: e3Forgive,
                             ),
                           );
                           _showSuccessSnackBar('Group updated successfully');
@@ -3468,30 +3833,51 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               missedPunchLimitPerMonth: missedPunchLimit,
                               annualLeaveRequestDeadlineDays:
                                   annualLeaveDeadline,
+                              annualLeaveMinNoticeDays: annualLeaveMinNotice,
+                              annualLeaveMaxRequestsPerPeriod: annualLeaveMaxRequests,
+                              annualLeavePeriodType: annualLeavePeriodTypeValue,
+                              hourlyLeaveMinHours: hourlyLeaveMinHours,
+                              hourlyLeaveMinMinutes: hourlyLeaveMinMinutes,
+                              hourlyLeaveMaxHours: hourlyLeaveMaxHours,
+                              hourlyLeaveMaxMinutes: hourlyLeaveMaxMinutes,
                               overtimeAllowed: overtimeAllowedValue,
                               minOvertimeMinutes: minOt,
                               maxOvertimeMinutes: maxOt,
                               holidayOvertimeRatio: holidayOvertimeRatioValue,
                               weekendOvertimeRatio: weekendOvertimeRatioValue,
+                              nightOvertimeAllowed: nightOvertimeAllowedValue,
+                              nightOvertimeStart: nightOvertimeStartController.text.trim().isNotEmpty
+                                  ? nightOvertimeStartController.text.trim()
+                                  : '22:00',
+                              nightOvertimeEnd: nightOvertimeEndController.text.trim().isNotEmpty
+                                  ? nightOvertimeEndController.text.trim()
+                                  : '06:00',
+                              nightOvertimeRatio: nightOvertimeRatioValue,
                               delayPenaltiesEnabled: delayPenaltiesEnabledValue,
                               earlyExitPenaltiesEnabled:
                                   earlyExitPenaltiesEnabledValue,
                               delayTier1Min: d1Min,
                               delayTier1Max: d1Max,
                               delayTier1Penalty: d1Pen,
+                              delayTier1Forgiveness: d1Forgive,
                               delayTier2Min: d2Min,
                               delayTier2Max: d2Max,
                               delayTier2Penalty: d2Pen,
+                              delayTier2Forgiveness: d2Forgive,
                               delayTier3Min: d3Min,
                               delayTier3Penalty: d3Pen,
+                              delayTier3Forgiveness: d3Forgive,
                               earlyExitTier1Min: e1Min,
                               earlyExitTier1Max: e1Max,
                               earlyExitTier1Penalty: e1Pen,
+                              earlyExitTier1Forgiveness: e1Forgive,
                               earlyExitTier2Min: e2Min,
                               earlyExitTier2Max: e2Max,
                               earlyExitTier2Penalty: e2Pen,
+                              earlyExitTier2Forgiveness: e2Forgive,
                               earlyExitTier3Min: e3Min,
                               earlyExitTier3Penalty: e3Pen,
+                              earlyExitTier3Forgiveness: e3Forgive,
                             ),
                           );
                           _showSuccessSnackBar('Group added successfully');
@@ -3595,9 +3981,11 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                           );
                           _showSuccessSnackBar('Employee updated successfully');
                         } else {
+                          final targetCompany = provider.currentCompanyCode == 'all' ? '' : provider.currentCompanyCode;
                           provider.addEmployee(
                             CompanyEmployee(
-                              id: provider.getNextEmployeeId(),
+                              id: provider.getNextEmployeeId(companyCode: targetCompany.isNotEmpty ? targetCompany : null),
+                              companyCode: targetCompany,
                               name: nameController.text.trim(),
                               email: emailVal,
                               position: newPos,
@@ -3677,10 +4065,20 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               longitude: selectedLongitude,
                               radius: selectedRadius,
                               groupIds: selectedLocationGroupIds,
+                              wifiBssid: wifiBssidController.text.trim().isNotEmpty
+                                  ? wifiBssidController.text.trim()
+                                  : null,
+                              overrideWifiBssid: true,
+                              wifiSsid: wifiSsidController.text.trim().isNotEmpty
+                                  ? wifiSsidController.text.trim()
+                                  : null,
+                              overrideWifiSsid: true,
+                              requireWifi: requireWifiValue,
                             ),
                           );
                           _showSuccessSnackBar('Location updated successfully');
                         } else {
+                          final targetCompany = provider.currentCompanyCode == 'all' ? '' : provider.currentCompanyCode;
                           provider.addLocation(
                             WorkLocation(
                               id: 'loc_${DateTime.now().millisecondsSinceEpoch}',
@@ -3689,6 +4087,14 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                               longitude: selectedLongitude!,
                               radius: selectedRadius!,
                               groupIds: selectedLocationGroupIds,
+                              companyCode: targetCompany,
+                              wifiBssid: wifiBssidController.text.trim().isNotEmpty
+                                  ? wifiBssidController.text.trim()
+                                  : null,
+                              wifiSsid: wifiSsidController.text.trim().isNotEmpty
+                                  ? wifiSsidController.text.trim()
+                                  : null,
+                              requireWifi: requireWifiValue,
                             ),
                           );
                           _showSuccessSnackBar('Location added successfully');
@@ -3938,13 +4344,13 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
             isDense: true,
             filled: true,
             fillColor: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.black.withValues(alpha: 0.04),
+                ? const Color(0xFF0F172A)
+                : const Color(0xFFF8FAFC),
             hintText: hintText,
             hintStyle: TextStyle(
               color: isDark
-                  ? Colors.white.withValues(alpha: 0.3)
-                  : Colors.black.withValues(alpha: 0.35),
+                  ? Colors.white.withValues(alpha: 0.35)
+                  : const Color(0xFF94A3B8),
               fontSize: 14,
             ),
             contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -3953,7 +4359,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                     onTap: onSuffixTap,
                     child: Icon(
                       suffixIcon,
-                      color: isDark ? Colors.white60 : Colors.black54,
+                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
                       size: 18,
                     ),
                   )
@@ -3967,7 +4373,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
               borderSide: BorderSide(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.1)
-                    : Colors.black.withValues(alpha: 0.12),
+                    : const Color(0xFFCBD5E1),
               ),
             ),
           ),
@@ -4031,14 +4437,14 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
             isExpanded: true,
             icon: Icon(
               Icons.arrow_drop_down,
-              color: isDark ? Colors.white60 : Colors.black54,
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
             ),
             decoration: InputDecoration(
               isDense: true,
               filled: true,
               fillColor: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.04),
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFFF8FAFC),
               contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -4049,7 +4455,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                 borderSide: BorderSide(
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.black.withValues(alpha: 0.12),
+                      : const Color(0xFFCBD5E1),
                 ),
               ),
             ),
@@ -4098,15 +4504,15 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
                     color: isSelected
                         ? const Color(0xFF2E65FF)
                         : (isDark
-                            ? Colors.white.withValues(alpha: 0.08)
+                            ? const Color(0xFF0F172A)
                             : const Color(0xFFE2E8F0)),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected
                           ? const Color(0xFF2E65FF)
                           : (isDark
-                              ? Colors.white.withValues(alpha: 0.15)
-                              : Colors.black.withValues(alpha: 0.08)),
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : const Color(0xFFCBD5E1)),
                       width: 1,
                     ),
                   ),
@@ -4143,13 +4549,13 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.03),
+            ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+            : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.08),
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE2E8F0),
           width: 1.0,
         ),
       ),
@@ -4181,19 +4587,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
       initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF2E65FF),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1E293B),
-              onSurface: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: buildAdaptivePickerTheme,
     );
     if (picked != null) {
       controller.text = DateFormat('yyyy-MM-dd').format(picked);
@@ -4218,19 +4612,7 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
     final picked = await showTimePicker(
       context: context,
       initialTime: initialTime,
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF2E65FF),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1E293B),
-              onSurface: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: buildAdaptivePickerTheme,
     );
     if (picked != null) {
       final hour = picked.hour.toString().padLeft(2, '0');

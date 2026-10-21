@@ -69,17 +69,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             Text(
                               provider.translate('user_and_access_mgmt'),
                               style: TextStyle(
-                                fontSize: 22,
+                                fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 color: isDark ? Colors.white : const Color(0xFF0F172A),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               provider.translate('user_and_access_desc'),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: isDark ? Colors.white60 : Colors.black54,
                               ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -232,6 +237,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             gradient: isSelected
                 ? const LinearGradient(
@@ -253,23 +259,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
-                size: 17,
+                size: 16,
                 color: isSelected
                     ? const Color(0xFF0A2342)
                     : (isDark ? Colors.white60 : Colors.black54),
               ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                  color: isSelected
-                      ? const Color(0xFF0A2342)
-                      : (isDark ? Colors.white70 : const Color(0xFF334155)),
+              const SizedBox(width: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected
+                          ? const Color(0xFF0A2342)
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
+                  ),
                 ),
               ),
             ],

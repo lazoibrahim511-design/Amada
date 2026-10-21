@@ -48,6 +48,11 @@ class ZkTecoService extends ChangeNotifier {
   List<ZkDeviceConfig> get devices => List.unmodifiable(_devices);
   List<ZkDeviceConfig> get enabledDevices => _devices.where((d) => d.isEnabled).toList();
 
+  List<ZkDeviceConfig> getDevicesForCompany(String companyCode) {
+    final code = companyCode.trim().toLowerCase();
+    return _devices.where((d) => d.companyCode.trim().toLowerCase() == code).toList();
+  }
+
   // Backward compatibility getters (referring to the first device)
   String get deviceIp => _devices.isNotEmpty ? _devices.first.ip : '192.168.1.201';
   int get devicePort => _devices.isNotEmpty ? _devices.first.port : 4370;
@@ -84,6 +89,26 @@ class ZkTecoService extends ChangeNotifier {
 
       await _loadDevicesFromPrefs(prefs);
 
+      // Load remote devices from Firebase if available
+      if (firebase != null && firebase.isAvailable) {
+        try {
+          final remoteDevices = await firebase.getDevices();
+          if (remoteDevices.isNotEmpty) {
+            for (var rDev in remoteDevices) {
+              final idx = _devices.indexWhere((d) => d.id == rDev.id);
+              if (idx != -1) {
+                _devices[idx] = rDev;
+              } else {
+                _devices.add(rDev);
+              }
+            }
+            await _saveDevicesToPrefs();
+          }
+        } catch (e) {
+          debugPrint('Error syncing devices with Firebase: $e');
+        }
+      }
+
       if (_autoSyncEnabled && provider != null && firebase != null) {
         startAutoSync(provider, firebase);
       }
@@ -107,21 +132,23 @@ class ZkTecoService extends ChangeNotifier {
     }
 
     if (_devices.isEmpty) {
-      // Migrate from legacy single device keys if available
-      final legacyIp = prefs.getString('zk_device_ip') ?? '192.168.1.201';
-      final legacyPort = prefs.getInt('zk_device_port') ?? 4370;
-      final legacyPassword = prefs.getInt('zk_device_password') ?? 0;
-      _devices = [
-        ZkDeviceConfig(
-          id: 'dev_${DateTime.now().millisecondsSinceEpoch}',
-          name: 'Main Terminal',
-          ip: legacyIp,
-          port: legacyPort,
-          password: legacyPassword,
-          isEnabled: true,
-        ),
-      ];
-      await _saveDevicesToPrefs();
+      // Migrate from legacy single device keys only if an IP was actually saved
+      final legacyIp = prefs.getString('zk_device_ip');
+      if (legacyIp != null && legacyIp.isNotEmpty) {
+        final legacyPort = prefs.getInt('zk_device_port') ?? 4370;
+        final legacyPassword = prefs.getInt('zk_device_password') ?? 0;
+        _devices = [
+          ZkDeviceConfig(
+            id: 'dev_${DateTime.now().millisecondsSinceEpoch}',
+            name: 'Main Terminal',
+            ip: legacyIp,
+            port: legacyPort,
+            password: legacyPassword,
+            isEnabled: true,
+          ),
+        ];
+        await _saveDevicesToPrefs();
+      }
     }
   }
 
@@ -146,6 +173,9 @@ class ZkTecoService extends ChangeNotifier {
   Future<void> addDevice(ZkDeviceConfig device) async {
     _devices.add(device);
     await _saveDevicesToPrefs();
+    if (_cachedFirebase != null && _cachedFirebase!.isAvailable) {
+      await _cachedFirebase!.saveDevice(device);
+    }
     _addLog('Added new device: "${device.name}" (${device.ip}:${device.port})');
     notifyListeners();
   }
@@ -156,6 +186,9 @@ class ZkTecoService extends ChangeNotifier {
     if (idx != -1) {
       _devices[idx] = device;
       await _saveDevicesToPrefs();
+      if (_cachedFirebase != null && _cachedFirebase!.isAvailable) {
+        await _cachedFirebase!.saveDevice(device);
+      }
       _addLog('Updated device: "${device.name}" (${device.ip}:${device.port})');
       notifyListeners();
     }
@@ -165,10 +198,13 @@ class ZkTecoService extends ChangeNotifier {
   Future<void> deleteDevice(String deviceId) async {
     final idx = _devices.indexWhere((d) => d.id == deviceId);
     if (idx != -1) {
-      final name = _devices[idx].name;
+      final dev = _devices[idx];
       _devices.removeAt(idx);
       await _saveDevicesToPrefs();
-      _addLog('Deleted device: "$name"');
+      if (_cachedFirebase != null && _cachedFirebase!.isAvailable) {
+        await _cachedFirebase!.deleteDevice(dev.id, companyCode: dev.companyCode);
+      }
+      _addLog('Deleted device: "${dev.name}"');
       notifyListeners();
     }
   }
@@ -439,6 +475,7 @@ class ZkTecoService extends ChangeNotifier {
         punches: punches,
         provider: provider,
         firebase: firebase,
+        deviceCompanyCode: device.companyCode,
       );
 
       _finishSync(summary);
@@ -476,12 +513,17 @@ class ZkTecoService extends ChangeNotifier {
       );
     }
 
-    final activeDevices = enabledDevices;
+    final currentCompany = provider.currentCompanyCode.trim().toLowerCase();
+    final activeDevices = _devices.where((d) =>
+      d.isEnabled && (currentCompany == 'all' || currentCompany.isEmpty || d.companyCode.trim().toLowerCase() == currentCompany || d.companyCode.isEmpty)
+    ).toList();
     if (activeDevices.isEmpty) {
       return ZkSyncSummary(
         success: false,
         syncTime: DateTime.now(),
-        message: 'No enabled ZKTeco devices configured.',
+        message: currentCompany == 'all' || currentCompany.isEmpty
+            ? 'No enabled ZKTeco devices configured.'
+            : 'No enabled ZKTeco devices configured for company $currentCompany.',
       );
     }
 
@@ -497,9 +539,10 @@ class ZkTecoService extends ChangeNotifier {
 
     _addLog('Starting multi-device sync across ${activeDevices.length} active devices...');
 
-    final allPunches = <ZkRawPunch>[];
+    final Map<String, List<ZkRawPunch>> punchesByCompany = {};
     final successDeviceNames = <String>[];
     final failedDeviceNames = <String>[];
+    int totalFetched = 0;
 
     for (var dev in activeDevices) {
       try {
@@ -512,7 +555,9 @@ class ZkTecoService extends ChangeNotifier {
           toDate: targetTo,
         );
 
-        allPunches.addAll(punches);
+        final compKey = dev.companyCode.trim().toLowerCase();
+        punchesByCompany.putIfAbsent(compKey, () => []).addAll(punches);
+        totalFetched += punches.length;
         successDeviceNames.add(dev.name);
 
         final idx = _devices.indexWhere((d) => d.id == dev.id);
@@ -537,7 +582,7 @@ class ZkTecoService extends ChangeNotifier {
 
     await _saveDevicesToPrefs();
 
-    if (allPunches.isEmpty) {
+    if (totalFetched == 0) {
       final summary = ZkSyncSummary(
         success: failedDeviceNames.isEmpty,
         totalPunchesFetched: 0,
@@ -552,12 +597,34 @@ class ZkTecoService extends ChangeNotifier {
       return summary;
     }
 
-    _addLog('Aggregated ${allPunches.length} total punches across ${successDeviceNames.length} devices. Running smart pairing engine...');
+    _addLog('Aggregated $totalFetched total punches across ${successDeviceNames.length} devices. Running shift-aware pairing engine...');
 
-    final summary = await _pairAndSavePunches(
-      punches: allPunches,
-      provider: provider,
-      firebase: firebase,
+    int totalCreated = 0;
+    int totalUpdated = 0;
+    final allDetails = <String>[];
+
+    for (var entry in punchesByCompany.entries) {
+      final compKey = entry.key;
+      final compPunches = entry.value;
+      final compSummary = await _pairAndSavePunches(
+        punches: compPunches,
+        provider: provider,
+        firebase: firebase,
+        deviceCompanyCode: compKey,
+      );
+      totalCreated += compSummary.newRecordsCreated;
+      totalUpdated += compSummary.recordsUpdated;
+      allDetails.addAll(compSummary.details);
+    }
+
+    final summary = ZkSyncSummary(
+      success: failedDeviceNames.isEmpty,
+      totalPunchesFetched: totalFetched,
+      newRecordsCreated: totalCreated,
+      recordsUpdated: totalUpdated,
+      syncTime: now,
+      message: 'Synced $totalFetched punches across ${successDeviceNames.length} devices ($totalCreated created, $totalUpdated updated).${failedDeviceNames.isNotEmpty ? " Failed: ${failedDeviceNames.join(', ')}" : ""}',
+      details: allDetails,
     );
 
     _finishSync(summary);
@@ -584,6 +651,7 @@ class ZkTecoService extends ChangeNotifier {
     required List<ZkRawPunch> punches,
     required AttendanceProvider provider,
     required FirebaseService firebase,
+    String? deviceCompanyCode,
   }) async {
     int newRecordsCreated = 0;
     int recordsUpdated = 0;
@@ -600,21 +668,24 @@ class ZkTecoService extends ChangeNotifier {
       list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
     });
 
-    // Map device userId to CompanyEmployee
-    final employees = provider.employees;
+    // Select candidate employees scoped to company
+    final cleanCompany = deviceCompanyCode?.trim().toLowerCase() ?? '';
+    final List<CompanyEmployee> candidateEmployees = (cleanCompany.isNotEmpty && cleanCompany != 'all')
+        ? provider.allEmployees.where((e) => e.companyCode.toLowerCase() == cleanCompany).toList()
+        : provider.employees;
 
     for (var entry in userPunches.entries) {
       final deviceUserId = entry.key;
       final rawList = entry.value;
 
       // Find matching employee
-      final emp = _findMatchingEmployee(deviceUserId, employees);
+      final emp = _findMatchingEmployee(deviceUserId, candidateEmployees);
       if (emp == null) {
         details.add('User ID $deviceUserId on device has no matching employee in app. Skipped.');
         continue;
       }
 
-      // Filter out duplicate / rapid bounce punches
+      // Filter out duplicate / rapid bounce punches within cooldown
       final cleanPunches = <ZkRawPunch>[];
       for (var p in rawList) {
         if (cleanPunches.isEmpty) {
@@ -636,46 +707,97 @@ class ZkTecoService extends ChangeNotifier {
             r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase()),
       );
 
-      // Process each clean punch into sessions
-      AttendanceRecord? currentOpenRecord = existingRecords.cast<AttendanceRecord?>().firstWhere(
-            (r) => r != null && r.checkOut == null,
-            orElse: () => null,
-          );
-
       for (var punch in cleanPunches) {
         final pTime = punch.timestamp;
 
-        if (currentOpenRecord == null) {
-          // Check if there is already a record whose checkIn matches this punch exactly
-          final exists = existingRecords.any((r) =>
-              r.checkIn.year == pTime.year &&
-              r.checkIn.month == pTime.month &&
-              r.checkIn.day == pTime.day &&
-              r.checkIn.hour == pTime.hour &&
-              r.checkIn.minute == pTime.minute);
+        // 1. Do not alter closed and paid payroll months
+        if (provider.isMonthClosed(pTime)) {
+          continue;
+        }
 
-          if (exists) {
-            final rec = existingRecords.firstWhere((r) =>
-                r.checkIn.year == pTime.year &&
-                r.checkIn.month == pTime.month &&
-                r.checkIn.day == pTime.day &&
-                r.checkIn.hour == pTime.hour &&
-                r.checkIn.minute == pTime.minute);
-            if (rec.checkOut == null) {
-              currentOpenRecord = rec;
+        // 2. Do not re-process manually deleted punches
+        if (provider.isPunchDeleted(emp.id, pTime)) {
+          continue;
+        }
+
+        // 3. Check if pTime is ALREADY recorded as a checkOut of an existing record
+        final matchesCheckOut = existingRecords.any((r) =>
+            r.checkOut != null &&
+            r.checkOut!.year == pTime.year &&
+            r.checkOut!.month == pTime.month &&
+            r.checkOut!.day == pTime.day &&
+            r.checkOut!.hour == pTime.hour &&
+            r.checkOut!.minute == pTime.minute);
+        if (matchesCheckOut) {
+          continue;
+        }
+
+        // 4. Check if pTime matches an existing checkIn
+        final matchingCheckInRecord = existingRecords.cast<AttendanceRecord?>().firstWhere(
+              (r) =>
+                  r != null &&
+                  r.checkIn.year == pTime.year &&
+                  r.checkIn.month == pTime.month &&
+                  r.checkIn.day == pTime.day &&
+                  r.checkIn.hour == pTime.hour &&
+                  r.checkIn.minute == pTime.minute,
+              orElse: () => null,
+            );
+
+        if (matchingCheckInRecord != null) {
+          continue;
+        }
+
+        // 5. Check if there is an active open session that this punch should complete (Check-Out)
+        final workDate = DateTime(pTime.year, pTime.month, pTime.day);
+        final shift = provider.getShiftForDate(emp, workDate);
+        final isOvernight = shift.isOvernightForDate(workDate);
+        final isSpecial = shift.isSpecialShiftForDate(workDate);
+        final maxAllowedHours = isSpecial ? 48 : (isOvernight ? 32 : 18);
+
+        AttendanceRecord? openRecordToClose;
+        for (var r in existingRecords) {
+          if (r.checkOut == null && !r.checkIn.isAfter(pTime)) {
+            final elapsed = pTime.difference(r.checkIn);
+            if (elapsed.inMinutes >= _cooldownMinutes && elapsed.inHours <= maxAllowedHours) {
+              if (openRecordToClose == null || r.checkIn.isAfter(openRecordToClose.checkIn)) {
+                openRecordToClose = r;
+              }
             }
-            continue;
           }
+        }
 
-          // Open a new session (Clock In)
+        if (openRecordToClose != null) {
+          // Clock Out
+          final completedRecord = openRecordToClose.copyWith(
+            checkOut: pTime,
+            employeeId: emp.id,
+          );
+
+          final idx = existingRecords.indexOf(openRecordToClose);
+          if (idx != -1) {
+            existingRecords[idx] = completedRecord;
+          }
+          provider.upsertRecordLocally(completedRecord);
+
+          if (firebase.isAvailable) {
+            try {
+              await firebase.saveRecord(emp.id, completedRecord);
+              recordsUpdated++;
+              details.add(
+                  '${emp.name}: Clock Out at ${pTime.toString().substring(0, 16)} (${completedRecord.durationString})');
+            } catch (e) {
+              debugPrint('Error updating record: $e');
+            }
+          }
+        } else {
+          // Clock In
           final newRec = AttendanceRecord(
             checkIn: pTime,
             checkOut: null,
             employeeId: emp.id,
           );
-          currentOpenRecord = newRec;
           existingRecords.add(newRec);
-
           provider.upsertRecordLocally(newRec);
 
           if (firebase.isAvailable) {
@@ -685,78 +807,6 @@ class ZkTecoService extends ChangeNotifier {
               details.add('${emp.name}: Clock In at ${pTime.toString().substring(0, 16)}');
             } catch (e) {
               debugPrint('Error saving record: $e');
-            }
-          }
-        } else {
-          // An open session exists
-          final elapsed = pTime.difference(currentOpenRecord.checkIn);
-
-          if (elapsed.isNegative) {
-            continue;
-          }
-
-          if (elapsed.inMinutes < _cooldownMinutes) {
-            continue;
-          }
-
-          final workDate = DateTime(
-            currentOpenRecord.checkIn.year,
-            currentOpenRecord.checkIn.month,
-            currentOpenRecord.checkIn.day,
-          );
-          final shift = provider.getShiftForDate(emp, workDate);
-          final isOvernight = shift.isOvernightForDate(workDate);
-          final isSpecial = shift.isSpecialShiftForDate(workDate);
-
-          // Pairing window: Special shifts (12h or 24h) pair up to 48 hours; overnight 32h; standard 18h
-          final maxAllowedHours = isSpecial ? 48 : (isOvernight ? 32 : 18);
-
-          if (elapsed.inHours <= maxAllowedHours) {
-            // Clock Out
-            final completedRecord = currentOpenRecord.copyWith(
-              checkOut: pTime,
-              employeeId: emp.id,
-            );
-
-            final idx = existingRecords.indexOf(currentOpenRecord);
-            if (idx != -1) {
-              existingRecords[idx] = completedRecord;
-            }
-            provider.upsertRecordLocally(completedRecord);
-
-            if (firebase.isAvailable) {
-              try {
-                await firebase.saveRecord(emp.id, completedRecord);
-                recordsUpdated++;
-                details.add(
-                    '${emp.name}: Clock Out at ${pTime.toString().substring(0, 16)} (${completedRecord.durationString})');
-              } catch (e) {
-                debugPrint('Error updating record: $e');
-              }
-            }
-
-            currentOpenRecord = null;
-          } else {
-            // Expired open session -> new Clock In
-            currentOpenRecord = null;
-
-            final newRec = AttendanceRecord(
-              checkIn: pTime,
-              checkOut: null,
-              employeeId: emp.id,
-            );
-            currentOpenRecord = newRec;
-            existingRecords.add(newRec);
-            provider.upsertRecordLocally(newRec);
-
-            if (firebase.isAvailable) {
-              try {
-                await firebase.saveRecord(emp.id, newRec);
-                newRecordsCreated++;
-                details.add('${emp.name}: New Clock In at ${pTime.toString().substring(0, 16)}');
-              } catch (e) {
-                debugPrint('Error saving record: $e');
-              }
             }
           }
         }
@@ -823,8 +873,16 @@ class ZkTecoService extends ChangeNotifier {
     }
   }
 
-  void startAutoSync(AttendanceProvider provider, FirebaseService firebase) {
+  void startAutoSync(AttendanceProvider provider, FirebaseService firebase, {bool triggerImmediately = true}) {
     stopAutoSync();
+    if (triggerImmediately) {
+      Future.delayed(const Duration(seconds: 4), () async {
+        if (_autoSyncEnabled && !_isSyncing) {
+          debugPrint('Running initial ZKTeco auto-sync...');
+          await syncAllDevices(provider: provider, firebase: firebase);
+        }
+      });
+    }
     _autoSyncTimer = Timer.periodic(
       Duration(minutes: _autoSyncIntervalMinutes),
       (_) async {

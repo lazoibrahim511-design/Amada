@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.attendance" "\0"
-            VALUE "FileDescription", "attendance_app" "\0"
+            VALUE "FileDescription", "Amada" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "attendance_app" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.attendance. All rights reserved." "\0"
             VALUE "OriginalFilename", "attendance_app.exe" "\0"
-            VALUE "ProductName", "attendance_app" "\0"
+            VALUE "ProductName", "Amada" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

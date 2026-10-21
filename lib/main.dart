@@ -11,34 +11,12 @@ import 'screens/login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/firebase_service.dart';
 import 'services/zkteco_service.dart';
-
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'widgets/picker_theme.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  debugPrint('Handling a background message: ${message.messageId}');
-
-  // If the message has no system notification payload (data-only), trigger local notification
-  if (message.notification == null && message.data.isNotEmpty) {
-    final title = message.data['title'] ?? 'New Message';
-    final body = message.data['body'] ?? '';
-    if (body.isNotEmpty) {
-      final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-      const androidDetails = AndroidNotificationDetails(
-        'chat_channel_id',
-        'Chat Messages',
-        importance: Importance.max,
-        priority: Priority.high,
-      );
-      await flutterLocalNotificationsPlugin.show(
-        id: DateTime.now().millisecond,
-        title: title,
-        body: body,
-        notificationDetails: const NotificationDetails(android: androidDetails),
-      );
-    }
-  }
+  debugPrint('Handling a background message via Cloud FCM: ${message.messageId}');
 }
 
 void main() async {
@@ -66,11 +44,11 @@ void main() async {
     systemNavigationBarIconBrightness: isLight ? Brightness.dark : Brightness.light,
   ));
 
-  // Initialize Firebase with timeout protection so slow connections or native locks never stall Frame 0
+  // Initialize Firebase with safe timeout so slow web/mobile connections or cold caches connect reliably
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(const Duration(milliseconds: 1200));
+    ).timeout(const Duration(seconds: 15));
 
     if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
       try {
@@ -166,11 +144,16 @@ class _MyAppState extends State<MyApp> {
           return MaterialApp(
             navigatorKey: rootNavigatorKey,
             scaffoldMessengerKey: rootScaffoldMessengerKey,
-            title: 'Time Attendance App',
+            title: 'Amada',
             debugShowCheckedModeBanner: false,
             themeMode: provider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
             theme: ThemeData(
-              fontFamily: provider.currentLanguage == 'ku' ? 'UniQaidar' : 'Inter',
+              fontFamily: provider.currentLanguage == 'ku'
+                  ? 'UniQaidar'
+                  : provider.currentLanguage == 'ar'
+                      ? 'NotoSansArabic'
+                      : 'Inter',
+              fontFamilyFallback: const ['UniQaidar', 'Speda', 'NotoSansArabic', 'NotoSans'],
               useMaterial3: true,
               brightness: Brightness.light,
               scaffoldBackgroundColor: Colors.transparent,
@@ -240,9 +223,22 @@ class _MyAppState extends State<MyApp> {
                   ),
                 ),
               ),
+              timePickerTheme: createAdaptiveTimePickerTheme(
+                isDark: false,
+                primaryColor: const Color(0xFF1330A6),
+              ),
+              datePickerTheme: createAdaptiveDatePickerTheme(
+                isDark: false,
+                primaryColor: const Color(0xFF1330A6),
+              ),
             ),
             darkTheme: ThemeData(
-              fontFamily: provider.currentLanguage == 'ku' ? 'UniQaidar' : 'Inter',
+              fontFamily: provider.currentLanguage == 'ku'
+                  ? 'UniQaidar'
+                  : provider.currentLanguage == 'ar'
+                      ? 'NotoSansArabic'
+                      : 'Inter',
+              fontFamilyFallback: const ['UniQaidar', 'Speda', 'NotoSansArabic', 'NotoSans'],
               useMaterial3: true,
               brightness: Brightness.dark,
               scaffoldBackgroundColor: Colors.transparent,
@@ -306,6 +302,14 @@ class _MyAppState extends State<MyApp> {
                     fontSize: 14,
                   ),
                 ),
+              ),
+              timePickerTheme: createAdaptiveTimePickerTheme(
+                isDark: true,
+                primaryColor: const Color(0xFF00F0D8),
+              ),
+              datePickerTheme: createAdaptiveDatePickerTheme(
+                isDark: true,
+                primaryColor: const Color(0xFF00F0D8),
               ),
             ),
             locale: Locale(provider.currentLanguage),

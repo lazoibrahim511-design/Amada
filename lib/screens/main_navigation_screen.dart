@@ -15,6 +15,7 @@ import '../providers/attendance_provider.dart';
 import 'chat_list_screen.dart';
 import '../widgets/web_notifications_dialog.dart';
 import '../widgets/company_settings_dialog.dart';
+import 'super_admin_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialTab;
@@ -56,6 +57,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
       const HrManagementScreen(isEmbedded: true, initialTab: HrTab.dailyReport),
       const RequestsScreen(initialSubordinateTab: true), // index 13: Approvals
       const HrManagementScreen(isEmbedded: true, initialTab: HrTab.device), // index 14: Device (ZKTeco)
+      const HrManagementScreen(isEmbedded: true, initialTab: HrTab.periodicReport), // index 15: Periodic Report
     ];
     _loadSavedTab();
   }
@@ -180,10 +182,36 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
               // Logo
               Row(
                 children: [
-                  const Icon(Icons.hub, color: Color(0xFF8B5CF6), size: 28),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF20B3A7).withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    'Amada',
+                    provider.currentCompanyCode == 'all'
+                        ? 'Master Network'
+                        : (provider.companyProfile?.name.isNotEmpty == true
+                            ? provider.companyProfile!.name
+                            : 'Amada'),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -193,7 +221,11 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                   ),
                 ],
               ),
-              const SizedBox(width: 32),
+              if (provider.isSuperAdmin) ...[
+                const SizedBox(width: 14),
+                _buildSuperAdminCompanySwitcher(context, provider, isDark),
+              ],
+              const SizedBox(width: 24),
               
               // Center Navigation Links
               Expanded(
@@ -244,6 +276,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                                 _buildPopupMenuItem(10, provider.translate('locations'), Icons.location_on),
                                 _buildPopupMenuItem(11, provider.translate('hr_payroll'), Icons.attach_money),
                                 _buildPopupMenuItem(12, provider.translate('daily_report'), Icons.bar_chart),
+                                _buildPopupMenuItem(15, provider.translate('periodic_report'), Icons.assessment_outlined),
                                 _buildPopupMenuItem(14, provider.translate('device'), Icons.fingerprint),
                               ],
                             ),
@@ -333,28 +366,28 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
               const SizedBox(width: 12),
 
-              // Settings button
-              InkWell(
-                onTap: () {
-                  if (provider.canEditCompanyInfo) {
+              // Settings button (Super Admin only)
+              if (provider.canEditCompanyInfo) ...[
+                InkWell(
+                  onTap: () {
                     showCompanySettingsDialog(context);
-                  }
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.settings_outlined,
-                    size: 20,
-                    color: isDark ? Colors.white : const Color(0xFF64748B),
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.settings_outlined,
+                      size: 20,
+                      color: isDark ? Colors.white : const Color(0xFF64748B),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
+              ],
 
               // Theme toggle
               InkWell(
@@ -615,5 +648,298 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
     }
+  }
+
+  Widget _buildSuperAdminCompanySwitcher(
+    BuildContext context,
+    AttendanceProvider provider,
+    bool isDark,
+  ) {
+    final isAll = provider.currentCompanyCode == 'all';
+    final currentLic = provider.allCompanies
+        .where((c) =>
+            c.companyCode.toLowerCase() ==
+            provider.currentCompanyCode.toLowerCase())
+        .firstOrNull;
+    final currentName = isAll
+        ? provider.translate('all_companies_master')
+        : (currentLic?.companyName.isNotEmpty == true
+            ? currentLic!.companyName
+            : (provider.companyProfile?.name.isNotEmpty == true
+                ? provider.companyProfile!.name
+                : provider.currentCompanyCode.toUpperCase()));
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+      ),
+      child: PopupMenuButton<String>(
+        offset: const Offset(0, 45),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          ),
+        ),
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        elevation: 10,
+        tooltip: provider.translate('switch_company'),
+        onSelected: (val) async {
+          if (val == '__saas_portal__') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SuperAdminScreen()),
+            );
+          } else if (val != provider.currentCompanyCode) {
+            await provider.setCompanyCode(val);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    val == 'all'
+                        ? provider.translate('all_companies_master')
+                        : 'Workspace: ${val.toUpperCase()}',
+                  ),
+                  duration: const Duration(seconds: 2),
+                  backgroundColor: const Color(0xFF8B5CF6),
+                ),
+              );
+            }
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: isAll
+                ? const Color(0xFF8B5CF6).withValues(alpha: isDark ? 0.25 : 0.12)
+                : const Color(0xFF00E5CE).withValues(alpha: isDark ? 0.2 : 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isAll
+                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
+                  : const Color(0xFF00E5CE).withValues(alpha: 0.4),
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isAll ? Icons.public : Icons.domain,
+                size: 15,
+                color: isAll ? const Color(0xFF8B5CF6) : const Color(0xFF00E5CE),
+              ),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
+                child: Text(
+                  currentName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+              ),
+            ],
+          ),
+        ),
+        itemBuilder: (ctx) {
+          final items = <PopupMenuEntry<String>>[];
+
+          // Header
+          items.add(
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 32,
+              child: Text(
+                provider.translate('switch_company').toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: Color(0xFF8B5CF6),
+                ),
+              ),
+            ),
+          );
+
+          // All Companies (Master View)
+          items.add(
+            PopupMenuItem<String>(
+              value: 'all',
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.public, color: Color(0xFF8B5CF6), size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          provider.translate('all_companies_master'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isAll ? FontWeight.w800 : FontWeight.w600,
+                            color: isAll
+                                ? const Color(0xFF8B5CF6)
+                                : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                          ),
+                        ),
+                        Text(
+                          provider.translate('master_network_view'),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: isDark ? Colors.white54 : const Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isAll)
+                    const Icon(Icons.check_circle_rounded, color: Color(0xFF8B5CF6), size: 16),
+                ],
+              ),
+            ),
+          );
+
+          items.add(const PopupMenuDivider(height: 12));
+
+          // Companies list
+          if (provider.allCompanies.isEmpty) {
+            items.add(
+              PopupMenuItem<String>(
+                value: 'amada',
+                child: Row(
+                  children: [
+                    const Icon(Icons.domain, size: 18, color: Color(0xFF00E5CE)),
+                    const SizedBox(width: 10),
+                    const Text('Amada Trading (amada)'),
+                    if (provider.currentCompanyCode == 'amada')
+                      const Padding(
+                        padding: EdgeInsets.only(left: 8.0),
+                        child: Icon(Icons.check_circle_rounded, color: Color(0xFF00E5CE), size: 16),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            for (final lic in provider.allCompanies) {
+              final isCurrent =
+                  lic.companyCode.toLowerCase() == provider.currentCompanyCode.toLowerCase();
+              items.add(
+                PopupMenuItem<String>(
+                  value: lic.companyCode,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: isCurrent
+                              ? const Color(0xFF00E5CE).withValues(alpha: 0.15)
+                              : (isDark ? Colors.white10 : const Color(0xFFF1F5F9)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.domain,
+                          size: 18,
+                          color: isCurrent
+                              ? const Color(0xFF00E5CE)
+                              : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              lic.companyName.isNotEmpty
+                                  ? lic.companyName
+                                  : lic.companyCode.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600,
+                                color: isCurrent
+                                    ? const Color(0xFF00E5CE)
+                                    : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                              ),
+                            ),
+                            Text(
+                              'Code: ${lic.companyCode} • ${lic.planName.toUpperCase()}',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: isDark ? Colors.white54 : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (isCurrent)
+                        const Icon(Icons.check_circle_rounded, color: Color(0xFF00E5CE), size: 16),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+
+          items.add(const PopupMenuDivider(height: 12));
+
+          // Direct jump to Master SaaS Portal
+          items.add(
+            PopupMenuItem<String>(
+              value: '__saas_portal__',
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.admin_panel_settings_rounded,
+                        color: Color(0xFFF59E0B), size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    provider.translate('super_admin_portal'),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          return items;
+        },
+      ),
+    );
   }
 }

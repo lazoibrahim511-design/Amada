@@ -1,6 +1,6 @@
 {
-    "name": "attendance_app",
-    "short_name": "attendance_app",
+    "name": "Amada",
+    "short_name": "Amada",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

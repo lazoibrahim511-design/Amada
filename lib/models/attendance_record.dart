@@ -16,7 +16,8 @@ class AttendanceRecord {
     final tIn = DateTime(checkIn.year, checkIn.month, checkIn.day, checkIn.hour, checkIn.minute);
     if (checkOut == null) {
       final now = DateTime.now();
-      if (now.difference(tIn).inHours.abs() >= 48) {
+      final isSameDay = now.year == checkIn.year && now.month == checkIn.month && now.day == checkIn.day;
+      if (!isSameDay || now.difference(tIn).inHours.abs() >= 24) {
         return Duration.zero;
       }
       final tNow = DateTime(now.year, now.month, now.day, now.hour, now.minute);

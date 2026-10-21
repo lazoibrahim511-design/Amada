@@ -170,9 +170,11 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     final shortDateStr = DateFormat('MMMM d').format(date);
 
     final dayRequests = <Request>[];
-    bool hasLeaveRequest = false;
+    bool hasFullDayLeave = false;
     String leaveType = '';
+    int approvedHourlyLeaveMinutes = 0;
     bool hasApprovedOt = false;
+    bool hasApprovedMissingPunch = false;
 
     for (var req in allRequests) {
       if (req.employeeId != null &&
@@ -205,9 +207,17 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
         if (dateMatches) {
           dayRequests.add(req);
           if (req.status == 'Approved') {
-            if (req.type.contains('Leave')) {
-              hasLeaveRequest = true;
+            if (req.type == 'Hourly Leave' ||
+                req.type.toLowerCase().contains('hourly')) {
+              final mins = parseHourlyLeaveDurationMinutes(req.duration);
+              approvedHourlyLeaveMinutes += mins > 0 ? mins : 60;
+            } else if (req.type.contains('Leave')) {
+              hasFullDayLeave = true;
               leaveType = req.type;
+            } else if (req.type == 'Missing Punch' ||
+                req.type == 'Forgot to Clock In' ||
+                req.type == 'Forgot to Clock Out') {
+              hasApprovedMissingPunch = true;
             }
             if (req.type == 'Overtime Approval') {
               hasApprovedOt = true;
@@ -219,16 +229,47 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
 
     final holiday = provider.getHolidayForEmployee(date, group?.id);
 
+    final shiftStart = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      shiftStartMinutes ~/ 60,
+      shiftStartMinutes % 60,
+    );
+    var shiftEnd = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      shiftEndMinutes ~/ 60,
+      shiftEndMinutes % 60,
+    );
+    if (shiftEnd.isBefore(shiftStart) ||
+        shiftEnd.isAtSameMomentAs(shiftStart) ||
+        shift.isOvernightForDate(date)) {
+      shiftEnd = shiftEnd.add(const Duration(days: 1));
+    }
+
+    final isToday = DateUtils.isSameDay(date, DateTime.now());
+    final hasUnexcusedMissedPunch = !hasApprovedMissingPunch &&
+        sortedRecords.isNotEmpty &&
+        sortedRecords.any((rec) {
+          if (rec.checkIn == rec.checkOut) return true;
+          if (rec.checkOut == null) {
+            if (!isToday) return true;
+            if (DateTime.now().isAfter(shiftEnd)) return true;
+          }
+          return false;
+        });
+
     int totalActualMinutes = 0;
     int dutyMinutes = 0;
     int restMinutes = 0;
     int delayMinutes = 0;
     int earlyExitMinutes = 0;
     int extraTimeMinutes = 0;
+    int nightExtraMinutes = 0;
     int overtimeMinutes = 0;
     bool hasActiveSession = false;
-
-    final isToday = DateUtils.isSameDay(date, DateTime.now());
 
     // 1. Session strings & actual duration
     final List<String> sessionTimes = [];
@@ -245,168 +286,194 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
           hasActiveSession = true;
         }
         sessionTimes.add('$startStr - $endStr');
-        totalActualMinutes += rec.duration.inMinutes;
+        if (!hasUnexcusedMissedPunch) {
+          totalActualMinutes += rec.duration.inMinutes;
+        }
       }
     }
 
     String clockTimeStr = sessionTimes.isNotEmpty ? sessionTimes.join('\n') : '-';
 
-    // 2. Break / Rest calculation
-    if (sortedRecords.length > 1) {
-      final breakStartStr = shift.getBreakStartForDate(date);
-      final breakEndStr = shift.getBreakEndForDate(date);
-      final allowedBreakDuration = shift.getBreakDurationForDate(date);
+    if (!hasUnexcusedMissedPunch) {
+      // 2. Break / Rest calculation
+      if (sortedRecords.length > 1) {
+        final breakStartStr = shift.getBreakStartForDate(date);
+        final breakEndStr = shift.getBreakEndForDate(date);
+        final allowedBreakDuration = shift.getBreakDurationForDate(date);
 
-      DateTime? bStart;
-      DateTime? bEnd;
-      if (breakStartStr.isNotEmpty &&
-          breakEndStr.isNotEmpty &&
-          allowedBreakDuration > 0) {
-        final bsParts = breakStartStr.split(':');
-        final beParts = breakEndStr.split(':');
-        if (bsParts.length >= 2 && beParts.length >= 2) {
-          bStart = DateTime(
-            date.year,
-            date.month,
-            date.day,
-            int.parse(bsParts[0]),
-            int.parse(bsParts[1]),
-          );
-          bEnd = DateTime(
-            date.year,
-            date.month,
-            date.day,
-            int.parse(beParts[0]),
-            int.parse(beParts[1]),
-          );
-          if (bEnd.isBefore(bStart)) {
-            bEnd = bEnd.add(const Duration(days: 1));
-          }
-        }
-      }
-
-      int totalExcusedRest = 0;
-      for (int i = 0; i < sortedRecords.length - 1; i++) {
-        final currentOut = sortedRecords[i].checkOut;
-        final nextIn = sortedRecords[i + 1].checkIn;
-        if (currentOut != null && nextIn.isAfter(currentOut)) {
-          if (bStart != null && bEnd != null) {
-            final intStart = currentOut.isAfter(bStart) ? currentOut : bStart;
-            final intEnd = nextIn.isBefore(bEnd) ? nextIn : bEnd;
-            int excused = 0;
-            if (intEnd.isAfter(intStart)) {
-              excused = intEnd.difference(intStart).inMinutes;
+        DateTime? bStart;
+        DateTime? bEnd;
+        if (breakStartStr.isNotEmpty &&
+            breakEndStr.isNotEmpty &&
+            allowedBreakDuration > 0) {
+          final bsParts = breakStartStr.split(':');
+          final beParts = breakEndStr.split(':');
+          if (bsParts.length >= 2 && beParts.length >= 2) {
+            bStart = DateTime(
+              date.year,
+              date.month,
+              date.day,
+              int.parse(bsParts[0]),
+              int.parse(bsParts[1]),
+            );
+            bEnd = DateTime(
+              date.year,
+              date.month,
+              date.day,
+              int.parse(beParts[0]),
+              int.parse(beParts[1]),
+            );
+            if (bEnd.isBefore(bStart)) {
+              bEnd = bEnd.add(const Duration(days: 1));
             }
-            if (totalExcusedRest + excused > allowedBreakDuration) {
-              excused = allowedBreakDuration - totalExcusedRest;
-              if (excused < 0) excused = 0;
+          }
+        }
+
+        int totalExcusedRest = 0;
+        for (int i = 0; i < sortedRecords.length - 1; i++) {
+          final currentOut = sortedRecords[i].checkOut;
+          final nextIn = sortedRecords[i + 1].checkIn;
+          if (currentOut != null && nextIn.isAfter(currentOut)) {
+            if (bStart != null && bEnd != null) {
+              final intStart = currentOut.isAfter(bStart) ? currentOut : bStart;
+              final intEnd = nextIn.isBefore(bEnd) ? nextIn : bEnd;
+              int excused = 0;
+              if (intEnd.isAfter(intStart)) {
+                excused = intEnd.difference(intStart).inMinutes;
+              }
+              if (totalExcusedRest + excused > allowedBreakDuration) {
+                excused = allowedBreakDuration - totalExcusedRest;
+                if (excused < 0) excused = 0;
+              }
+              totalExcusedRest += excused;
+              restMinutes += excused;
             }
-            totalExcusedRest += excused;
-            restMinutes += excused;
-          }
-        }
-      }
-    }
-
-    // 3. Duty Time & Extra Time
-    if (sortedRecords.isNotEmpty) {
-      final shiftStart = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        shiftStartMinutes ~/ 60,
-        shiftStartMinutes % 60,
-      );
-      var shiftEnd = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        shiftEndMinutes ~/ 60,
-        shiftEndMinutes % 60,
-      );
-      if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart) || shift.isOvernightForDate(date)) {
-        shiftEnd = shiftEnd.add(const Duration(days: 1));
-      }
-
-      for (var rec in sortedRecords) {
-        final rawStart = rec.checkIn;
-        final rawEnd = rec.checkOut ?? (isToday ? DateTime.now() : rawStart);
-
-        final sStart = DateTime(
-          rawStart.year,
-          rawStart.month,
-          rawStart.day,
-          rawStart.hour,
-          rawStart.minute,
-        );
-        final sEnd = DateTime(
-          rawEnd.year,
-          rawEnd.month,
-          rawEnd.day,
-          rawEnd.hour,
-          rawEnd.minute,
-        );
-
-        final intStart = sStart.isAfter(shiftStart) ? sStart : shiftStart;
-        final intEnd = sEnd.isBefore(shiftEnd) ? sEnd : shiftEnd;
-        if (intEnd.isAfter(intStart)) {
-          dutyMinutes += intEnd.difference(intStart).inMinutes;
-        }
-
-        if (!isWorkingDay) {
-          extraTimeMinutes += sEnd.difference(sStart).inMinutes;
-        } else {
-          if (sStart.isBefore(shiftStart)) {
-            final endBefore = sEnd.isBefore(shiftStart) ? sEnd : shiftStart;
-            extraTimeMinutes += endBefore.difference(sStart).inMinutes;
-          }
-          if (sEnd.isAfter(shiftEnd)) {
-            final startAfter = sStart.isAfter(shiftEnd) ? sStart : shiftEnd;
-            extraTimeMinutes += sEnd.difference(startAfter).inMinutes;
           }
         }
       }
 
-      final isSpecial = shift.isSpecialShiftForDate(date);
-      final dayShiftDurMins = shift.getShiftDurationMinutesForDate(date);
+      // 3. Duty Time & Extra Time
+      if (sortedRecords.isNotEmpty) {
+        for (var rec in sortedRecords) {
+          final rawStart = rec.checkIn;
+          final rawEnd = rec.checkOut ?? (isToday ? DateTime.now() : rawStart);
 
-      if (isSpecial) {
-        dutyMinutes = totalActualMinutes > dayShiftDurMins ? dayShiftDurMins : totalActualMinutes;
-        extraTimeMinutes = totalActualMinutes > dayShiftDurMins ? (totalActualMinutes - dayShiftDurMins) : 0;
-        delayMinutes = 0;
-        earlyExitMinutes = 0;
-      } else if (isWorkingDay && !hasLeaveRequest && holiday == null) {
-        // Delay (First session arrival)
-        final firstRec = sortedRecords.first;
-        final isMissedCheckIn = firstRec.checkIn == firstRec.checkOut;
-        if (!isMissedCheckIn) {
-          final diff = firstRec.checkIn.difference(shiftStart).inMinutes;
-          if (diff > shift.forgivenessOfDelay) {
-            delayMinutes = diff;
+          final sStart = DateTime(
+            rawStart.year,
+            rawStart.month,
+            rawStart.day,
+            rawStart.hour,
+            rawStart.minute,
+          );
+          final sEnd = DateTime(
+            rawEnd.year,
+            rawEnd.month,
+            rawEnd.day,
+            rawEnd.hour,
+            rawEnd.minute,
+          );
+
+          final intStart = sStart.isAfter(shiftStart) ? sStart : shiftStart;
+          final intEnd = sEnd.isBefore(shiftEnd) ? sEnd : shiftEnd;
+          if (intEnd.isAfter(intStart)) {
+            dutyMinutes += intEnd.difference(intStart).inMinutes;
           }
-        }
 
-        // Early Exit (Last session departure)
-        final lastRec = sortedRecords.last;
-        if (lastRec.checkOut != null) {
-          final diff = shiftEnd.difference(lastRec.checkOut!).inMinutes;
-          if (diff > shift.earlyExit) {
-            earlyExitMinutes = diff;
-          }
-        }
-      }
-
-      // Overtime
-      if (extraTimeMinutes > 0 && hasApprovedOt) {
-        final minOt = group?.minOvertimeMinutes ?? 0;
-        final maxOt = group?.maxOvertimeMinutes ?? 480;
-        if (extraTimeMinutes >= minOt) {
-          final baseOt = extraTimeMinutes.clamp(0, maxOt);
           if (!isWorkingDay) {
-            overtimeMinutes =
-                (baseOt * (group?.weekendOvertimeRatio ?? 1.5)).toInt();
+            extraTimeMinutes += sEnd.difference(sStart).inMinutes;
+            if (group?.nightOvertimeAllowed == true) {
+              nightExtraMinutes += group!.calculateNightMinutes(sStart, sEnd);
+            }
           } else {
-            overtimeMinutes = baseOt;
+            if (sStart.isBefore(shiftStart)) {
+              final endBefore = sEnd.isBefore(shiftStart) ? sEnd : shiftStart;
+              extraTimeMinutes += endBefore.difference(sStart).inMinutes;
+              if (group?.nightOvertimeAllowed == true) {
+                nightExtraMinutes += group!.calculateNightMinutes(sStart, endBefore);
+              }
+            }
+            if (sEnd.isAfter(shiftEnd)) {
+              final startAfter = sStart.isAfter(shiftEnd) ? sStart : shiftEnd;
+              extraTimeMinutes += sEnd.difference(startAfter).inMinutes;
+              if (group?.nightOvertimeAllowed == true) {
+                nightExtraMinutes += group!.calculateNightMinutes(startAfter, sEnd);
+              }
+            }
+          }
+        }
+
+        final isSpecial = shift.isSpecialShiftForDate(date);
+        final dayShiftDurMins = shift.getShiftDurationMinutesForDate(date);
+
+        if (isSpecial) {
+          dutyMinutes = totalActualMinutes > dayShiftDurMins ? dayShiftDurMins : totalActualMinutes;
+          extraTimeMinutes = totalActualMinutes > dayShiftDurMins ? (totalActualMinutes - dayShiftDurMins) : 0;
+          if (group?.nightOvertimeAllowed == true && extraTimeMinutes > 0 && sortedRecords.isNotEmpty) {
+            final lastRec = sortedRecords.last;
+            final rawEnd = lastRec.checkOut ?? (isToday ? DateTime.now() : lastRec.checkIn);
+            final extraStart = rawEnd.subtract(Duration(minutes: extraTimeMinutes));
+            nightExtraMinutes = group!.calculateNightMinutes(extraStart, rawEnd);
+          }
+          delayMinutes = 0;
+          earlyExitMinutes = 0;
+        } else if (isWorkingDay && !hasFullDayLeave && holiday == null) {
+          final shiftRecords = sortedRecords
+              .where((r) => r.checkIn.isBefore(shiftEnd))
+              .toList();
+
+          if (shiftRecords.isNotEmpty) {
+            // Delay (First session arrival of shift)
+            final firstRec = shiftRecords.first;
+            final isMissedCheckIn = firstRec.checkIn == firstRec.checkOut;
+            if (!isMissedCheckIn) {
+              final diff = firstRec.checkIn.difference(shiftStart).inMinutes;
+              if (diff > shift.forgivenessOfDelay) {
+                delayMinutes = diff;
+              }
+            }
+
+            // Early Exit (Last session departure of shift)
+            final lastRec = shiftRecords.last;
+            if (lastRec.checkOut != null) {
+              final diff = shiftEnd.difference(lastRec.checkOut!).inMinutes;
+              if (diff > shift.earlyExit) {
+                earlyExitMinutes = diff;
+              }
+            }
+
+            // Excuse delay / early exit with approved hourly leave
+            if (approvedHourlyLeaveMinutes > 0) {
+              int remainingHourly = approvedHourlyLeaveMinutes;
+              if (delayMinutes > 0) {
+                final excused = math.min(delayMinutes, remainingHourly);
+                delayMinutes -= excused;
+                remainingHourly -= excused;
+              }
+              if (earlyExitMinutes > 0 && remainingHourly > 0) {
+                final excused = math.min(earlyExitMinutes, remainingHourly);
+                earlyExitMinutes -= excused;
+                remainingHourly -= excused;
+              }
+            }
+          }
+        }
+
+        // Overtime
+        if (extraTimeMinutes > 0 && hasApprovedOt) {
+          if (group != null) {
+            overtimeMinutes = group.calculateOvertimeMinutes(
+              dayExtraMinutes: extraTimeMinutes,
+              nightExtraMinutes: nightExtraMinutes,
+              isWeekend: !isWorkingDay,
+              isHoliday: holiday != null,
+            );
+          } else {
+            final baseOt = extraTimeMinutes.clamp(0, 480);
+            if (!isWorkingDay) {
+              overtimeMinutes = (baseOt * 1.5).toInt();
+            } else {
+              overtimeMinutes = baseOt;
+            }
           }
         }
       }
@@ -417,7 +484,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     Color statusColor = const Color(0xFF10B981);
     IconData statusIcon = Icons.check_circle_rounded;
 
-    if (hasLeaveRequest) {
+    if (hasFullDayLeave) {
       status = leaveType.isNotEmpty ? leaveType : 'Leave';
       statusColor = const Color(0xFF6366F1);
       statusIcon = Icons.beach_access_rounded;
@@ -427,6 +494,10 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
       statusColor = const Color(0xFF00BD96);
       statusIcon = Icons.celebration_rounded;
       if (clockTimeStr == '-') clockTimeStr = holiday.name;
+    } else if (hasUnexcusedMissedPunch) {
+      status = 'Missing Punch';
+      statusColor = const Color(0xFFEF4444);
+      statusIcon = Icons.warning_amber_rounded;
     } else if (sortedRecords.isNotEmpty) {
       if (hasActiveSession) {
         status = 'Active';
@@ -456,7 +527,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
         status = 'Absent';
         statusColor = const Color(0xFFEF4444);
         statusIcon = Icons.cancel_rounded;
-        clockTimeStr = 'No Punch';
+        clockTimeStr = approvedHourlyLeaveMinutes > 0 ? 'Hourly Leave' : 'No Punch';
       }
     }
 
@@ -480,6 +551,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
       'statusColor': statusColor,
       'statusIcon': statusIcon,
       'hasRecord': sortedRecords.isNotEmpty,
+      'hasUnexcusedMissedPunch': hasUnexcusedMissedPunch,
       'isToday': isToday,
       'isWorkingDay': isWorkingDay,
       'records': sortedRecords,
@@ -2276,6 +2348,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
           records: rows,
           date: _selectedDate,
           profile: provider.companyProfile,
+          languageCode: provider.currentLanguage,
         );
       } else {
         await ExportService.exportDailyReportToExcel(

@@ -260,6 +260,48 @@ class _HrLocationsTabState extends State<HrLocationsTab> {
               ),
             ],
           ),
+          if ((location.wifiSsid != null && location.wifiSsid!.isNotEmpty) ||
+              (location.wifiBssid != null && location.wifiBssid!.isNotEmpty)) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: location.requireWifi
+                    ? const Color(0xFF00CBB4).withValues(alpha: 0.1)
+                    : (isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: location.requireWifi
+                      ? const Color(0xFF00CBB4).withValues(alpha: 0.3)
+                      : (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.wifi_rounded,
+                    size: 14,
+                    color: location.requireWifi ? const Color(0xFF00CBB4) : const Color(0xFF64748B),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${location.wifiSsid?.isNotEmpty == true ? location.wifiSsid : 'Wi-Fi'}${location.wifiBssid?.isNotEmpty == true ? ' (${location.wifiBssid})' : ''}${location.requireWifi ? ' • ${provider.translate('require_wifi')}' : ''}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: location.requireWifi
+                            ? const Color(0xFF00CBB4)
+                            : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -322,6 +364,10 @@ void showLocationDialog(BuildContext context, {WorkLocation? location}) {
   final latController = TextEditingController(text: (location?.latitude ?? 0.0).toString());
   final lngController = TextEditingController(text: (location?.longitude ?? 0.0).toString());
   final radiusController = TextEditingController(text: (location?.radius ?? 100.0).toString());
+  final bssidController = TextEditingController(text: location?.wifiBssid ?? '');
+  final ssidController = TextEditingController(text: location?.wifiSsid ?? '');
+  bool requireWifiVal = location?.requireWifi ?? false;
+  bool isDetectingWifi = false;
   final provider = Provider.of<AttendanceProvider>(context, listen: false);
 
   showGlassDialog(
@@ -329,46 +375,193 @@ void showLocationDialog(BuildContext context, {WorkLocation? location}) {
     title: location == null ? provider.translate('add_new_location') : provider.translate('edit_location'),
     subtitle: provider.translate('fill_details_below'),
     icon: Icons.location_on_outlined,
-    content: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: nameController,
-            decoration: InputDecoration(
-              labelText: provider.translate('location_name_label'),
-              border: const OutlineInputBorder(),
-            ),
+    content: StatefulBuilder(
+      builder: (context, setDialogState) {
+        return SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: provider.translate('location_name_label'),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: latController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: provider.translate('latitude_label'),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: lngController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: provider.translate('longitude_label'),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: radiusController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: '${provider.translate('radius')} (${provider.translate('meters')})',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00CBB4).withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF00CBB4).withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.wifi_rounded, size: 18, color: Color(0xFF00CBB4)),
+                        const SizedBox(width: 8),
+                        Text(
+                          provider.translate('office_wifi_verification'),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF00CBB4),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      provider.translate('wifi_bssid_help'),
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: ssidController,
+                      decoration: InputDecoration(
+                        labelText: provider.translate('wifi_ssid'),
+                        hintText: 'e.g. Office_WiFi',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: bssidController,
+                      decoration: InputDecoration(
+                        labelText: provider.translate('wifi_bssid'),
+                        hintText: 'e.g. 00:11:22:33:44:55',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        NeuButton(
+                          label: provider.translate('detect_current_wifi'),
+                          variant: NeuButtonVariant.primary,
+                          isLoading: isDetectingWifi,
+                          icon: const Icon(Icons.wifi_find_rounded, size: 15),
+                          height: 32,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          onPressed: isDetectingWifi
+                              ? null
+                              : () async {
+                                  setDialogState(() => isDetectingWifi = true);
+                                  try {
+                                    final wifi = await provider.getCurrentWifiDetails();
+                                    setDialogState(() {
+                                      isDetectingWifi = false;
+                                      if (wifi['bssid'] != null) bssidController.text = wifi['bssid']!;
+                                      if (wifi['ssid'] != null) ssidController.text = wifi['ssid']!;
+                                    });
+                                    if (context.mounted) {
+                                      if (wifi['bssid'] != null || wifi['ssid'] != null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              provider.translate('wifi_detected', params: {
+                                                'ssid': wifi['ssid'] ?? 'Wi-Fi',
+                                                'bssid': wifi['bssid'] ?? '',
+                                              }),
+                                            ),
+                                            backgroundColor: const Color(0xFF00CBB4),
+                                            duration: const Duration(seconds: 3),
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(wifi['error'] ?? provider.translate('no_wifi_detected')),
+                                            backgroundColor: Colors.redAccent,
+                                            duration: const Duration(seconds: 4),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isDetectingWifi = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                        ),
+                        const Spacer(),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: requireWifiVal,
+                              activeThumbColor: const Color(0xFF00CBB4),
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  requireWifiVal = val;
+                                });
+                              },
+                            ),
+                            Text(
+                              provider.translate('require_wifi'),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: latController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: provider.translate('latitude_label'),
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: lngController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: provider.translate('longitude_label'),
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: radiusController,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: '${provider.translate('radius')} (${provider.translate('meters')})',
-              border: const OutlineInputBorder(),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     ),
     actions: [
       TextButton(
@@ -381,13 +574,19 @@ void showLocationDialog(BuildContext context, {WorkLocation? location}) {
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 18),
         onPressed: () {
-          if (nameController.text.trim().isEmpty) return;
+          final targetCompany = provider.currentCompanyCode == 'all' ? '' : provider.currentCompanyCode;
           final newLoc = WorkLocation(
             id: location?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
             name: nameController.text.trim(),
             latitude: double.tryParse(latController.text) ?? 0.0,
             longitude: double.tryParse(lngController.text) ?? 0.0,
             radius: double.tryParse(radiusController.text) ?? 100.0,
+            companyCode: (location != null && location.companyCode.isNotEmpty)
+                ? location.companyCode
+                : targetCompany,
+            wifiBssid: bssidController.text.trim().isNotEmpty ? bssidController.text.trim() : null,
+            wifiSsid: ssidController.text.trim().isNotEmpty ? ssidController.text.trim() : null,
+            requireWifi: requireWifiVal,
           );
           if (location == null) {
             provider.addLocation(newLoc);

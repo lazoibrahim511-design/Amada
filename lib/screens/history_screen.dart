@@ -55,7 +55,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (currentUser == null) return [];
 
     if (currentUser.role == 'hr' || currentUser.role == 'admin' || provider.canEditCompanyInfo) {
-      final list = <CompanyEmployee>[currentUser];
+      final list = <CompanyEmployee>[];
+      if (!AttendanceProvider.isSuperAdminUser(currentUser)) {
+        list.add(currentUser);
+      }
       for (var e in provider.employees) {
         if (e.id != currentUser.id) {
           list.add(e);
@@ -198,6 +201,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                        r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
                   .toList());
 
+      int delayTier1Occurrences = 0;
+      int delayTier2Occurrences = 0;
+      int delayTier3Occurrences = 0;
+      int earlyExitTier1Occurrences = 0;
+      int earlyExitTier2Occurrences = 0;
+      int earlyExitTier3Occurrences = 0;
+
       for (var date in datesInPeriod) {
         final activeGroupId = provider.getGroupIdForDate(emp, date);
         EmployeeGroup? group;
@@ -205,6 +215,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           group = provider.groups.firstWhere((g) => g.id == activeGroupId);
         } catch (_) {}
         final shift = provider.getShiftForDate(emp, date);
+        final holiday = provider.getHolidayForEmployee(date, group?.id);
 
         final startTimeStr = shift.getStartTimeForDate(date);
         final endTimeStr = shift.getEndTimeForDate(date);
@@ -216,6 +227,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final shiftEndMinutes = partsEnd.length >= 2
             ? int.parse(partsEnd[0]) * 60 + int.parse(partsEnd[1])
             : 1020; // Default 17:00
+
+        final shiftStart = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          shiftStartMinutes ~/ 60,
+          shiftStartMinutes % 60,
+        );
+        var shiftEnd = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          shiftEndMinutes ~/ 60,
+          shiftEndMinutes % 60,
+        );
+        if (shiftEnd.isBefore(shiftStart) ||
+            shiftEnd.isAtSameMomentAs(shiftStart) ||
+            shift.isOvernightForDate(date)) {
+          shiftEnd = shiftEnd.add(const Duration(days: 1));
+        }
 
         final dayShiftDurMins = shift.getShiftDurationMinutesForDate(date);
         final shiftWorkHoursStr = formatMinutes(dayShiftDurMins);
@@ -234,12 +265,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
         int delayMinutes = 0;
         int earlyExitMinutes = 0;
         int extraTimeMinutes = 0;
+        int nightExtraMinutes = 0;
         int overtimeMinutes = 0;
+        int usedHourlyForDelayAndEarly = 0;
         String clockTimeStr = '-';
         double penaltyAmount = 0.0;
         bool hasRecord = dateRecords.isNotEmpty;
         List<Request> dateApprovedRequests = [];
-        bool hasLeaveRequest = false;
+        bool hasFullDayLeave = false;
+        int approvedHourlyLeaveMinutes = 0;
+        List<HourlyLeaveTimeRange> approvedHourlyLeaveRanges = [];
         List<Request> allDayRequests = [];
         for (var req in requestsToCompile) {
           try {
@@ -271,8 +306,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
               allDayRequests.add(req);
               if (req.status == 'Approved' && req.type != 'Missing Punch') {
                 dateApprovedRequests.add(req);
-                if (req.type.contains('Leave')) {
-                  hasLeaveRequest = true;
+                if (req.type == 'Hourly Leave' ||
+                    req.type.toLowerCase().contains('hourly')) {
+                  final mins = parseHourlyLeaveDurationMinutes(req.duration);
+                  approvedHourlyLeaveMinutes += mins > 0 ? mins : 60;
+                  final range = parseHourlyLeaveTimeRange(req.duration);
+                  if (range != null) {
+                    approvedHourlyLeaveRanges.add(range);
+                  }
+                } else if (req.type.contains('Leave')) {
+                  hasFullDayLeave = true;
                 }
               }
             }
@@ -368,13 +411,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
           }
         }
 
+        final isToday = DateUtils.isSameDay(date, DateTime.now());
+        final hasUnexcusedMissedPunch = !hasApprovedMissingPunch &&
+            dateRecords.isNotEmpty &&
+            dateRecords.any((rec) {
+              if (rec.checkIn == rec.checkOut) return true;
+              if (rec.checkOut == null) {
+                if (!isToday) return true;
+                if (DateTime.now().isAfter(shiftEnd)) return true;
+              }
+              return false;
+            });
+
         if (hasRecord) {
           final sortedRecords = List<AttendanceRecord>.from(dateRecords)
             ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
 
           // Format session times
           final List<String> sessionTimes = [];
-          final isToday = DateUtils.isSameDay(date, DateTime.now());
           for (var rec in sortedRecords) {
             final isMissedCheckIn = rec.checkIn == rec.checkOut;
             final startStr = isMissedCheckIn
@@ -389,11 +443,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           }
           clockTimeStr = sessionTimes.join('\n');
 
-          int totalExcusedRestMinutes = 0;
+          if (!hasUnexcusedMissedPunch) {
+            int totalExcusedRestMinutes = 0;
 
-          final breakStartStr = shift.getBreakStartForDate(date);
-          final breakEndStr = shift.getBreakEndForDate(date);
-          final allowedBreakDuration = shift.getBreakDurationForDate(date);
+            final breakStartStr = shift.getBreakStartForDate(date);
+            final breakEndStr = shift.getBreakEndForDate(date);
+            final allowedBreakDuration = shift.getBreakDurationForDate(date);
 
           DateTime? bStart;
           DateTime? bEnd;
@@ -423,19 +478,33 @@ class _HistoryScreenState extends State<HistoryScreen> {
             }
           }
 
-          // Calculate rest minutes (gap between sessions)
-          if (sortedRecords.length > 1) {
+          // Calculate rest minutes (gap between sessions within shift window)
+          final isWorkingDay = shift.isWorkingDay(date);
+          if (sortedRecords.length > 1 && isWorkingDay) {
             for (int i = 0; i < sortedRecords.length - 1; i++) {
               final currentOut = sortedRecords[i].checkOut;
               final nextIn = sortedRecords[i + 1].checkIn;
               if (currentOut != null && nextIn.isAfter(currentOut)) {
-                final gapDuration = nextIn.difference(currentOut).inMinutes;
+                // If the gap starts at or after shiftEnd, it's outside shift hours (e.g. night overtime gap)
+                if (currentOut.isAfter(shiftEnd) || currentOut.isAtSameMomentAs(shiftEnd)) {
+                  continue;
+                }
+                // If the employee does not return before shiftEnd, their departure is handled by Early Exit
+                if (nextIn.isAfter(shiftEnd) || nextIn.isAtSameMomentAs(shiftEnd)) {
+                  continue;
+                }
+
+                final gapStart = currentOut.isAfter(shiftStart) ? currentOut : shiftStart;
+                final gapEnd = nextIn.isBefore(shiftEnd) ? nextIn : shiftEnd;
+                if (!gapEnd.isAfter(gapStart)) continue;
+
+                final gapDuration = gapEnd.difference(gapStart).inMinutes;
                 if (bStart != null && bEnd != null) {
                   // Find intersection of gap with break window
-                  final intersectStart = currentOut.isAfter(bStart)
-                      ? currentOut
+                  final intersectStart = gapStart.isAfter(bStart)
+                      ? gapStart
                       : bStart;
-                  final intersectEnd = nextIn.isBefore(bEnd) ? nextIn : bEnd;
+                  final intersectEnd = gapEnd.isBefore(bEnd) ? gapEnd : bEnd;
 
                   int excusedInGap = 0;
                   if (intersectEnd.isAfter(intersectStart)) {
@@ -489,23 +558,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               rawEnd.minute,
             );
 
-            final shiftStart = DateTime(
-              date.year,
-              date.month,
-              date.day,
-              shiftStartMinutes ~/ 60,
-              shiftStartMinutes % 60,
-            );
-            var shiftEnd = DateTime(
-              date.year,
-              date.month,
-              date.day,
-              shiftEndMinutes ~/ 60,
-              shiftEndMinutes % 60,
-            );
-            if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart) || shift.isOvernightForDate(date)) {
-              shiftEnd = shiftEnd.add(const Duration(days: 1));
-            }
+
 
             final intersectStart = sessionStart.isAfter(shiftStart)
                 ? sessionStart
@@ -522,6 +575,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             final isWeekend = !shift.isWorkingDay(date);
             if (isWeekend) {
               extraTimeMinutes += sessionEnd.difference(sessionStart).inMinutes;
+              if (group?.nightOvertimeAllowed == true) {
+                nightExtraMinutes += group!.calculateNightMinutes(
+                  sessionStart,
+                  sessionEnd,
+                );
+              }
             } else {
               // Calculate Extra Time (only worked minutes outside of shift bounds)
               if (sessionStart.isBefore(shiftStart)) {
@@ -531,6 +590,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 extraTimeMinutes += endForBefore
                     .difference(sessionStart)
                     .inMinutes;
+                if (group?.nightOvertimeAllowed == true) {
+                  nightExtraMinutes += group!.calculateNightMinutes(
+                    sessionStart,
+                    endForBefore,
+                  );
+                }
               }
               if (sessionEnd.isAfter(shiftEnd)) {
                 final startForAfter = sessionStart.isAfter(shiftEnd)
@@ -539,6 +604,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 extraTimeMinutes += sessionEnd
                     .difference(startForAfter)
                     .inMinutes;
+                if (group?.nightOvertimeAllowed == true) {
+                  nightExtraMinutes += group!.calculateNightMinutes(
+                    startForAfter,
+                    sessionEnd,
+                  );
+                }
               }
             }
           }
@@ -547,6 +618,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (isSpecial) {
             dutyMinutes = totalActualMinutes > dayShiftDurMins ? dayShiftDurMins : totalActualMinutes;
             extraTimeMinutes = totalActualMinutes > dayShiftDurMins ? (totalActualMinutes - dayShiftDurMins) : 0;
+            if (group?.nightOvertimeAllowed == true && extraTimeMinutes > 0 && dateRecords.isNotEmpty) {
+              final lastRec = dateRecords.last;
+              final rawEnd = lastRec.checkOut ?? (isToday ? DateTime.now() : lastRec.checkIn);
+              final extraStart = rawEnd.subtract(Duration(minutes: extraTimeMinutes));
+              nightExtraMinutes = group!.calculateNightMinutes(extraStart, rawEnd);
+            }
             delayMinutes = 0;
             earlyExitMinutes = 0;
             penaltyAmount = 0.0;
@@ -559,46 +636,65 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 (sortedRecords.first.checkIn == sortedRecords.first.checkOut ||
                     sortedRecords.first.checkOut == null);
 
-            // 3. Delay Minutes (late arrival on the first session)
-            final firstRec = sortedRecords.first;
-            final isMissedCheckIn = firstRec.checkIn == firstRec.checkOut;
-            if (!isMissedCheckIn && !hasOnlyOnePunch) {
-              final shiftStart = DateTime(
-                date.year,
-                date.month,
-                date.day,
-                shiftStartMinutes ~/ 60,
-                shiftStartMinutes % 60,
-              );
-              final delay = firstRec.checkIn.difference(shiftStart).inMinutes;
-              if (delay > shift.forgivenessOfDelay) {
-                delayMinutes = delay;
-              }
-            }
+            final shiftRecords = sortedRecords
+                .where((r) => r.checkIn.isBefore(shiftEnd))
+                .toList();
 
-            // 4. Early Exit Minutes (leaving early on the last completed session)
-            final lastRec = sortedRecords.last;
-            if (lastRec.checkOut != null && !hasOnlyOnePunch) {
-              final shiftStart = DateTime(
-                date.year,
-                date.month,
-                date.day,
-                shiftStartMinutes ~/ 60,
-                shiftStartMinutes % 60,
-              );
-              var shiftEnd = DateTime(
-                date.year,
-                date.month,
-                date.day,
-                shiftEndMinutes ~/ 60,
-                shiftEndMinutes % 60,
-              );
-              if (shiftEnd.isBefore(shiftStart) || shift.isOvernightForDate(date)) {
-                shiftEnd = shiftEnd.add(const Duration(days: 1));
+            if (shiftRecords.isNotEmpty) {
+              // 3. Delay Minutes (late arrival on the first session of shift)
+              final firstRec = shiftRecords.first;
+              final isMissedCheckIn = firstRec.checkIn == firstRec.checkOut;
+              if (!isMissedCheckIn && !hasOnlyOnePunch) {
+                final delay = firstRec.checkIn.difference(shiftStart).inMinutes;
+                if (delay > shift.forgivenessOfDelay) {
+                  delayMinutes = delay;
+                }
               }
-              final earlyExit = shiftEnd.difference(lastRec.checkOut!).inMinutes;
-              if (earlyExit > shift.earlyExit) {
-                earlyExitMinutes = earlyExit;
+
+              // 4. Early Exit Minutes (leaving early on the last completed session of shift)
+              final lastRec = shiftRecords.last;
+              if (lastRec.checkOut != null && !hasOnlyOnePunch) {
+                final earlyExit =
+                    shiftEnd.difference(lastRec.checkOut!).inMinutes;
+                if (earlyExit > shift.earlyExit) {
+                  earlyExitMinutes = earlyExit;
+                }
+              }
+
+              // Excuse delay / early exit with approved hourly leave before penalty computation
+              if (approvedHourlyLeaveMinutes > 0) {
+                int remainingHourly = approvedHourlyLeaveMinutes;
+                if (approvedHourlyLeaveRanges.isNotEmpty) {
+                  for (final r in approvedHourlyLeaveRanges) {
+                    if (delayMinutes > 0 &&
+                        r.startMinutes <= shiftStartMinutes + shift.forgivenessOfDelay + 30) {
+                      final excused = math.min(delayMinutes, r.durationMinutes);
+                      delayMinutes -= excused;
+                      remainingHourly = math.max(0, remainingHourly - excused);
+                      usedHourlyForDelayAndEarly += excused;
+                    }
+                    if (earlyExitMinutes > 0 &&
+                        r.endMinutes >= shiftEndMinutes - shift.earlyExit - 30) {
+                      final excused = math.min(earlyExitMinutes, r.durationMinutes);
+                      earlyExitMinutes -= excused;
+                      remainingHourly = math.max(0, remainingHourly - excused);
+                      usedHourlyForDelayAndEarly += excused;
+                    }
+                  }
+                } else {
+                  if (delayMinutes > 0 && remainingHourly > 0) {
+                    final excused = math.min(delayMinutes, remainingHourly);
+                    delayMinutes -= excused;
+                    remainingHourly -= excused;
+                    usedHourlyForDelayAndEarly += excused;
+                  }
+                  if (earlyExitMinutes > 0 && remainingHourly > 0) {
+                    final excused = math.min(earlyExitMinutes, remainingHourly);
+                    earlyExitMinutes -= excused;
+                    remainingHourly -= excused;
+                    usedHourlyForDelayAndEarly += excused;
+                  }
+                }
               }
             }
           }
@@ -613,36 +709,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
           );
 
           if (extraTimeMinutes > 0 && hasApprovedOt) {
-            final isOvertimeAllowed = group?.overtimeAllowed ?? true;
-            if (isOvertimeAllowed) {
-              final minOt = group?.minOvertimeMinutes ?? 0;
-              final maxOt = group?.maxOvertimeMinutes ?? 480;
-              if (extraTimeMinutes >= minOt) {
-                final baseOt = extraTimeMinutes.clamp(0, maxOt);
-                final isWeekend = !shift.isWorkingDay(date);
-                if (isWeekend) {
-                  overtimeMinutes =
-                      (baseOt * (group?.weekendOvertimeRatio ?? 1.5)).toInt();
-                } else {
-                  overtimeMinutes = baseOt;
-                }
-              }
+            if (group != null) {
+              overtimeMinutes = group.calculateOvertimeMinutes(
+                dayExtraMinutes: extraTimeMinutes,
+                nightExtraMinutes: nightExtraMinutes,
+                isWeekend: !shift.isWorkingDay(date),
+                isHoliday: holiday != null,
+              );
+            } else {
+              final baseOt = extraTimeMinutes.clamp(0, 480);
+              final isWeekend = !shift.isWorkingDay(date);
+              overtimeMinutes = isWeekend ? (baseOt * 1.5).toInt() : baseOt;
             }
           }
 
-          // 6. Penalty calculations by Group rules
+          // 6. Penalty calculations by Group rules (with forgiveness per tier)
           double delayPenalty = 0.0;
           if (delayMinutes > 0 && (group?.delayPenaltiesEnabled ?? true)) {
             final g = group;
             if (g != null) {
               if (delayMinutes >= g.delayTier1Min &&
                   delayMinutes <= g.delayTier1Max) {
-                delayPenalty = g.delayTier1Penalty;
+                delayTier1Occurrences++;
+                if (delayTier1Occurrences > g.delayTier1Forgiveness) {
+                  delayPenalty = g.delayTier1Penalty;
+                }
               } else if (delayMinutes >= g.delayTier2Min &&
                   delayMinutes <= g.delayTier2Max) {
-                delayPenalty = g.delayTier2Penalty;
+                delayTier2Occurrences++;
+                if (delayTier2Occurrences > g.delayTier2Forgiveness) {
+                  delayPenalty = g.delayTier2Penalty;
+                }
               } else if (delayMinutes >= g.delayTier3Min) {
-                delayPenalty = g.delayTier3Penalty;
+                delayTier3Occurrences++;
+                if (delayTier3Occurrences > g.delayTier3Forgiveness) {
+                  delayPenalty = g.delayTier3Penalty;
+                }
               }
             }
           }
@@ -654,20 +756,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
             if (g != null) {
               if (earlyExitMinutes >= g.earlyExitTier1Min &&
                   earlyExitMinutes <= g.earlyExitTier1Max) {
-                earlyExitPenalty = g.earlyExitTier1Penalty;
+                earlyExitTier1Occurrences++;
+                if (earlyExitTier1Occurrences > g.earlyExitTier1Forgiveness) {
+                  earlyExitPenalty = g.earlyExitTier1Penalty;
+                }
               } else if (earlyExitMinutes >= g.earlyExitTier2Min &&
                   earlyExitMinutes <= g.earlyExitTier2Max) {
-                earlyExitPenalty = g.earlyExitTier2Penalty;
+                earlyExitTier2Occurrences++;
+                if (earlyExitTier2Occurrences > g.earlyExitTier2Forgiveness) {
+                  earlyExitPenalty = g.earlyExitTier2Penalty;
+                }
               } else if (earlyExitMinutes >= g.earlyExitTier3Min) {
-                earlyExitPenalty = g.earlyExitTier3Penalty;
+                earlyExitTier3Occurrences++;
+                if (earlyExitTier3Occurrences > g.earlyExitTier3Forgiveness) {
+                  earlyExitPenalty = g.earlyExitTier3Penalty;
+                }
               }
             }
           }
 
-          penaltyAmount = delayPenalty + earlyExitPenalty;
+            penaltyAmount = delayPenalty + earlyExitPenalty;
+          }
         }
-
-        final holiday = provider.getHolidayForEmployee(date, group?.id);
 
         if (holiday != null) {
           if (!hasRecord) {
@@ -705,7 +815,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             clockTimeStr = '$clockTimeStr\n$requestTypes';
           }
 
-          if (hasLeaveRequest) {
+          if (hasFullDayLeave) {
             delayMinutes = 0;
             earlyExitMinutes = 0;
             penaltyAmount = 0.0;
@@ -717,66 +827,97 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final isFutureDay = date.isAfter(DateTime.now());
         final isSpecialShiftDay = shift.isSpecialShiftForDate(date);
 
-        if (isSpecialShiftDay) {
+        if (hasUnexcusedMissedPunch) {
           delayMinutes = 0;
           earlyExitMinutes = 0;
           penaltyAmount = 0.0;
-          if (!isWeekendDay && !hasLeaveRequest && holiday == null && !isFutureDay) {
-            if (totalActualMinutes < dayShiftDurMins) {
-              deficitMinutes = dayShiftDurMins - totalActualMinutes;
+          if (!isWeekendDay && !hasFullDayLeave && holiday == null && !isFutureDay) {
+            deficitMinutes = dayShiftDurMins;
+            if (approvedHourlyLeaveMinutes > 0) {
+              deficitMinutes = math.max(0, deficitMinutes - approvedHourlyLeaveMinutes);
+            }
+          } else {
+            deficitMinutes = 0;
+          }
+        } else if (isSpecialShiftDay) {
+          delayMinutes = 0;
+          earlyExitMinutes = 0;
+          penaltyAmount = 0.0;
+          if (!isWeekendDay && !hasFullDayLeave && holiday == null && !isFutureDay) {
+            final effectiveDur = math.max(0, dayShiftDurMins - approvedHourlyLeaveMinutes);
+            if (totalActualMinutes < effectiveDur) {
+              deficitMinutes = effectiveDur - totalActualMinutes;
             } else {
               deficitMinutes = 0;
             }
           }
         } else {
-          deficitMinutes =
-              delayMinutes + earlyExitMinutes + unexcusedRestMinutes;
+          final shiftRecords = dateRecords
+              .where((r) => r.checkIn.isBefore(shiftEnd))
+              .toList();
 
           if (!isWeekendDay &&
-              !hasLeaveRequest &&
+              !hasFullDayLeave &&
               holiday == null &&
-              !hasApprovedMissingPunch &&
               !isFutureDay) {
-            int shiftDur = shiftEndMinutes - shiftStartMinutes;
-            if (shiftDur < 0) shiftDur += 24 * 60;
+            deficitMinutes =
+                delayMinutes + earlyExitMinutes + unexcusedRestMinutes;
 
-            int missingPunchDeficit = 0;
-            final hasOnlyOnePunch =
-                dateRecords.length == 1 &&
-                (dateRecords.first.checkIn == dateRecords.first.checkOut ||
-                    dateRecords.first.checkOut == null);
-            if (hasOnlyOnePunch) {
-              missingPunchDeficit = shiftDur;
-            } else {
-              for (var r in dateRecords) {
-                if (r.checkIn == r.checkOut) {
-                  final outMinutes = r.checkOut!.hour * 60 + r.checkOut!.minute;
-                  final clampedOut = outMinutes > shiftEndMinutes
-                      ? shiftEndMinutes
-                      : outMinutes;
-                  if (clampedOut > shiftStartMinutes) {
-                    missingPunchDeficit += (clampedOut - shiftStartMinutes);
-                  }
-                } else if (r.checkOut == null) {
-                  final isToday = DateUtils.isSameDay(date, DateTime.now());
-                  if (!isToday) {
-                    final inMinutes = r.checkIn.hour * 60 + r.checkIn.minute;
-                    final clampedIn = inMinutes < shiftStartMinutes
-                        ? shiftStartMinutes
-                        : inMinutes;
-                    if (shiftEndMinutes > clampedIn) {
-                      missingPunchDeficit += (shiftEndMinutes - clampedIn);
+            if (!hasApprovedMissingPunch) {
+              int shiftDur = shiftEndMinutes - shiftStartMinutes;
+              if (shiftDur < 0) shiftDur += 24 * 60;
+
+              int missingPunchDeficit = 0;
+              final hasOnlyOnePunch =
+                  dateRecords.length == 1 &&
+                  (dateRecords.first.checkIn == dateRecords.first.checkOut ||
+                      dateRecords.first.checkOut == null);
+              if (hasOnlyOnePunch) {
+                missingPunchDeficit = shiftDur;
+              } else if (!hasRecord || shiftRecords.isEmpty) {
+                missingPunchDeficit = shiftDur;
+              } else {
+                for (var r in dateRecords) {
+                  if (r.checkIn == r.checkOut) {
+                    final outMinutes =
+                        r.checkOut!.hour * 60 + r.checkOut!.minute;
+                    final clampedOut = outMinutes > shiftEndMinutes
+                        ? shiftEndMinutes
+                        : outMinutes;
+                    if (clampedOut > shiftStartMinutes) {
+                      missingPunchDeficit += (clampedOut - shiftStartMinutes);
+                    }
+                  } else if (r.checkOut == null) {
+                    final isToday = DateUtils.isSameDay(date, DateTime.now());
+                    if (!isToday) {
+                      final inMinutes =
+                          r.checkIn.hour * 60 + r.checkIn.minute;
+                      final clampedIn = inMinutes < shiftStartMinutes
+                          ? shiftStartMinutes
+                          : inMinutes;
+                      if (shiftEndMinutes > clampedIn) {
+                        missingPunchDeficit += (shiftEndMinutes - clampedIn);
+                      }
                     }
                   }
                 }
               }
+
+              deficitMinutes += missingPunchDeficit;
             }
 
-            if (!hasRecord) {
-              missingPunchDeficit += shiftDur;
+            // Deficit cannot exceed the shift duration for the day
+            if (deficitMinutes > dayShiftDurMins) {
+              deficitMinutes = dayShiftDurMins;
             }
 
-            deficitMinutes += missingPunchDeficit;
+            // Deduct unused approved hourly leave from deficit
+            final unusedHourly = math.max(0, approvedHourlyLeaveMinutes - usedHourlyForDelayAndEarly);
+            if (unusedHourly > 0) {
+              deficitMinutes = math.max(0, deficitMinutes - unusedHourly);
+            }
+          } else {
+            deficitMinutes = 0;
           }
         }
 
@@ -793,8 +934,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
           'overtime': overtimeMinutes,
           'clockTime': clockTimeStr,
           'penalty': penaltyAmount,
-          'isLeave': hasLeaveRequest || holiday != null,
+          'isLeave': hasFullDayLeave || holiday != null,
+          'hasFullDayLeave': hasFullDayLeave,
+          'hasHourlyLeave': approvedHourlyLeaveMinutes > 0,
+          'hourlyLeaveMinutes': approvedHourlyLeaveMinutes,
           'isMissingPunch': hasApprovedMissingPunch,
+          'hasUnexcusedMissedPunch': hasUnexcusedMissedPunch,
           'missingPunchTimes': missingPunchTimes,
           'isWeekend': isWeekendDay,
           'requests': allDayRequests,
@@ -1070,7 +1215,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final hasRecord = row['hasRecord'] as bool;
       final isWeekend = row['isWeekend'] as bool;
 
-      if (hasRecord && (row['attendance'] as int) > 0) {
+      if (hasRecord &&
+          (row['attendance'] as int) > 0 &&
+          !(row['hasUnexcusedMissedPunch'] as bool? ?? false)) {
         activeDays++;
         totalAttendance += row['attendance'] as int;
         totalDuty += row['duty'] as int;
@@ -1944,20 +2091,30 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildAddRequestButton(AttendanceProvider provider) {
+    final isClosed = _selectedDate != null && provider.isMonthClosed(_selectedDate!);
     return NeuButton(
-      onPressed: () {
-        showNewRequestDialog(
-          context: context,
-          provider: provider,
-          initialEmployeeId: _selectedEmployeeId,
-          initialDate: _selectedDate,
-          onSubmitted: () {
-            final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
-            _loadSubordinateRecords(provider, activeEmpId);
-          },
-        );
-      },
-      icon: const Icon(Icons.add),
+      onPressed: isClosed
+          ? () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(provider.translate('cannot_modify_closed_month')),
+                  backgroundColor: Colors.amber.shade800,
+                ),
+              );
+            }
+          : () {
+              showNewRequestDialog(
+                context: context,
+                provider: provider,
+                initialEmployeeId: _selectedEmployeeId,
+                initialDate: _selectedDate,
+                onSubmitted: () {
+                  final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
+                  _loadSubordinateRecords(provider, activeEmpId);
+                },
+              );
+            },
+      icon: Icon(isClosed ? Icons.lock_outline : Icons.add),
       label: provider.translate('new_request'),
     );
   }
@@ -1988,6 +2145,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           employee: employee,
           month: _reportMonth,
           profile: provider.companyProfile,
+          languageCode: provider.currentLanguage,
         );
       },
     );
@@ -2008,6 +2166,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor =
         Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    final isDayMonthClosed =
+        provider.isMonthClosed(date) ||
+        provider.isDateStringInClosedMonth(rowData['date'] ?? date);
 
     showDialog(
       context: context,
@@ -2098,8 +2259,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           horizontal: 24,
                           vertical: 12,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        child: Wrap(
+                          alignment: WrapAlignment.spaceAround,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
                           children: [
                             if ((rowData['shiftName'] as String?)?.isNotEmpty ?? false)
                               _buildDialogDayStat(
@@ -2137,11 +2301,45 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   ? const Color(0xFFFF5C5C)
                                   : textColor.withValues(alpha: 0.7),
                             ),
+                            if (((rowData['deficit'] as int?) ?? 0) > 0)
+                              _buildDialogDayStat(
+                                label: provider.translate('deficit'),
+                                value: formatMinutes((rowData['deficit'] as int?) ?? 0),
+                                color: const Color(0xFFFF5C5C),
+                              ),
                           ],
                         ),
                       ),
 
                       const Divider(height: 1, thickness: 1),
+
+                      // Closed month warning banner
+                      if (isDayMonthClosed)
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade900.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.lock_rounded, size: 16, color: Colors.amber.shade400),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  provider.translate('cannot_modify_closed_month'),
+                                  style: TextStyle(
+                                    color: Colors.amber.shade300,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
                       // Requests Content
                       Flexible(
@@ -2186,27 +2384,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         height: 1.4,
                                       ),
                                     ),
-                                    const SizedBox(height: 20),
-                                    NeuButton(
-                                      onPressed: () {
-                                        Navigator.of(ctx).pop();
-                                        showNewRequestDialog(
-                                          context: context,
-                                          provider: provider,
-                                          initialEmployeeId: _selectedEmployeeId,
-                                          initialDate: date,
-                                          onSubmitted: () {
-                                            final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
-                                            _loadSubordinateRecords(provider, activeEmpId);
-                                          },
-                                        );
-                                      },
-                                      icon: const Icon(Icons.add),
-                                      label: provider.translate('new_request'),
-                                      height: 40,
-                                      fontSize: 13,
-                                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                                    ),
+                                    if (!isDayMonthClosed) ...[
+                                      const SizedBox(height: 20),
+                                      NeuButton(
+                                        onPressed: () {
+                                          Navigator.of(ctx).pop();
+                                          showNewRequestDialog(
+                                            context: context,
+                                            provider: provider,
+                                            initialEmployeeId: _selectedEmployeeId,
+                                            initialDate: date,
+                                            onSubmitted: () {
+                                              final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
+                                              _loadSubordinateRecords(provider, activeEmpId);
+                                            },
+                                          );
+                                        },
+                                        icon: const Icon(Icons.add),
+                                        label: provider.translate('new_request'),
+                                        height: 40,
+                                        fontSize: 13,
+                                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               )
@@ -2217,12 +2417,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final req = requests[index];
+                                  final isReqClosed = isDayMonthClosed || provider.isDateStringInClosedMonth(req.date);
                                   return _buildRequestDetailCard(
                                     req,
                                     provider,
                                     isDark,
                                     textColor,
-                                    onDelete: () async {
+                                    onDelete: isReqClosed ? null : () async {
                                       final confirm = await showDialog<bool>(
                                         context: dialogCtx,
                                         builder: (c) => AlertDialog(

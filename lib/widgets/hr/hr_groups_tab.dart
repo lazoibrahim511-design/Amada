@@ -246,7 +246,8 @@ class _HrGroupsTabState extends State<HrGroupsTab> {
                     child: _buildInfoChip(
                       icon: Icons.more_time_rounded,
                       iconColor: const Color(0xFF8B5CF6),
-                      label: 'Overtime: ${group.overtimeAllowed ? 'Allowed' : 'Off'}',
+                      label:
+                          'Overtime: ${group.overtimeAllowed ? (group.nightOvertimeAllowed ? 'Allowed (+Night)' : 'Allowed') : 'Off'}',
                       isDark: isDark,
                     ),
                   ),
@@ -381,11 +382,13 @@ void showGroupDialog(BuildContext context, {EmployeeGroup? group}) {
         padding: const EdgeInsets.symmetric(horizontal: 18),
         onPressed: () {
           if (nameController.text.trim().isEmpty) return;
-          final newGroup = EmployeeGroup(
-            id: group?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-            name: nameController.text.trim(),
-            shiftId: group?.shiftId ?? '',
-          );
+          final newGroup = group != null
+              ? group.copyWith(name: nameController.text.trim())
+              : EmployeeGroup(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  name: nameController.text.trim(),
+                  shiftId: '',
+                );
           if (group == null) {
             provider.addGroup(newGroup);
           } else {

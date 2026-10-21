@@ -76,17 +76,54 @@ class _CustomCalendarState extends State<CustomCalendar> {
       return DayStatus.none;
     }
 
-    final hasIncomplete = dayRecords.any((rec) => rec.checkOut == null);
-    if (hasIncomplete && !isToday) {
-      return DayStatus.incomplete; // past day but has an incomplete checkout
-    }
-
-    if (shift.getStartTimeForDate(date).isEmpty || shift.getEndTimeForDate(date).isEmpty) {
+    final startTimeStr = shift.getStartTimeForDate(date);
+    final endTimeStr = shift.getEndTimeForDate(date);
+    if (startTimeStr.isEmpty || endTimeStr.isEmpty) {
       return DayStatus.normal;
     }
 
-    final shiftStartMinutes = _parseTimeToMinutes(shift.getStartTimeForDate(date));
-    final shiftEndMinutes = _parseTimeToMinutes(shift.getEndTimeForDate(date));
+    final shiftStartMinutes = _parseTimeToMinutes(startTimeStr);
+    final shiftEndMinutes = _parseTimeToMinutes(endTimeStr);
+
+    final shiftStart = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      shiftStartMinutes ~/ 60,
+      shiftStartMinutes % 60,
+    );
+    var shiftEnd = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      shiftEndMinutes ~/ 60,
+      shiftEndMinutes % 60,
+    );
+    if (shiftEnd.isBefore(shiftStart) ||
+        shiftEnd.isAtSameMomentAs(shiftStart) ||
+        shift.isOvernightForDate(date)) {
+      shiftEnd = shiftEnd.add(const Duration(days: 1));
+    }
+
+    final hasApprovedMissingPunch = requests.any((req) =>
+        req.status == 'Approved' &&
+        (req.type == 'Missing Punch' ||
+            req.type == 'Forgot to Clock In' ||
+            req.type == 'Forgot to Clock Out'));
+
+    final hasUnexcusedMissedPunch = !hasApprovedMissingPunch &&
+        dayRecords.any((rec) {
+          if (rec.checkIn == rec.checkOut) return true;
+          if (rec.checkOut == null) {
+            if (!isToday) return true;
+            if (DateTime.now().isAfter(shiftEnd)) return true;
+          }
+          return false;
+        });
+
+    if (hasUnexcusedMissedPunch) {
+      return DayStatus.incomplete;
+    }
 
     // Sort records to find first check-in and last check-out
     final sortedRecords = List<AttendanceRecord>.from(dayRecords)
@@ -205,8 +242,10 @@ class _CustomCalendarState extends State<CustomCalendar> {
     final String dateLabel = DateFormat('MMMM d').format(date);
 
     int totalMinutes = 0;
-    for (var rec in dayRecords) {
-      totalMinutes += rec.duration.inMinutes;
+    if (status != DayStatus.incomplete) {
+      for (var rec in dayRecords) {
+        totalMinutes += rec.duration.inMinutes;
+      }
     }
     final int hrs = totalMinutes ~/ 60;
     final int mins = totalMinutes % 60;
@@ -263,7 +302,9 @@ class _CustomCalendarState extends State<CustomCalendar> {
         expectedDurationMinutes - shift.getBreakDurationForDate(date);
 
     int deficitMinutes = 0;
-    if ((status == DayStatus.deficit || status == DayStatus.deficitAndExtraTime) && totalMinutes < netExpectedDuration) {
+    if (status == DayStatus.incomplete) {
+      deficitMinutes = netExpectedDuration;
+    } else if ((status == DayStatus.deficit || status == DayStatus.deficitAndExtraTime) && totalMinutes < netExpectedDuration) {
       deficitMinutes = netExpectedDuration - totalMinutes;
     }
 

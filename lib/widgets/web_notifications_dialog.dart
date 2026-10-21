@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/app_notification.dart';
+import '../models/hr_models.dart';
 import '../providers/attendance_provider.dart';
 import '../screens/chat_room_screen.dart';
 import '../screens/requests_screen.dart';
@@ -514,16 +515,22 @@ class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
 
           if (item.type == NotificationType.chat && item.relatedId != null) {
             final contact = provider.employees
-                .where((e) => e.id == item.relatedId)
-                .firstOrNull;
-            if (contact != null) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatRoomScreen(contact: contact),
-                ),
-              );
-            }
+                .where((e) => e.id.trim().toLowerCase() == item.relatedId!.trim().toLowerCase())
+                .firstOrNull ??
+                CompanyEmployee(
+                  id: item.relatedId!,
+                  name: item.title.replaceFirst('Message from ', ''),
+                  email: '',
+                  position: 'Management',
+                  role: 'hr',
+                  companyCode: provider.currentCompanyCode,
+                );
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatRoomScreen(contact: contact),
+              ),
+            );
           } else if (item.type == NotificationType.request) {
             Navigator.push(
               context,

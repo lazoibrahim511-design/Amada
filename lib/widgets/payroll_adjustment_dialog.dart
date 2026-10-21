@@ -16,12 +16,23 @@ Future<void> showPayrollAdjustmentDialog({
   final isAllowed = currentUser != null && (
     currentUser.role == 'hr' ||
     currentUser.role == 'admin' ||
-    currentUser.email == 'admin@company.com'
+    currentUser.email == 'admin@company.com' ||
+    provider.isHRManager
   );
   if (!isAllowed) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(provider.translate('access_denied_adjustments')),
+      ),
+    );
+    return;
+  }
+
+  if (initialMonth != null && provider.isMonthClosed(initialMonth)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(provider.translate('cannot_modify_closed_month')),
+        backgroundColor: Colors.amber.shade800,
       ),
     );
     return;
@@ -234,6 +245,17 @@ class _PayrollAdjustmentDialogContentState
 
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
     final monthStr = DateFormat('yyyy-MM').format(_selectedDate);
+
+    if (provider.isMonthClosedStr(monthStr)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.amber.shade800,
+          content: Text(provider.translate('cannot_modify_closed_month')),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final adjustment = PayrollAdjustment(
       id: 'adj_${DateTime.now().millisecondsSinceEpoch}',
@@ -549,7 +571,9 @@ class _PayrollAdjustmentDialogContentState
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<CompanyEmployee>(
-                              value: _selectedEmployee,
+                              value: employees.contains(_selectedEmployee)
+                                  ? _selectedEmployee
+                                  : (employees.isNotEmpty ? employees.first : null),
                               isExpanded: true,
                               dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                               hint: Text(provider.translate('select_employee')),
@@ -1325,6 +1349,16 @@ class _ManageAdjustmentsDialogContent extends StatelessWidget {
                                         size: 20,
                                       ),
                                       onPressed: () async {
+                                        if (provider.isMonthClosedStr(adj.month)) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              backgroundColor: Colors.amber.shade800,
+                                              content: Text(provider.translate('cannot_modify_closed_month')),
+                                              behavior: SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                          return;
+                                        }
                                         final typeLabel = provider.translate(adj.type == 'addition' ? 'addition' : 'deduction');
                                         final catLabel = getLocalizedPayrollCategory(adj.category, provider);
                                         final amountStr = adj.currency == 'USD'
