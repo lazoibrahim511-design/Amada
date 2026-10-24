@@ -121,7 +121,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     setState(() {
       _isLoadingSubordinate = true;
       _currentlyLoadingId = empId;
-      _selectedEmployeeId = empId;
     });
 
     try {
@@ -171,7 +170,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       );
 
       final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
-      final isCurrentUser = activeEmpId == provider.currentEmployee?.id;
+      final isCurrentUser = activeEmpId == provider.currentEmployee?.id ||
+          activeEmpId == provider.employeeId;
 
       // Resolve Employee and Shift
       final emp = provider.employees.firstWhere(
@@ -179,27 +179,94 @@ class _HistoryScreenState extends State<HistoryScreen> {
         orElse: () => provider.currentEmployee ?? CompanyEmployee(id: activeEmpId, name: 'Employee', email: '', position: ''),
       );
 
-      final recordsToCompile = _subordinateRecords.isNotEmpty
-          ? _subordinateRecords
-          : (isCurrentUser && provider.records.isNotEmpty
-              ? provider.records
-              : provider.allCompanyRecords
-                  .where((r) =>
-                      r.employeeId != null &&
-                      (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
-                       r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase()))
-                  .toList());
-      final requestsToCompile = _subordinateRequests.isNotEmpty
-          ? _subordinateRequests
-          : (isCurrentUser && provider.requests.isNotEmpty
-              ? provider.requests
-              : provider.allCompanyRequests
-                  .where((r) =>
-                      r.employeeId != null &&
-                      (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
-                       r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                       r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
-                  .toList());
+      final List<AttendanceRecord> recordsToCompile;
+      if (isCurrentUser) {
+        // Current user: always prioritize live streaming records from provider.records
+        if (provider.records.isNotEmpty) {
+          recordsToCompile = provider.records;
+        } else if (_subordinateRecords.isNotEmpty) {
+          recordsToCompile = _subordinateRecords;
+        } else {
+          recordsToCompile = provider.allCompanyRecords
+              .where((r) =>
+                  r.employeeId != null &&
+                  (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
+                   r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
+                   r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+              .toList();
+        }
+      } else {
+        // Subordinate employee: merge live company stream with direct-fetched subordinate records
+        final companyRecordsForEmp = provider.allCompanyRecords
+            .where((r) =>
+                r.employeeId != null &&
+                (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
+                 r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
+                 r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+            .toList();
+
+        if (companyRecordsForEmp.isNotEmpty && _subordinateRecords.isNotEmpty) {
+          final Map<String, AttendanceRecord> recordMap = {};
+          for (var r in _subordinateRecords) {
+            final key = '${r.checkIn.year}-${r.checkIn.month}-${r.checkIn.day}_${r.checkIn.hour}:${r.checkIn.minute}';
+            recordMap[key] = r;
+          }
+          // Live company records overwrite/augment with real-time stream updates
+          for (var r in companyRecordsForEmp) {
+            final key = '${r.checkIn.year}-${r.checkIn.month}-${r.checkIn.day}_${r.checkIn.hour}:${r.checkIn.minute}';
+            recordMap[key] = r;
+          }
+          recordsToCompile = recordMap.values.toList()
+            ..sort((a, b) => b.checkIn.compareTo(a.checkIn));
+        } else if (companyRecordsForEmp.isNotEmpty) {
+          recordsToCompile = companyRecordsForEmp;
+        } else {
+          recordsToCompile = _subordinateRecords;
+        }
+      }
+
+      final List<Request> requestsToCompile;
+      if (isCurrentUser) {
+        // Current user: always prioritize live streaming requests from provider.requests
+        if (provider.requests.isNotEmpty) {
+          requestsToCompile = provider.requests;
+        } else if (_subordinateRequests.isNotEmpty) {
+          requestsToCompile = _subordinateRequests;
+        } else {
+          requestsToCompile = provider.allCompanyRequests
+              .where((r) =>
+                  r.employeeId != null &&
+                  (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
+                   r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
+                   r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+              .toList();
+        }
+      } else {
+        // Subordinate employee: merge live company requests stream with direct-fetched subordinate requests
+        final companyRequestsForEmp = provider.allCompanyRequests
+            .where((r) =>
+                r.employeeId != null &&
+                (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
+                 r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
+                 r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+            .toList();
+
+        if (companyRequestsForEmp.isNotEmpty && _subordinateRequests.isNotEmpty) {
+          final Map<String, Request> requestMap = {};
+          for (var r in _subordinateRequests) {
+            requestMap[r.id] = r;
+          }
+          // Live company requests overwrite/augment with real-time stream updates
+          for (var r in companyRequestsForEmp) {
+            requestMap[r.id] = r;
+          }
+          requestsToCompile = requestMap.values.toList();
+        } else if (companyRequestsForEmp.isNotEmpty) {
+          requestsToCompile = companyRequestsForEmp;
+        } else {
+          requestsToCompile = _subordinateRequests;
+        }
+      }
 
       int delayTier1Occurrences = 0;
       int delayTier2Occurrences = 0;
@@ -987,6 +1054,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  _buildRefreshButton(provider),
+                                  const SizedBox(width: 8),
                                   _buildExportButton(provider, compiledData),
                                   const SizedBox(width: 12),
                                   _buildAddRequestButton(provider),
@@ -1011,9 +1080,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 ),
                                 const SizedBox(width: 8),
                               ],
+                              _buildRefreshButton(provider),
+                              const SizedBox(width: 8),
                               _buildExportButton(provider, compiledData),
-                              const SizedBox(width: 12),
-                              _buildAddRequestButton(provider),
+                              const SizedBox(width: 8),
+                              _buildAddRequestButton(provider, isCompact: constraints.maxWidth < 420),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -1030,7 +1101,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
               // Main content area
               Expanded(
-                child: _isLoadingSubordinate
+                child: _isLoadingSubordinate && compiledData.isEmpty
                     ? const Center(
                         child: CircularProgressIndicator(
                           color: Color(0xFF2E65FF),
@@ -1497,14 +1568,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                           // Scrollable Body
                           Expanded(
-                            child: Scrollbar(
-                              controller: _tableVerticalController,
-                              thumbVisibility: true,
-                              child: SingleChildScrollView(
+                            child: RefreshIndicator(
+                              onRefresh: () async {
+                                final activeEmpId = _selectedEmployeeId ??
+                                    provider.currentEmployee?.id ??
+                                    provider.employeeId;
+                                if (activeEmpId.isNotEmpty) {
+                                  _loadSubordinateRecords(provider, activeEmpId);
+                                }
+                              },
+                              child: Scrollbar(
                                 controller: _tableVerticalController,
-                                scrollDirection: Axis.vertical,
-                                physics: const BouncingScrollPhysics(),
-                                child: Table(
+                                thumbVisibility: true,
+                                child: SingleChildScrollView(
+                                  controller: _tableVerticalController,
+                                  scrollDirection: Axis.vertical,
+                                  physics: const AlwaysScrollableScrollPhysics(
+                                    parent: BouncingScrollPhysics(),
+                                  ),
+                                  child: Table(
                                   columnWidths: columnWidths,
                                   defaultVerticalAlignment:
                                       TableCellVerticalAlignment.middle,
@@ -2012,7 +2094,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ),
                             ),
                           ),
-                        ],
+                        ),
+                      ],
                       ),
                     ),
                   ),
@@ -2081,6 +2164,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               setState(() {
                 _selectedEmployeeId = val;
                 _selectedDate = null;
+                _subordinateRecords = [];
+                _subordinateRequests = [];
               });
               _loadSubordinateRecords(provider, val);
             }
@@ -2090,8 +2175,68 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildAddRequestButton(AttendanceProvider provider) {
+  Widget _buildRefreshButton(AttendanceProvider provider) {
+    return NeuIconButton(
+      size: 44,
+      variant: NeuButtonVariant.whitePill,
+      tooltip: provider.translate('refresh'),
+      icon: _isLoadingSubordinate
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF2E65FF),
+              ),
+            )
+          : const Icon(Icons.refresh_rounded, size: 20),
+      onPressed: _isLoadingSubordinate
+          ? null
+          : () async {
+              final activeEmpId = _selectedEmployeeId ??
+                  provider.currentEmployee?.id ??
+                  provider.employeeId;
+              if (activeEmpId.isNotEmpty) {
+                _loadSubordinateRecords(provider, activeEmpId);
+              }
+            },
+    );
+  }
+
+  Widget _buildAddRequestButton(
+    AttendanceProvider provider, {
+    bool isCompact = false,
+  }) {
     final isClosed = _selectedDate != null && provider.isMonthClosed(_selectedDate!);
+    if (isCompact) {
+      return NeuIconButton(
+        size: 44,
+        variant: NeuButtonVariant.primary,
+        tooltip: provider.translate('new_request'),
+        icon: Icon(isClosed ? Icons.lock_outline : Icons.add, size: 20),
+        onPressed: isClosed
+            ? () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('cannot_modify_closed_month')),
+                    backgroundColor: Colors.amber.shade800,
+                  ),
+                );
+              }
+            : () {
+                showNewRequestDialog(
+                  context: context,
+                  provider: provider,
+                  initialEmployeeId: _selectedEmployeeId,
+                  initialDate: _selectedDate,
+                  onSubmitted: () {
+                    final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
+                    _loadSubordinateRecords(provider, activeEmpId);
+                  },
+                );
+              },
+      );
+    }
     return NeuButton(
       onPressed: isClosed
           ? () {
