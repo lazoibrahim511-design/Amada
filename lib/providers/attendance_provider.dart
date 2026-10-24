@@ -520,6 +520,8 @@ class AttendanceProvider with ChangeNotifier {
   double _overtimeValue = 0.0;
   double _attendanceDeficit = 0.0;
   double _attendanceDeficitHours = 0.0;
+  double _unpaidLeaveHours = 0.0;
+  double _unpaidLeaveDeduction = 0.0;
   double _hourlyRate = 0.0;
 
   double _foodAllowance = 0.0;
@@ -760,6 +762,8 @@ class AttendanceProvider with ChangeNotifier {
   double get overtimeValue => _overtimeValue;
   double get attendanceDeficit => _attendanceDeficit;
   double get attendanceDeficitHours => _attendanceDeficitHours;
+  double get unpaidLeaveHours => _unpaidLeaveHours;
+  double get unpaidLeaveDeduction => _unpaidLeaveDeduction;
   double get hourlyRate => _hourlyRate;
   double get foodAllowance => _foodAllowance;
   double get transportationAllowance => _transportationAllowance;
@@ -2180,6 +2184,7 @@ class AttendanceProvider with ChangeNotifier {
     int totalDutyMinutes = 0;
     int totalOvertimeMinutes = 0;
     int totalDeficitMinutes = 0;
+    int totalUnpaidLeaveMinutes = 0;
     double totalPenalties = 0.0;
     int daysWorked = 0;
 
@@ -2232,23 +2237,38 @@ class AttendanceProvider with ChangeNotifier {
         (r) =>
             r.type == 'Annual Leave' ||
             r.type == 'Sick Leave' ||
+            r.type == 'Unpaid Leave' ||
             (r.type.contains('Leave') &&
                 r.type != 'Hourly Leave' &&
+                r.type != 'Hourly Unpaid Leave' &&
                 !r.type.toLowerCase().contains('hourly')),
       );
       int approvedHourlyMinutes = 0;
       int approvedOtMinutes = 0;
       bool hasApprovedOt = false;
+      int dayUnpaidLeaveMinutes = 0;
+      bool hasApprovedDailyUnpaidLeave = false;
+
       for (var r in dayApprovedRequests) {
-        if (r.type == 'Hourly Leave' || r.type.toLowerCase().contains('hourly')) {
+        if (r.type == 'Hourly Leave') {
           final m = parseHourlyLeaveDurationMinutes(r.duration);
           approvedHourlyMinutes += m > 0 ? m : 60;
+        } else if (r.type == 'Hourly Unpaid Leave') {
+          final m = parseHourlyLeaveDurationMinutes(r.duration);
+          final mins = m > 0 ? m : 60;
+          approvedHourlyMinutes += mins;
+          dayUnpaidLeaveMinutes += mins;
+        } else if (r.type == 'Unpaid Leave') {
+          hasApprovedDailyUnpaidLeave = true;
+          final shiftDur = shift.getShiftDurationMinutesForDate(date);
+          dayUnpaidLeaveMinutes += shiftDur;
         } else if (r.type == 'Overtime Approval') {
           hasApprovedOt = true;
           final m = parseOvertimeApprovalDurationMinutes(r.duration);
           approvedOtMinutes += m > 0 ? m : 0;
         }
       }
+      totalUnpaidLeaveMinutes += dayUnpaidLeaveMinutes;
 
       final holiday = _holidays.firstWhere(
         (h) {
@@ -2638,9 +2658,11 @@ class AttendanceProvider with ChangeNotifier {
         }
       } else {
         // No record on this day
-        // Since Gross Salary is based on Days Worked (salaryCalcByDay),
-        // completely missing a day naturally reduces the gross.
-        // We do not add the missing shift to the deficit to avoid double-deduction.
+        // If employee was on approved daily unpaid leave, count in daysWorked so basic gross is full,
+        // and unpaidLeaveDeduction cleanly deducts the exact leave amount as a line item.
+        if (hasApprovedDailyUnpaidLeave) {
+          daysWorked++;
+        }
       }
     }
 
@@ -2649,6 +2671,11 @@ class AttendanceProvider with ChangeNotifier {
     final double overtimeValue = overtimeHours * hourlyRate * 1.5;
     final double attendanceDeficitHours = totalDeficitMinutes / 60.0;
     final double attendanceDeficit = attendanceDeficitHours * hourlyRate;
+
+    // Unpaid leave calculation: ((basic salary / 8) / 30) * unpaid leave hours
+    final double unpaidHourlyRate = ((basicSalary / 8.0) / 30.0);
+    final double unpaidLeaveHours = totalUnpaidLeaveMinutes / 60.0;
+    final double unpaidLeaveDeduction = unpaidLeaveHours * unpaidHourlyRate;
 
     // Salary calculation by day / attendance
     // Standard HR practice: calculate daily rate based on 30 days regardless of the actual month length
@@ -2690,7 +2717,11 @@ class AttendanceProvider with ChangeNotifier {
 
     // 5% insurance deduction decreases final net salary
     final double employeeInsuranceDeduction = (daysWorked > 0 || salaryCalcByDay > 0) ? insuranceEmployee : 0.0;
-    final double decrementalSalary = attendanceDeficit + totalPenalties + monthlyDeductions + employeeInsuranceDeduction;
+    final double decrementalSalary = attendanceDeficit +
+        totalPenalties +
+        monthlyDeductions +
+        employeeInsuranceDeduction +
+        unpaidLeaveDeduction;
     final double netEarnings = (incrementalSalary - decrementalSalary).clamp(
       0.0,
       double.infinity,
@@ -2706,6 +2737,8 @@ class AttendanceProvider with ChangeNotifier {
       overtimeValue: overtimeValue,
       attendanceDeficitHours: attendanceDeficitHours,
       attendanceDeficit: attendanceDeficit,
+      unpaidLeaveHours: unpaidLeaveHours,
+      unpaidLeaveDeduction: unpaidLeaveDeduction,
       monthlyPenalties: totalPenalties,
       foodAllowance: foodAllowance,
       transportationAllowance: transportationAllowance,
@@ -2934,6 +2967,8 @@ class AttendanceProvider with ChangeNotifier {
     _overtimeValue = report.overtimeValue;
     _attendanceDeficitHours = report.attendanceDeficitHours;
     _attendanceDeficit = report.attendanceDeficit;
+    _unpaidLeaveHours = report.unpaidLeaveHours;
+    _unpaidLeaveDeduction = report.unpaidLeaveDeduction;
     _monthlyPenalties = report.monthlyPenalties;
     _salaryCalcByDay = report.salaryCalcByDay;
     _foodAllowance = report.foodAllowance;
@@ -3867,6 +3902,10 @@ class AttendanceProvider with ChangeNotifier {
         return 'مۆڵەتی نەخۆشی';
       case 'Hourly Leave':
         return 'مۆڵەتی کاتی (کاتژمێری)';
+      case 'Unpaid Leave':
+        return 'مۆڵەتی بێ مووچە';
+      case 'Hourly Unpaid Leave':
+        return 'مۆڵەتی کاتژمێری بێ مووچە';
       case 'Permission':
         return 'مۆڵەتی کاتی';
       case 'Overtime Approval':
@@ -4891,6 +4930,8 @@ class PayrollReport {
   final double overtimeValue;
   final double attendanceDeficitHours;
   final double attendanceDeficit;
+  final double unpaidLeaveHours;
+  final double unpaidLeaveDeduction;
   final double monthlyPenalties;
   final double foodAllowance;
   final double transportationAllowance;
@@ -4917,6 +4958,8 @@ class PayrollReport {
     required this.overtimeValue,
     this.attendanceDeficitHours = 0.0,
     required this.attendanceDeficit,
+    this.unpaidLeaveHours = 0.0,
+    this.unpaidLeaveDeduction = 0.0,
     required this.monthlyPenalties,
     required this.foodAllowance,
     required this.transportationAllowance,
@@ -4950,6 +4993,8 @@ extension PayrollReportSnapshotExt on PayrollReportSnapshot {
       overtimeValue: overtimeValue,
       attendanceDeficitHours: attendanceDeficitHours,
       attendanceDeficit: attendanceDeficit,
+      unpaidLeaveHours: unpaidLeaveHours,
+      unpaidLeaveDeduction: unpaidLeaveDeduction,
       monthlyPenalties: monthlyPenalties,
       foodAllowance: foodAllowance,
       transportationAllowance: transportationAllowance,
@@ -4984,6 +5029,8 @@ extension PayrollReportExt on PayrollReport {
       overtimeValue: overtimeValue,
       attendanceDeficitHours: attendanceDeficitHours,
       attendanceDeficit: attendanceDeficit,
+      unpaidLeaveHours: unpaidLeaveHours,
+      unpaidLeaveDeduction: unpaidLeaveDeduction,
       monthlyPenalties: monthlyPenalties,
       foodAllowance: foodAllowance,
       transportationAllowance: transportationAllowance,

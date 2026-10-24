@@ -581,6 +581,10 @@ DateTime? _parseRequestStartDate(String dateStr) {
         return provider.translate('forgot_to_clock_out');
       case 'Hourly Leave':
         return provider.translate('hourly_leave');
+      case 'Unpaid Leave':
+        return provider.translate('unpaid_leave');
+      case 'Hourly Unpaid Leave':
+        return provider.translate('hourly_unpaid_leave');
       case 'Change Shift':
         return provider.translate('change_shift');
       case 'Missing Punch':
@@ -1697,6 +1701,14 @@ DateTime? _parseRequestStartDate(String dateStr) {
                     child: Text(provider.translate('hourly_leave')),
                   ),
                   DropdownMenuItem(
+                    value: 'Unpaid Leave',
+                    child: Text(provider.translate('unpaid_leave')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Hourly Unpaid Leave',
+                    child: Text(provider.translate('hourly_unpaid_leave')),
+                  ),
+                  DropdownMenuItem(
                     value: 'Missing Punch',
                     child: Text(provider.translate('missing_punch')),
                   ),
@@ -1726,6 +1738,10 @@ DateTime? _parseRequestStartDate(String dateStr) {
                       } else if (selectedType == 'Sick Leave') {
                         dateController.text = 'June 3, 2026';
                         durController.text = '1 Day';
+                      } else if (selectedType == 'Unpaid Leave') {
+                        dateController.text =
+                            DateFormat('MMMM d, yyyy').format(DateTime.now());
+                        durController.text = '1 Day';
                       } else if (selectedType == 'Missing Punch') {
                         dateController.text = 'June 2, 2026';
                         timeController.text = DateFormat(
@@ -1736,7 +1752,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                           'MMMM d, yyyy',
                         ).format(DateTime.now());
                         durController.text = '1 Day';
-                      } else if (selectedType == 'Hourly Leave') {
+                      } else if (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave') {
                         dateController.text = DateFormat(
                           'MMMM d, yyyy',
                         ).format(DateTime.now());
@@ -1782,7 +1798,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
               ],
               SizedBox(height: 16),
               _buildDialogField(
-                (isOvertime || selectedType == 'Hourly Leave')
+                (isOvertime || selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave')
                     ? provider.translate('date')
                     : provider.translate('dates'),
                 dateController,
@@ -1815,11 +1831,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
                     context: context,
                     firstDate: firstPickerDate,
                     lastDate: lastPickerDate,
-                    isSingleDateOnly: (selectedType == 'Hourly Leave' || isOvertime),
+                    isSingleDateOnly: (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave' || isOvertime),
                   );
                   if (picked != null) {
                     setDialogState(() {
-                      if (selectedType == 'Hourly Leave' || isOvertime) {
+                      if (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave' || isOvertime) {
                         dateController.text = DateFormat(
                           'MMMM d, yyyy',
                         ).format(picked.start);
@@ -2004,7 +2020,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                                   int.tryParse(
                                     fromTimeController.text.split(':')[0],
                                   ) ??
-                                  (selectedType == 'Hourly Leave' ? 15 : 17),
+                                  (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave' ? 15 : 17),
                               minute:
                                   int.tryParse(
                                     fromTimeController.text.split(':')[1],
@@ -2041,7 +2057,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                                     int.parse(tParts[1]);
                                 int diff = tMins - fMins;
                                 if (diff < 0) diff += 24 * 60;
-                                if (selectedType == 'Hourly Leave') {
+                                if (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave') {
                                   durController.text =
                                       formatHourlyLeaveDurationString(
                                     fromTimeController.text,
@@ -2070,7 +2086,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                                   int.tryParse(
                                     toTimeController.text.split(':')[0],
                                   ) ??
-                                  (selectedType == 'Hourly Leave' ? 16 : 19),
+                                  (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave' ? 16 : 19),
                               minute:
                                   int.tryParse(
                                     toTimeController.text.split(':')[1],
@@ -2107,7 +2123,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                                     int.parse(tParts[1]);
                                 int diff = tMins - fMins;
                                 if (diff < 0) diff += 24 * 60;
-                                if (selectedType == 'Hourly Leave') {
+                                if (selectedType == 'Hourly Leave' || selectedType == 'Hourly Unpaid Leave') {
                                   durController.text =
                                       formatHourlyLeaveDurationString(
                                     fromTimeController.text,

@@ -84,12 +84,15 @@ class _PayrollScreenState extends State<PayrollScreen> {
         : null;
     final currentMonthlyAdditions = currentReport?.monthlyAdditions ?? 0.0;
     final currentMonthlyDeductions = currentReport?.monthlyDeductions ?? 0.0;
+    final unpaidLeaveHours = currentReport?.unpaidLeaveHours ?? provider.unpaidLeaveHours;
+    final unpaidLeaveDeduction = currentReport?.unpaidLeaveDeduction ?? provider.unpaidLeaveDeduction;
 
     final activeConfig = provider.currentEmployee != null 
         ? provider.getActiveSalaryConfig(provider.currentEmployee!, provider.selectedMonth)
         : null;
     final basicSalary = activeConfig?.basicSalary ?? 0.0;
     final workingHours = activeConfig?.workingHours ?? 0.0;
+    final unpaidHourlyRate = ((basicSalary / 8.0) / 30.0);
 
     final numberFormat = NumberFormat('#,##0.00');
     final String currency = activeConfig?.currency ?? provider.currentEmployee?.salaryCurrency ?? 'USD';
@@ -602,6 +605,15 @@ class _PayrollScreenState extends State<PayrollScreen> {
                               color: const Color(0xFFFF5C5C),
                             ),
                           ],
+                          if (unpaidLeaveDeduction > 0) ...[
+                            Divider(color: (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : Colors.black12), height: 1),
+                            _buildBreakdownRow(context, 
+                              label: provider.translate('unpaid_leave_deduction'),
+                              details: '${unpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')} @ ${formatAmount(unpaidHourlyRate)}/${provider.translate('unit_hrs')}',
+                              amount: '-${formatAmount(unpaidLeaveDeduction)}',
+                              color: const Color(0xFFFF5C5C),
+                            ),
+                          ],
                           if (provider.hasInsurance) ...[
                             Divider(color: (Theme.of(context).brightness == Brightness.dark ? Colors.white10 : Colors.black12), height: 1),
                             _buildBreakdownRow(context, 
@@ -805,6 +817,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final double totalOvertimeValue = reports.fold(0.0, (sum, r) => sum + r.overtimeValue);
     final double totalDeficitHours = reports.fold(0.0, (sum, r) => sum + r.attendanceDeficitHours);
     final double totalDeficitValue = reports.fold(0.0, (sum, r) => sum + r.attendanceDeficit);
+    final double totalUnpaidLeaveHours = reports.fold(0.0, (sum, r) => sum + r.unpaidLeaveHours);
+    final double totalUnpaidLeaveValue = reports.fold(0.0, (sum, r) => sum + r.unpaidLeaveDeduction);
     final double totalMonthlyAdditions = reports.fold(0.0, (sum, r) => sum + r.monthlyAdditions);
     final double totalMonthlyDeductions = reports.fold(0.0, (sum, r) => sum + r.monthlyDeductions);
     final double totalFoodAllowance = reports.fold(0.0, (sum, r) => sum + r.foodAllowance);
@@ -873,6 +887,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
                   DataColumn(label: Text(provider.translate('overtime_val'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF00FF87)))),
                   DataColumn(label: Text(provider.translate('deficit_hrs'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
                   DataColumn(label: Text(provider.translate('deficit_val'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
+                  DataColumn(label: Text(provider.translate('unpaid_leave_hrs'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
+                  DataColumn(label: Text(provider.translate('unpaid_leave_val'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
                   DataColumn(label: Text(provider.translate('food_allow_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
                   DataColumn(label: Text(provider.translate('trans_allow_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
                   DataColumn(label: Text(provider.translate('other_allow_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
@@ -900,6 +916,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
                         DataCell(Text(formatEmpAmount(r.overtimeValue, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFF00FF87)))),
                         DataCell(Text('${r.attendanceDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
                         DataCell(Text(formatEmpAmount(r.attendanceDeficit, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
+                        DataCell(Text('${r.unpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
+                        DataCell(Text(formatEmpAmount(r.unpaidLeaveDeduction, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
                         DataCell(Text(formatEmpAmount(r.foodAllowance, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
                         DataCell(Text(formatEmpAmount(r.transportationAllowance, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
                         DataCell(Text(formatEmpAmount(r.otherAllowance, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
@@ -1119,6 +1137,22 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       )),
                       DataCell(Text(
                         formatEmpAmount(totalDeficitValue, defaultCurrency),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Color(0xFFFF5C5C),
+                        ),
+                      )),
+                      DataCell(Text(
+                        '${totalUnpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Color(0xFFFF5C5C),
+                        ),
+                      )),
+                      DataCell(Text(
+                        formatEmpAmount(totalUnpaidLeaveValue, defaultCurrency),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 12,

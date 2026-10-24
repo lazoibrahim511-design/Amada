@@ -927,6 +927,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 if (r.type == 'Sick Leave') {
                   return provider.translate('sick_leave');
                 }
+                if (r.type == 'Unpaid Leave') {
+                  return provider.translate('unpaid_leave');
+                }
+                if (r.type == 'Hourly Unpaid Leave') {
+                  return provider.translate('hourly_unpaid_leave');
+                }
                 if (r.type == 'Overtime Approval') {
                   return provider.translate('overtime_approval');
                 }
@@ -1049,6 +1055,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
           }
         }
 
+        int dayUnpaidMinutes = 0;
+        for (var req in dateApprovedRequests) {
+          if (req.type == 'Unpaid Leave') {
+            dayUnpaidMinutes += dayShiftDurMins;
+          } else if (req.type == 'Hourly Unpaid Leave') {
+            final mins = parseHourlyLeaveDurationMinutes(req.duration);
+            dayUnpaidMinutes += mins > 0 ? mins : 60;
+          }
+        }
+
         compiledData.add({
           'date': date,
           'hasRecord': hasRecord,
@@ -1066,6 +1082,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
           'hasFullDayLeave': hasFullDayLeave,
           'hasHourlyLeave': approvedHourlyLeaveMinutes > 0,
           'hourlyLeaveMinutes': approvedHourlyLeaveMinutes,
+          'unpaidLeaveMinutes': dayUnpaidMinutes,
+          'hasUnpaidLeave': dayUnpaidMinutes > 0,
           'isMissingPunch': hasApprovedMissingPunch,
           'hasUnexcusedMissedPunch': hasUnexcusedMissedPunch,
           'missingPunchTimes': missingPunchTimes,
@@ -1368,6 +1386,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final String totalDeficitStr =
         '${totalDeficit ~/ 60}h ${totalDeficit % 60}m';
 
+    int totalUnpaidLeave = 0;
+    for (var row in compiledData) {
+      totalUnpaidLeave += (row['unpaidLeaveMinutes'] as int?) ?? 0;
+    }
+
     final cards = [
       _buildMiniSummaryCard(
         provider.translate('duty_days'),
@@ -1414,6 +1437,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         '${NumberFormat('#,##0').format(totalPenalties)} IQD',
         const Color(0xFFFF5C5C),
       ),
+      if (totalUnpaidLeave > 0)
+        _buildMiniSummaryCard(
+          provider.translate('unpaid_leave'),
+          '${totalUnpaidLeave ~/ 60}h ${totalUnpaidLeave % 60}m',
+          const Color(0xFFF59E0B),
+        ),
     ];
 
     return Padding(
@@ -3549,6 +3578,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return provider.translate('hourly_leave') != 'hourly_leave'
             ? provider.translate('hourly_leave')
             : 'Hourly Leave';
+      case 'Unpaid Leave':
+        return provider.translate('unpaid_leave') != 'unpaid_leave'
+            ? provider.translate('unpaid_leave')
+            : 'Unpaid Leave';
+      case 'Hourly Unpaid Leave':
+        return provider.translate('hourly_unpaid_leave') != 'hourly_unpaid_leave'
+            ? provider.translate('hourly_unpaid_leave')
+            : 'Hourly Unpaid Leave';
       case 'Change Shift':
         return provider.translate('change_shift') != 'change_shift'
             ? provider.translate('change_shift')

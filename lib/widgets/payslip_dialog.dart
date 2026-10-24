@@ -961,7 +961,14 @@ class _PayslipDialogContentState extends State<PayslipDialogContent> {
                     value: '-${_formatAmount(r.insuranceEmployee, r.currency)}',
                     color: const Color(0xFFFF5C5C),
                   ),
-                if (r.attendanceDeficit == 0 && r.monthlyPenalties == 0 && r.monthlyDeductions == 0 && !r.hasInsurance)
+                if (r.unpaidLeaveDeduction > 0)
+                  _buildRow(
+                    context,
+                    label: '${provider.translate('unpaid_leave_deduction')} (${r.unpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')})',
+                    value: '-${_formatAmount(r.unpaidLeaveDeduction, r.currency)}',
+                    color: const Color(0xFFFF5C5C),
+                  ),
+                if (r.attendanceDeficit == 0 && r.monthlyPenalties == 0 && r.monthlyDeductions == 0 && !r.hasInsurance && r.unpaidLeaveDeduction == 0)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(

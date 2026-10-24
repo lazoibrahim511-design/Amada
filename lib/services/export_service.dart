@@ -71,6 +71,8 @@ class ExportService {
       'Overtime (Val)',
       'Deficit (Hrs)',
       'Deficit (Val)',
+      'Unpaid Leave (Hrs)',
+      'Unpaid Leave (Val)',
       'Food Allow.',
       'Trans. Allow.',
       'Other Allow.',
@@ -104,25 +106,27 @@ class ExportService {
       sheet.getRangeByIndex(row, 7).setNumber(r.overtimeValue);
       sheet.getRangeByIndex(row, 8).setNumber(r.attendanceDeficitHours);
       sheet.getRangeByIndex(row, 9).setNumber(r.attendanceDeficit);
-      sheet.getRangeByIndex(row, 10).setNumber(r.foodAllowance);
-      sheet.getRangeByIndex(row, 11).setNumber(r.transportationAllowance);
-      sheet.getRangeByIndex(row, 12).setNumber(r.otherAllowance);
-      sheet
-          .getRangeByIndex(row, 13)
-          .setNumber(r.hasInsurance ? r.insuranceSalary : 0.0);
-      sheet
-          .getRangeByIndex(row, 14)
-          .setNumber(r.hasInsurance ? r.insuranceEmployee : 0.0);
+      sheet.getRangeByIndex(row, 10).setNumber(r.unpaidLeaveHours);
+      sheet.getRangeByIndex(row, 11).setNumber(r.unpaidLeaveDeduction);
+      sheet.getRangeByIndex(row, 12).setNumber(r.foodAllowance);
+      sheet.getRangeByIndex(row, 13).setNumber(r.transportationAllowance);
+      sheet.getRangeByIndex(row, 14).setNumber(r.otherAllowance);
       sheet
           .getRangeByIndex(row, 15)
+          .setNumber(r.hasInsurance ? r.insuranceSalary : 0.0);
+      sheet
+          .getRangeByIndex(row, 16)
+          .setNumber(r.hasInsurance ? r.insuranceEmployee : 0.0);
+      sheet
+          .getRangeByIndex(row, 17)
           .setNumber(r.hasInsurance ? r.insuranceCompany : 0.0);
-      sheet.getRangeByIndex(row, 16).setNumber(r.monthlyAdditions);
-      sheet.getRangeByIndex(row, 17).setNumber(r.monthlyPenalties);
-      sheet.getRangeByIndex(row, 18).setNumber(r.monthlyDeductions);
-      sheet.getRangeByIndex(row, 19).setNumber(r.incrementalSalary);
-      sheet.getRangeByIndex(row, 20).setNumber(r.decrementalSalary);
-      sheet.getRangeByIndex(row, 21).setNumber(r.netEarnings);
-      sheet.getRangeByIndex(row, 22).setText(r.currency);
+      sheet.getRangeByIndex(row, 18).setNumber(r.monthlyAdditions);
+      sheet.getRangeByIndex(row, 19).setNumber(r.monthlyPenalties);
+      sheet.getRangeByIndex(row, 20).setNumber(r.monthlyDeductions);
+      sheet.getRangeByIndex(row, 21).setNumber(r.incrementalSalary);
+      sheet.getRangeByIndex(row, 22).setNumber(r.decrementalSalary);
+      sheet.getRangeByIndex(row, 23).setNumber(r.netEarnings);
+      sheet.getRangeByIndex(row, 24).setText(r.currency);
     }
 
     // Total row
@@ -156,6 +160,14 @@ class ExportService {
       final totalDeficitValue = reports.fold(
         0.0,
         (sum, r) => sum + r.attendanceDeficit,
+      );
+      final totalUnpaidLeaveHours = reports.fold(
+        0.0,
+        (sum, r) => sum + r.unpaidLeaveHours,
+      );
+      final totalUnpaidLeaveValue = reports.fold(
+        0.0,
+        (sum, r) => sum + r.unpaidLeaveDeduction,
       );
       final totalMonthlyAdditions = reports.fold(
         0.0,
@@ -214,23 +226,25 @@ class ExportService {
       sheet.getRangeByIndex(totalRow, 7).setNumber(totalOvertimeValue);
       sheet.getRangeByIndex(totalRow, 8).setNumber(totalDeficitHours);
       sheet.getRangeByIndex(totalRow, 9).setNumber(totalDeficitValue);
-      sheet.getRangeByIndex(totalRow, 10).setNumber(totalFoodAllowance);
+      sheet.getRangeByIndex(totalRow, 10).setNumber(totalUnpaidLeaveHours);
+      sheet.getRangeByIndex(totalRow, 11).setNumber(totalUnpaidLeaveValue);
+      sheet.getRangeByIndex(totalRow, 12).setNumber(totalFoodAllowance);
       sheet
-          .getRangeByIndex(totalRow, 11)
+          .getRangeByIndex(totalRow, 13)
           .setNumber(totalTransportationAllowance);
-      sheet.getRangeByIndex(totalRow, 12).setNumber(totalOtherAllowance);
-      sheet.getRangeByIndex(totalRow, 13).setNumber(totalInsuranceSalary);
-      sheet.getRangeByIndex(totalRow, 14).setNumber(totalInsurance5);
-      sheet.getRangeByIndex(totalRow, 15).setNumber(totalInsurance12);
-      sheet.getRangeByIndex(totalRow, 16).setNumber(totalMonthlyAdditions);
-      sheet.getRangeByIndex(totalRow, 17).setNumber(totalPenalties);
-      sheet.getRangeByIndex(totalRow, 18).setNumber(totalMonthlyDeductions);
-      sheet.getRangeByIndex(totalRow, 19).setNumber(totalGrossSalary);
-      sheet.getRangeByIndex(totalRow, 20).setNumber(totalDeductions);
-      sheet.getRangeByIndex(totalRow, 21).setNumber(totalNetEarnings);
-      sheet.getRangeByIndex(totalRow, 22).setText('');
+      sheet.getRangeByIndex(totalRow, 14).setNumber(totalOtherAllowance);
+      sheet.getRangeByIndex(totalRow, 15).setNumber(totalInsuranceSalary);
+      sheet.getRangeByIndex(totalRow, 16).setNumber(totalInsurance5);
+      sheet.getRangeByIndex(totalRow, 17).setNumber(totalInsurance12);
+      sheet.getRangeByIndex(totalRow, 18).setNumber(totalMonthlyAdditions);
+      sheet.getRangeByIndex(totalRow, 19).setNumber(totalPenalties);
+      sheet.getRangeByIndex(totalRow, 20).setNumber(totalMonthlyDeductions);
+      sheet.getRangeByIndex(totalRow, 21).setNumber(totalGrossSalary);
+      sheet.getRangeByIndex(totalRow, 22).setNumber(totalDeductions);
+      sheet.getRangeByIndex(totalRow, 23).setNumber(totalNetEarnings);
+      sheet.getRangeByIndex(totalRow, 24).setText('');
 
-      for (int col = 1; col <= 22; col++) {
+      for (int col = 1; col <= 24; col++) {
         sheet.getRangeByIndex(totalRow, col).cellStyle.bold = true;
       }
     }
@@ -2078,6 +2092,12 @@ class ExportService {
                                 ? PdfColor.fromHex('#DC2626')
                                 : null,
                           ),
+                          if (report.unpaidLeaveDeduction > 0)
+                            buildTableRow(
+                              '${t('unpaid_leave_deduction', 'Unpaid Leave Deduction')} (${report.unpaidLeaveHours.toStringAsFixed(1)}${t('unit_hrs', 'h')})',
+                              '-${formatPdfAmount(report.unpaidLeaveDeduction, report.currency)}',
+                              color: PdfColor.fromHex('#DC2626'),
+                            ),
                           pw.SizedBox(height: 6),
                           pw.Divider(
                             thickness: 0.8,

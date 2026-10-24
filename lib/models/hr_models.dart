@@ -1916,6 +1916,8 @@ class PayrollReportSnapshot {
   final double overtimeValue;
   final double attendanceDeficitHours;
   final double attendanceDeficit;
+  final double unpaidLeaveHours;
+  final double unpaidLeaveDeduction;
   final double monthlyPenalties;
   final double foodAllowance;
   final double transportationAllowance;
@@ -1944,6 +1946,8 @@ class PayrollReportSnapshot {
     required this.overtimeValue,
     required this.attendanceDeficitHours,
     required this.attendanceDeficit,
+    this.unpaidLeaveHours = 0.0,
+    this.unpaidLeaveDeduction = 0.0,
     required this.monthlyPenalties,
     required this.foodAllowance,
     required this.transportationAllowance,
@@ -1974,6 +1978,8 @@ class PayrollReportSnapshot {
       'overtimeValue': overtimeValue,
       'attendanceDeficitHours': attendanceDeficitHours,
       'attendanceDeficit': attendanceDeficit,
+      'unpaidLeaveHours': unpaidLeaveHours,
+      'unpaidLeaveDeduction': unpaidLeaveDeduction,
       'monthlyPenalties': monthlyPenalties,
       'foodAllowance': foodAllowance,
       'transportationAllowance': transportationAllowance,
@@ -2005,6 +2011,8 @@ class PayrollReportSnapshot {
       overtimeValue: (map['overtimeValue'] as num?)?.toDouble() ?? 0.0,
       attendanceDeficitHours: (map['attendanceDeficitHours'] as num?)?.toDouble() ?? 0.0,
       attendanceDeficit: (map['attendanceDeficit'] as num?)?.toDouble() ?? 0.0,
+      unpaidLeaveHours: (map['unpaidLeaveHours'] as num?)?.toDouble() ?? 0.0,
+      unpaidLeaveDeduction: (map['unpaidLeaveDeduction'] as num?)?.toDouble() ?? 0.0,
       monthlyPenalties: (map['monthlyPenalties'] as num?)?.toDouble() ?? 0.0,
       foodAllowance: (map['foodAllowance'] as num?)?.toDouble() ?? 0.0,
       transportationAllowance: (map['transportationAllowance'] as num?)?.toDouble() ?? 0.0,
