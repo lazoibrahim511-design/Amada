@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/hr_models.dart';
 import '../providers/attendance_provider.dart';
 import '../widgets/neu_button.dart';
+import 'compact_date_picker_dialog.dart';
 
 Future<void> showPayrollAdjustmentDialog({
   required BuildContext context,
@@ -197,24 +198,11 @@ class _PayrollAdjustmentDialogContentState
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showCompactDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: _type == 'addition'
-                  ? const Color(0xFF00C853)
-                  : const Color(0xFFFF5252),
-              brightness: Theme.of(context).brightness,
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
     if (picked != null) {
       setState(() {

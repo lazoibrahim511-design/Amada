@@ -14,6 +14,7 @@ import '../../models/hr_models.dart';
 import '../glass_container.dart';
 import '../glass_dialog.dart';
 import '../neu_button.dart';
+import '../compact_date_picker_dialog.dart';
 import '../avatar_image_helper.dart';
 import '../../screens/face_auth_screen.dart';
 
@@ -2457,7 +2458,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                         child: InkWell(
                           onTap: () async {
                             final current = DateTime.tryParse(dobController.text) ?? DateTime(1995, 1, 1);
-                            final picked = await showDatePicker(
+                            final picked = await showCompactDatePicker(
                               context: context,
                               initialDate: current,
                               firstDate: DateTime(1940),
@@ -2835,7 +2836,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                                 child: InkWell(
                                   onTap: () async {
                                     final initial = DateTime.tryParse(groupStartDateController.text) ?? DateTime.now();
-                                    final picked = await showDatePicker(
+                                    final picked = await showCompactDatePicker(
                                       context: context,
                                       initialDate: initial,
                                       firstDate: DateTime(2000),
@@ -2866,7 +2867,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                                 child: InkWell(
                                   onTap: () async {
                                     final initial = DateTime.tryParse(groupEndDateController.text) ?? DateTime.now();
-                                    final picked = await showDatePicker(
+                                    final picked = await showCompactDatePicker(
                                       context: context,
                                       initialDate: initial,
                                       firstDate: DateTime(2000),
@@ -3166,7 +3167,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                         child: InkWell(
                           onTap: () async {
                             final current = DateTime.tryParse(passportExpiryController.text) ?? DateTime.now().add(const Duration(days: 365));
-                            final picked = await showDatePicker(
+                            final picked = await showCompactDatePicker(
                               context: context,
                               initialDate: current,
                               firstDate: DateTime(2000),
@@ -3228,7 +3229,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                         child: InkWell(
                           onTap: () async {
                             final current = DateTime.tryParse(residenceCardExpiryController.text) ?? DateTime.now().add(const Duration(days: 365));
-                            final picked = await showDatePicker(
+                            final picked = await showCompactDatePicker(
                               context: context,
                               initialDate: current,
                               firstDate: DateTime(2000),

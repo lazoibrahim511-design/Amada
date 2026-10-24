@@ -5,6 +5,7 @@ import '../models/request_model.dart';
 import '../providers/attendance_provider.dart';
 import 'glass_dialog.dart';
 import 'picker_theme.dart';
+import 'compact_date_picker_dialog.dart';
 
 List<CompanyEmployee> _getSubordinatesList(AttendanceProvider provider) {
   final currentUser = provider.currentEmployee;
@@ -642,11 +643,11 @@ Future<void> showNewRequestDialog({
                   firstPickerDate = lastPickerDate;
                 }
 
-                final picked = await showDateRangePicker(
+                final picked = await showCompactDateRangePicker(
                   context: context,
                   firstDate: firstPickerDate,
                   lastDate: lastPickerDate,
-                  builder: buildAdaptivePickerTheme,
+                  isSingleDateOnly: (selectedType == 'Hourly Leave' || isOvertime),
                 );
                 if (picked != null) {
                   setDialogState(() {

@@ -27,6 +27,8 @@ class MainNavigationScreen extends StatefulWidget {
 
 class MainNavigationScreenState extends State<MainNavigationScreen> {
   late int _selectedIndex;
+  late final PageController _pageController;
+  bool _isPageAnimating = false;
 
   // Let's create an list of pages. We can add a Clock tab that is a dedicated view,
   // or we can reuse/navigate as required.
@@ -39,6 +41,9 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
   void initState() {
     super.initState();
     _selectedIndex = widget.initialTab;
+    _pageController = PageController(
+      initialPage: widget.initialTab.clamp(0, 4),
+    );
     _pages = [
       const HomeScreen(),
       const ClockScreen(),
@@ -62,6 +67,12 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
     _loadSavedTab();
   }
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSavedTab() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -71,6 +82,9 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
           setState(() {
             _selectedIndex = savedTab;
           });
+          if (_pageController.hasClients && savedTab < 5) {
+            _pageController.jumpToPage(savedTab);
+          }
         }
       }
     } catch (e) {
@@ -87,6 +101,21 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
       await prefs.setInt('main_nav_tab', index);
     } catch (e) {
       debugPrint('Failed to save tab: $e');
+    }
+
+    if (!kIsWeb && _pageController.hasClients && index < 5) {
+      if ((_pageController.page?.round() ?? _selectedIndex) != index) {
+        _isPageAnimating = true;
+        try {
+          await _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+          );
+        } finally {
+          _isPageAnimating = false;
+        }
+      }
     }
   }
 
@@ -113,6 +142,19 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isDesktop = constraints.maxWidth >= 800;
+              final isMobileApp = !kIsWeb && !isDesktop;
+
+              // Ensure PageView stays synchronized if returning from embedded desktop tabs
+              if (isMobileApp && _selectedIndex < 5) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _pageController.hasClients && !_isPageAnimating) {
+                    if (_pageController.page?.round() != _selectedIndex) {
+                      _pageController.jumpToPage(_selectedIndex);
+                    }
+                  }
+                });
+              }
+
               return Stack(
                 children: [
                   if (isDesktop)
@@ -127,8 +169,34 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                         ],
                       ),
                     )
+                  else if (isMobileApp && _selectedIndex < 5)
+                    // Fluid, interactive swipable PageView only in mobile app
+                    SafeArea(
+                      bottom: false,
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const BouncingScrollPhysics(),
+                        onPageChanged: (pageIndex) {
+                          if (!_isPageAnimating && _selectedIndex != pageIndex) {
+                            setState(() {
+                              _selectedIndex = pageIndex;
+                            });
+                            SharedPreferences.getInstance().then((prefs) {
+                              prefs.setInt('main_nav_tab', pageIndex);
+                            }).catchError((_) {});
+                          }
+                        },
+                        children: [
+                          _KeepAlivePage(child: _pages[0]),
+                          _KeepAlivePage(child: _pages[1]),
+                          _KeepAlivePage(child: _pages[2]),
+                          _KeepAlivePage(child: _pages[3]),
+                          _KeepAlivePage(child: _pages[4]),
+                        ],
+                      ),
+                    )
                   else
-                    // Current Screen
+                    // Fallback / Web mobile / Embedded HR tabs
                     SafeArea(
                       bottom: false,
                       child: IndexedStack(index: _selectedIndex, children: _pages),
@@ -592,62 +660,72 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
     final isSelected = _selectedIndex == index;
     final icon = isSelected ? filledIcon : outlineIcon;
 
-    if (isSelected) {
-      // Pill-shaped container for active tab
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.2)),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.15)),
-            width: 1,
+    return GestureDetector(
+      onTap: () => onTabSelected(index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 240),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: anim,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(anim),
+            child: child,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)), size: 22),
-            SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // Standard icon and label stack for inactive tabs
-      return GestureDetector(
-        onTap: () => onTabSelected(index),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 56,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7)), size: 22),
-              SizedBox(height: 4),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7)),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+        child: isSelected
+            ? Container(
+                key: ValueKey('nav_sel_$index'),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.2)),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.15)),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)), size: 20),
+                    const SizedBox(width: 5),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : SizedBox(
+                key: ValueKey('nav_unsel_$index'),
+                width: 48,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7)), size: 20),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7)),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   Widget _buildSuperAdminCompanySwitcher(
@@ -943,3 +1021,24 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 }
+
+class _KeepAlivePage extends StatefulWidget {
+  final Widget child;
+  const _KeepAlivePage({required this.child});
+
+  @override
+  State<_KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<_KeepAlivePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+

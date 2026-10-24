@@ -11,6 +11,7 @@ import '../../providers/attendance_provider.dart';
 import '../../services/export_service.dart';
 import '../glass_container.dart';
 import '../neu_button.dart';
+import '../compact_date_picker_dialog.dart';
 
 class HrDailyReportTab extends StatefulWidget {
   final String searchQuery;
@@ -734,22 +735,11 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
             InkWell(
               borderRadius: BorderRadius.circular(50),
               onTap: () async {
-                final picked = await showDatePicker(
+                final picked = await showCompactDatePicker(
                   context: context,
                   initialDate: _selectedDate,
                   firstDate: DateTime(2020),
                   lastDate: DateTime(2035),
-                  builder: (context, child) {
-                    return Theme(
-                      data: Theme.of(context).copyWith(
-                        colorScheme: ColorScheme.fromSeed(
-                          seedColor: const Color(0xFF00E5CE),
-                          brightness: isDark ? Brightness.dark : Brightness.light,
-                        ),
-                      ),
-                      child: child!,
-                    );
-                  },
                 );
                 if (picked != null) {
                   setState(() {

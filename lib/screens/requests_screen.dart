@@ -9,6 +9,7 @@ import '../models/request_model.dart';
 import '../widgets/avatar_image_helper.dart';
 import '../widgets/neu_button.dart';
 import '../widgets/picker_theme.dart';
+import '../widgets/compact_date_picker_dialog.dart';
 import 'package:intl/intl.dart';
 
 class RequestsScreen extends StatefulWidget {
@@ -1804,11 +1805,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
                     firstPickerDate = lastPickerDate;
                   }
 
-                  final picked = await showDateRangePicker(
+                  final picked = await showCompactDateRangePicker(
                     context: context,
                     firstDate: firstPickerDate,
                     lastDate: lastPickerDate,
-                    builder: buildAdaptivePickerTheme,
+                    isSingleDateOnly: (selectedType == 'Hourly Leave' || isOvertime),
                   );
                   if (picked != null) {
                     setDialogState(() {

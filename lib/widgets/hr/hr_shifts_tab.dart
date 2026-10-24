@@ -5,6 +5,7 @@ import '../../models/hr_models.dart';
 import '../glass_container.dart';
 import '../glass_dialog.dart';
 import '../neu_button.dart';
+import '../compact_date_picker_dialog.dart';
 
 class HrShiftsTab extends StatefulWidget {
   final String searchQuery;
@@ -1315,7 +1316,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                               initial = DateTime.parse(rotationStartDateController.text);
                             } catch (_) {}
                           }
-                          final picked = await showDatePicker(
+                          final picked = await showCompactDatePicker(
                             context: context,
                             initialDate: initial,
                             firstDate: DateTime(2020),

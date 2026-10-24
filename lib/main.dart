@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/firebase_service.dart';
 import 'services/zkteco_service.dart';
 import 'widgets/picker_theme.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -21,6 +22,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await initializeDateFormatting('en', null);
+  } catch (_) {}
 
   // Load cached preferences first for instantaneous 0-delay theme and UI rendering
   final prefs = await SharedPreferences.getInstance();
@@ -225,11 +229,13 @@ class _MyAppState extends State<MyApp> {
               ),
               timePickerTheme: createAdaptiveTimePickerTheme(
                 isDark: false,
-                primaryColor: const Color(0xFF1330A6),
+                primaryColor: const Color(0xFF00E5CE),
+                onPrimaryColor: const Color(0xFF0A2342),
               ),
               datePickerTheme: createAdaptiveDatePickerTheme(
                 isDark: false,
-                primaryColor: const Color(0xFF1330A6),
+                primaryColor: const Color(0xFF00E5CE),
+                onPrimaryColor: const Color(0xFF0A2342),
               ),
             ),
             darkTheme: ThemeData(
@@ -306,10 +312,12 @@ class _MyAppState extends State<MyApp> {
               timePickerTheme: createAdaptiveTimePickerTheme(
                 isDark: true,
                 primaryColor: const Color(0xFF00F0D8),
+                onPrimaryColor: const Color(0xFF0A2342),
               ),
               datePickerTheme: createAdaptiveDatePickerTheme(
                 isDark: true,
                 primaryColor: const Color(0xFF00F0D8),
+                onPrimaryColor: const Color(0xFF0A2342),
               ),
             ),
             locale: Locale(provider.currentLanguage),

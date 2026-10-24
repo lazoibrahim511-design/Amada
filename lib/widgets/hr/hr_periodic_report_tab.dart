@@ -8,6 +8,7 @@ import '../../models/request_model.dart';
 import '../../providers/attendance_provider.dart';
 import '../../services/export_service.dart';
 import '../glass_container.dart';
+import '../compact_date_picker_dialog.dart';
 
 class HrPeriodicReportTab extends StatefulWidget {
   final String searchQuery;
@@ -140,22 +141,11 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
 
 
   Future<void> _pickDateRange() async {
-    final picked = await showDateRangePicker(
+    final picked = await showCompactDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
       initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF10B981),
-              brightness: Theme.of(context).brightness,
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
 
     if (picked != null) {

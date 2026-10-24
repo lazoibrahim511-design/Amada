@@ -10,6 +10,7 @@ import '../widgets/neu_button.dart';
 import '../widgets/avatar_image_helper.dart';
 import 'map_picker_screen.dart';
 import '../widgets/picker_theme.dart';
+import '../widgets/compact_date_picker_dialog.dart';
 
 import 'hr_management_screen.dart';
 import '../widgets/hr/hr_structures_tab.dart';
@@ -4640,12 +4641,11 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
     TextEditingController controller,
   ) async {
     final initialDate = DateTime.tryParse(controller.text) ?? DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showCompactDatePicker(
       context: context,
       initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
-      builder: buildAdaptivePickerTheme,
     );
     if (picked != null) {
       controller.text = DateFormat('yyyy-MM-dd').format(picked);
@@ -5274,7 +5274,7 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
               const SizedBox(height: 16),
               InkWell(
                 onTap: () async {
-                  final d = await showDatePicker(
+                  final d = await showCompactDatePicker(
                     context: context,
                     initialDate: selectedStartDate,
                     firstDate: DateTime(2020),
@@ -5315,7 +5315,7 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
               const SizedBox(height: 16),
               InkWell(
                 onTap: () async {
-                  final d = await showDatePicker(
+                  final d = await showCompactDatePicker(
                     context: context,
                     initialDate: selectedEndDate ?? DateTime.now(),
                     firstDate: DateTime(2020),
