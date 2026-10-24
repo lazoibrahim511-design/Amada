@@ -2169,6 +2169,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     AttendanceProvider provider,
     List<CompanyEmployee> subordinates,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final itemTextColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final menuBgColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+
     final seenIds = <String>{};
     final uniqueSubordinates =
         subordinates.where((e) => seenIds.add(e.id)).toList();
@@ -2177,7 +2181,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return GlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       child: Theme(
-        data: ThemeData.dark().copyWith(canvasColor: const Color(0xFF1E293B)),
+        data: (isDark ? ThemeData.dark() : ThemeData.light()).copyWith(
+          canvasColor: menuBgColor,
+          menuButtonTheme: MenuButtonThemeData(
+            style: MenuItemButton.styleFrom(
+              foregroundColor: itemTextColor,
+            ),
+          ),
+        ),
         child: DropdownMenu<String>(
           key: ValueKey('emp_dropdown_${activeId}_${uniqueSubordinates.length}'),
           initialSelection: activeId,
@@ -2186,19 +2197,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
           expandedInsets: EdgeInsets.zero,
           menuStyle: MenuStyle(
             backgroundColor: WidgetStateProperty.all(
-              (Theme.of(context).brightness == Brightness.dark
-                  ? const Color(0xFF1E293B).withValues(alpha: 0.98)
-                  : Colors.white.withValues(alpha: 0.98)),
+              menuBgColor.withValues(alpha: 0.98),
             ),
             elevation: WidgetStateProperty.all(8),
             shape: WidgetStateProperty.all(
               RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
-                  color:
-                      (Theme.of(context).textTheme.bodyLarge?.color ??
-                              Colors.black)
-                          .withValues(alpha: 0.1),
+                  color: (isDark ? Colors.white : Colors.black)
+                      .withValues(alpha: 0.1),
                 ),
               ),
             ),
@@ -2209,9 +2216,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             contentPadding: EdgeInsets.zero,
           ),
           textStyle: TextStyle(
-            color:
-                ((Theme.of(context).textTheme.bodyLarge?.color ??
-                Colors.black)),
+            color: itemTextColor,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -2219,6 +2224,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             return DropdownMenuEntry<String>(
               value: emp.id,
               label: '${emp.name} (${emp.position})',
+              style: MenuItemButton.styleFrom(
+                foregroundColor: itemTextColor,
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             );
           }).toList(),
           onSelected: (val) {
