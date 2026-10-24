@@ -175,6 +175,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     String leaveType = '';
     int approvedHourlyLeaveMinutes = 0;
     bool hasApprovedOt = false;
+    int approvedOtMinutes = 0;
     bool hasApprovedMissingPunch = false;
 
     for (var req in allRequests) {
@@ -222,6 +223,8 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
             }
             if (req.type == 'Overtime Approval') {
               hasApprovedOt = true;
+              final parsed = parseOvertimeApprovalDurationMinutes(req.duration);
+              approvedOtMinutes += (parsed > 0 ? parsed : 0);
             }
           }
         }
@@ -461,19 +464,33 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
 
         // Overtime
         if (extraTimeMinutes > 0 && hasApprovedOt) {
-          if (group != null) {
-            overtimeMinutes = group.calculateOvertimeMinutes(
-              dayExtraMinutes: extraTimeMinutes,
-              nightExtraMinutes: nightExtraMinutes,
-              isWeekend: !isWorkingDay,
-              isHoliday: holiday != null,
-            );
-          } else {
-            final baseOt = extraTimeMinutes.clamp(0, 480);
-            if (!isWorkingDay) {
-              overtimeMinutes = (baseOt * 1.5).toInt();
+          final effectiveOtExtra = approvedOtMinutes > 0
+              ? math.min(extraTimeMinutes, approvedOtMinutes)
+              : extraTimeMinutes;
+
+          if (effectiveOtExtra > 0) {
+            final nightPortion = extraTimeMinutes > 0
+                ? (nightExtraMinutes * (effectiveOtExtra / extraTimeMinutes)).round()
+                : 0;
+
+            if (group != null) {
+              overtimeMinutes = group.calculateOvertimeMinutes(
+                dayExtraMinutes: effectiveOtExtra,
+                nightExtraMinutes: nightPortion,
+                isWeekend: !isWorkingDay,
+                isHoliday: holiday != null,
+              );
             } else {
-              overtimeMinutes = baseOt;
+              final baseOt = effectiveOtExtra.clamp(0, 480);
+              if (!isWorkingDay) {
+                overtimeMinutes = (baseOt * 1.5).toInt();
+              } else {
+                overtimeMinutes = baseOt;
+              }
+            }
+
+            if (overtimeMinutes > 0) {
+              extraTimeMinutes = math.max(0, extraTimeMinutes - effectiveOtExtra);
             }
           }
         }

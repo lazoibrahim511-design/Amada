@@ -343,6 +343,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         int approvedHourlyLeaveMinutes = 0;
         List<HourlyLeaveTimeRange> approvedHourlyLeaveRanges = [];
         List<Request> allDayRequests = [];
+        int approvedOvertimeMinutes = 0;
+        bool hasApprovedOt = false;
         for (var req in requestsToCompile) {
           try {
             final dateStr = req.date;
@@ -381,6 +383,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   if (range != null) {
                     approvedHourlyLeaveRanges.add(range);
                   }
+                } else if (req.type == 'Overtime Approval') {
+                  hasApprovedOt = true;
+                  final mins = parseOvertimeApprovalDurationMinutes(req.duration);
+                  approvedOvertimeMinutes += mins > 0 ? mins : 0;
                 } else if (req.type.contains('Leave')) {
                   hasFullDayLeave = true;
                 }
@@ -768,25 +774,46 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
           // 5. Overtime calculation (based on extra time minutes and approved overtime requests)
           final dateStr = DateFormat('MMMM d, yyyy').format(date);
-          final hasApprovedOt = requestsToCompile.any(
+          final matchingOtReqs = requestsToCompile.where(
             (req) =>
                 req.type == 'Overtime Approval' &&
-                req.date == dateStr &&
-                req.status == 'Approved',
+                req.status == 'Approved' &&
+                (req.date == dateStr || req.date.startsWith(dateStr)),
           );
+          for (final req in matchingOtReqs) {
+            if (!dateApprovedRequests.contains(req)) {
+              hasApprovedOt = true;
+              final mins = parseOvertimeApprovalDurationMinutes(req.duration);
+              approvedOvertimeMinutes += mins > 0 ? mins : 0;
+            }
+          }
 
           if (extraTimeMinutes > 0 && hasApprovedOt) {
-            if (group != null) {
-              overtimeMinutes = group.calculateOvertimeMinutes(
-                dayExtraMinutes: extraTimeMinutes,
-                nightExtraMinutes: nightExtraMinutes,
-                isWeekend: !shift.isWorkingDay(date),
-                isHoliday: holiday != null,
-              );
-            } else {
-              final baseOt = extraTimeMinutes.clamp(0, 480);
-              final isWeekend = !shift.isWorkingDay(date);
-              overtimeMinutes = isWeekend ? (baseOt * 1.5).toInt() : baseOt;
+            final effectiveOtExtra = approvedOvertimeMinutes > 0
+                ? math.min(extraTimeMinutes, approvedOvertimeMinutes)
+                : extraTimeMinutes;
+
+            if (effectiveOtExtra > 0) {
+              final nightPortion = extraTimeMinutes > 0
+                  ? (nightExtraMinutes * (effectiveOtExtra / extraTimeMinutes)).round()
+                  : 0;
+
+              if (group != null) {
+                overtimeMinutes = group.calculateOvertimeMinutes(
+                  dayExtraMinutes: effectiveOtExtra,
+                  nightExtraMinutes: nightPortion,
+                  isWeekend: !shift.isWorkingDay(date),
+                  isHoliday: holiday != null,
+                );
+              } else {
+                final baseOt = effectiveOtExtra.clamp(0, 480);
+                final isWeekend = !shift.isWorkingDay(date);
+                overtimeMinutes = isWeekend ? (baseOt * 1.5).toInt() : baseOt;
+              }
+
+              if (overtimeMinutes > 0) {
+                extraTimeMinutes = math.max(0, extraTimeMinutes - effectiveOtExtra);
+              }
             }
           }
 
@@ -2451,6 +2478,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 label: provider.translate('deficit'),
                                 value: formatMinutes((rowData['deficit'] as int?) ?? 0),
                                 color: const Color(0xFFFF5C5C),
+                              ),
+                            if (((rowData['extraTime'] as int?) ?? 0) > 0)
+                              _buildDialogDayStat(
+                                label: provider.translate('extra_time'),
+                                value: formatMinutes((rowData['extraTime'] as int?) ?? 0),
+                                color: const Color(0xFFFF9800),
+                              ),
+                            if (((rowData['overtime'] as int?) ?? 0) > 0)
+                              _buildDialogDayStat(
+                                label: provider.translate('overtime'),
+                                value: formatMinutes((rowData['overtime'] as int?) ?? 0),
+                                color: const Color(0xFF00FF87),
                               ),
                           ],
                         ),

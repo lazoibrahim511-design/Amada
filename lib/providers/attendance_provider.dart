@@ -2237,15 +2237,18 @@ class AttendanceProvider with ChangeNotifier {
                 !r.type.toLowerCase().contains('hourly')),
       );
       int approvedHourlyMinutes = 0;
+      int approvedOtMinutes = 0;
+      bool hasApprovedOt = false;
       for (var r in dayApprovedRequests) {
         if (r.type == 'Hourly Leave' || r.type.toLowerCase().contains('hourly')) {
           final m = parseHourlyLeaveDurationMinutes(r.duration);
           approvedHourlyMinutes += m > 0 ? m : 60;
+        } else if (r.type == 'Overtime Approval') {
+          hasApprovedOt = true;
+          final m = parseOvertimeApprovalDurationMinutes(r.duration);
+          approvedOtMinutes += m > 0 ? m : 0;
         }
       }
-      final hasApprovedOt = dayApprovedRequests.any(
-        (r) => r.type == 'Overtime Approval',
-      );
 
       final holiday = _holidays.firstWhere(
         (h) {
@@ -2567,12 +2570,22 @@ class AttendanceProvider with ChangeNotifier {
 
         // Overtime
         if (dayExtra > 0 && hasApprovedOt && group.overtimeAllowed) {
-          totalOvertimeMinutes += group.calculateOvertimeMinutes(
-            dayExtraMinutes: dayExtra,
-            nightExtraMinutes: dayNightExtra,
-            isWeekend: !isWorkingDay,
-            isHoliday: isHoliday,
-          );
+          final effectiveOtExtra = approvedOtMinutes > 0
+              ? math.min(dayExtra, approvedOtMinutes)
+              : dayExtra;
+
+          if (effectiveOtExtra > 0) {
+            final effNight = dayExtra > 0
+                ? (dayNightExtra * (effectiveOtExtra / dayExtra)).round()
+                : 0;
+
+            totalOvertimeMinutes += group.calculateOvertimeMinutes(
+              dayExtraMinutes: effectiveOtExtra,
+              nightExtraMinutes: effNight,
+              isWeekend: !isWorkingDay,
+              isHoliday: isHoliday,
+            );
+          }
         }
 
         // Deficit on active day

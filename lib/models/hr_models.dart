@@ -1076,6 +1076,13 @@ int parseHourlyLeaveDurationMinutes(String raw) {
   return 0;
 }
 
+/// Parses duration string for Overtime Approval request into minutes.
+/// Supports "From 08:25 to 09:00 (0.6 Hours)", "From 08:25 to 09:00",
+/// "2.5 Hours", "35 Mins", "35", etc.
+int parseOvertimeApprovalDurationMinutes(String raw) {
+  return parseHourlyLeaveDurationMinutes(raw);
+}
+
 class HourlyLeaveTimeRange {
   final int startMinutes;
   final int endMinutes;
