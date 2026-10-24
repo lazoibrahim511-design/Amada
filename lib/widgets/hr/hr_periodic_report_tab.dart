@@ -264,6 +264,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
           date,
           emp: emp,
           recordsPool: empRecords,
+          requestsPool: empRequests,
         )..sort((a, b) => a.checkIn.compareTo(b.checkIn));
 
         final dayRequests = <Request>[];

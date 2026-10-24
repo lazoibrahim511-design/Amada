@@ -2089,11 +2089,195 @@ class AttendanceProvider with ChangeNotifier {
     return dayOfCheckIn;
   }
 
+  DateTime? _parseTimeToDateTime(DateTime baseDate, String tStr, WorkShift shift) {
+    try {
+      final clean = tStr.trim();
+      DateTime dt;
+      if (clean.toLowerCase().contains('am') || clean.toLowerCase().contains('pm')) {
+        dt = DateFormat('hh:mm a').parse(clean);
+      } else {
+        dt = DateFormat('HH:mm').parse(clean);
+      }
+      var result = DateTime(baseDate.year, baseDate.month, baseDate.day, dt.hour, dt.minute);
+      if (shift.isOvernightForDate(baseDate)) {
+        final cutoffStr = shift.getCrossMidnightCutoffForDate(baseDate);
+        final cParts = cutoffStr.split(':');
+        final cutoffMins = (int.tryParse(cParts[0]) ?? 3) * 60 +
+            (cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? 0) : 0);
+        final mins = dt.hour * 60 + dt.minute;
+        if (mins < cutoffMins) {
+          result = result.add(const Duration(days: 1));
+        }
+      }
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<AttendanceRecord> _reconcilePunchesWithMissingRequests({
+    required DateTime date,
+    required CompanyEmployee emp,
+    required WorkShift shift,
+    required List<AttendanceRecord> rawRecords,
+    required List<Request> missingPunchReqs,
+  }) {
+    final List<_PunchPoint> punches = [];
+    for (var rec in rawRecords) {
+      if (rec.checkIn == rec.checkOut) {
+        // Missed check-in; the punch is a clock-out
+        punches.add(_PunchPoint(rec.checkIn, false));
+      } else if (rec.checkOut == null) {
+        // Clock-in without check-out
+        punches.add(_PunchPoint(rec.checkIn, true));
+      } else {
+        // Normal pair
+        punches.add(_PunchPoint(rec.checkIn, true));
+        punches.add(_PunchPoint(rec.checkOut!, false));
+      }
+    }
+
+    final timeRegex = RegExp(r'(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)');
+    for (var req in missingPunchReqs) {
+      final dur = req.duration;
+      if (dur.contains('Clock In:') && dur.contains('Clock Out:')) {
+        final inPart = dur.split('Clock Out:')[0].replaceAll('Clock In:', '').trim();
+        final outPart = dur.split('Clock Out:')[1].trim();
+        final inDt = _parseTimeToDateTime(date, inPart, shift);
+        final outDt = _parseTimeToDateTime(date, outPart, shift);
+        if (inDt != null) punches.add(_PunchPoint(inDt, true));
+        if (outDt != null) punches.add(_PunchPoint(outDt, false));
+      } else if (dur.contains('Clock In:')) {
+        final inPart = dur.replaceAll('Clock In:', '').trim();
+        final inDt = _parseTimeToDateTime(date, inPart, shift);
+        if (inDt != null) punches.add(_PunchPoint(inDt, true));
+      } else if (dur.contains('Clock Out:')) {
+        final outPart = dur.replaceAll('Clock Out:', '').trim();
+        final outDt = _parseTimeToDateTime(date, outPart, shift);
+        if (outDt != null) punches.add(_PunchPoint(outDt, false));
+      } else if (dur.contains('-')) {
+        final parts = dur.split('-');
+        if (parts.length == 2) {
+          final inDt = _parseTimeToDateTime(date, parts[0].trim(), shift);
+          final outDt = _parseTimeToDateTime(date, parts[1].trim(), shift);
+          if (inDt != null) punches.add(_PunchPoint(inDt, true));
+          if (outDt != null) punches.add(_PunchPoint(outDt, false));
+        }
+      } else {
+        final match = timeRegex.firstMatch(dur);
+        if (match != null) {
+          final dt = _parseTimeToDateTime(date, match.group(1)!, shift);
+          if (dt != null) punches.add(_PunchPoint(dt, null));
+        }
+      }
+    }
+
+    punches.sort((a, b) => a.time.compareTo(b.time));
+
+    final List<_PunchPoint> cleanPunches = [];
+    for (var p in punches) {
+      if (cleanPunches.isEmpty) {
+        cleanPunches.add(p);
+      } else {
+        final last = cleanPunches.last;
+        if (p.time.difference(last.time).inMinutes.abs() <= 1) {
+          if (last.isClockIn == null && p.isClockIn != null) {
+            cleanPunches[cleanPunches.length - 1] = p;
+          }
+        } else {
+          cleanPunches.add(p);
+        }
+      }
+    }
+
+    final List<AttendanceRecord> reconciled = [];
+    if (cleanPunches.isEmpty) {
+      return rawRecords;
+    }
+
+    if (cleanPunches.length == 1) {
+      if (cleanPunches[0].isClockIn == false) {
+        reconciled.add(AttendanceRecord(
+          checkIn: cleanPunches[0].time,
+          checkOut: cleanPunches[0].time,
+          employeeId: emp.id,
+        ));
+      } else {
+        reconciled.add(AttendanceRecord(
+          checkIn: cleanPunches[0].time,
+          checkOut: null,
+          employeeId: emp.id,
+        ));
+      }
+      return reconciled;
+    }
+
+    if (cleanPunches.length % 2 == 0) {
+      for (int i = 0; i < cleanPunches.length; i += 2) {
+        reconciled.add(AttendanceRecord(
+          checkIn: cleanPunches[i].time,
+          checkOut: cleanPunches[i + 1].time,
+          employeeId: emp.id,
+        ));
+      }
+      return reconciled;
+    }
+
+    // Odd number of punches (> 1):
+    if (cleanPunches.first.isClockIn == false) {
+      reconciled.add(AttendanceRecord(
+        checkIn: cleanPunches.first.time,
+        checkOut: cleanPunches.first.time,
+        employeeId: emp.id,
+      ));
+      for (int i = 1; i < cleanPunches.length; i += 2) {
+        if (i + 1 < cleanPunches.length) {
+          reconciled.add(AttendanceRecord(
+            checkIn: cleanPunches[i].time,
+            checkOut: cleanPunches[i + 1].time,
+            employeeId: emp.id,
+          ));
+        } else {
+          reconciled.add(AttendanceRecord(
+            checkIn: cleanPunches[i].time,
+            checkOut: null,
+            employeeId: emp.id,
+          ));
+        }
+      }
+    } else {
+      for (int i = 0; i < cleanPunches.length - 1; i += 2) {
+        reconciled.add(AttendanceRecord(
+          checkIn: cleanPunches[i].time,
+          checkOut: cleanPunches[i + 1].time,
+          employeeId: emp.id,
+        ));
+      }
+      final last = cleanPunches.last;
+      if (last.isClockIn == false) {
+        reconciled.add(AttendanceRecord(
+          checkIn: last.time,
+          checkOut: last.time,
+          employeeId: emp.id,
+        ));
+      } else {
+        reconciled.add(AttendanceRecord(
+          checkIn: last.time,
+          checkOut: null,
+          employeeId: emp.id,
+        ));
+      }
+    }
+
+    return reconciled;
+  }
+
   List<AttendanceRecord> getRecordsForDate(
     DateTime date, {
     required CompanyEmployee emp,
     List<AttendanceRecord>? recordsPool,
     List<Request>? requestsPool,
+    bool includeApprovedMissingPunches = true,
   }) {
     final pool = recordsPool ??
         ((emp.id == _employeeId)
@@ -2106,12 +2290,100 @@ class AttendanceProvider with ChangeNotifier {
                      r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
                 .toList());
 
-    return pool.where((rec) {
+    final rawRecords = pool.where((rec) {
       final effDate = getEffectiveDateForRecord(rec, emp);
       return effDate.year == date.year &&
           effDate.month == date.month &&
           effDate.day == date.day;
     }).toList();
+
+    if (!includeApprovedMissingPunches) {
+      return rawRecords;
+    }
+
+    final reqPool = requestsPool ??
+        _allRequestsMap[emp.id] ??
+        ((emp.id == _employeeId)
+            ? requests
+            : _allCompanyRequests
+                .where((r) =>
+                    r.employeeId != null &&
+                    (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
+                     r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
+                     r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+                .toList());
+
+    final shift = getShiftForDate(emp, date);
+    final isOvernight = shift.isOvernightForDate(date);
+
+    final missingPunchReqs = <Request>[];
+    for (final req in reqPool) {
+      if (req.type != 'Missing Punch' &&
+          req.type != 'Forgot to Clock In' &&
+          req.type != 'Forgot to Clock Out') {
+        continue;
+      }
+      if (req.status != 'Approved') continue;
+
+      DateTime? rDate;
+      try {
+        final dStr = req.date.split(' - ').first.trim();
+        if (dStr.contains(',')) {
+          rDate = DateFormat('MMMM d, yyyy').parse(dStr);
+        } else if (dStr.contains('/')) {
+          final slashParts = dStr.split('/');
+          if (slashParts.length == 3) {
+            try {
+              rDate = DateFormat('dd/MM/yyyy').parse(dStr);
+            } catch (_) {
+              rDate = DateFormat('MM/dd/yyyy').parse(dStr);
+            }
+          }
+        } else {
+          rDate = DateTime.tryParse(dStr);
+        }
+      } catch (_) {}
+      if (rDate == null) continue;
+
+      if (DateUtils.isSameDay(rDate, date)) {
+        missingPunchReqs.add(req);
+        continue;
+      }
+
+      if (isOvernight &&
+          DateUtils.isSameDay(rDate, date.add(const Duration(days: 1)))) {
+        final dur = req.duration;
+        final timeStr = dur
+            .replaceAll('Clock In:', '')
+            .replaceAll('Clock Out:', '')
+            .trim();
+        try {
+          final parsedTime = timeStr.contains('AM') || timeStr.contains('PM')
+              ? DateFormat('hh:mm a').parse(timeStr)
+              : DateFormat('HH:mm').parse(timeStr);
+          final punchMins = parsedTime.hour * 60 + parsedTime.minute;
+          final cutoffStr = shift.getCrossMidnightCutoffForDate(date);
+          final cParts = cutoffStr.split(':');
+          final cutoffMins = (int.tryParse(cParts[0]) ?? 3) * 60 +
+              (cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? 0) : 0);
+          if (punchMins < cutoffMins) {
+            missingPunchReqs.add(req);
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (missingPunchReqs.isEmpty) {
+      return rawRecords;
+    }
+
+    return _reconcilePunchesWithMissingRequests(
+      date: date,
+      emp: emp,
+      shift: shift,
+      rawRecords: rawRecords,
+      missingPunchReqs: missingPunchReqs,
+    );
   }
 
   PayrollReport generatePayrollReport(
@@ -2218,6 +2490,7 @@ class AttendanceProvider with ChangeNotifier {
         date,
         emp: emp,
         recordsPool: employeeRecords,
+        requestsPool: employeeRequests,
       );
 
       final hasRecord = dayRecords.isNotEmpty;
@@ -3827,6 +4100,7 @@ class AttendanceProvider with ChangeNotifier {
       _allCompanyRequests[cIdx] = updatedReq;
     }
 
+    recalculateAllStats();
     notifyListeners();
 
     final reqForBalance = updatedReq ?? existing;
@@ -5045,4 +5319,10 @@ extension PayrollReportExt on PayrollReport {
       currency: currency,
     );
   }
+}
+
+class _PunchPoint {
+  final DateTime time;
+  final bool? isClockIn;
+  _PunchPoint(this.time, [this.isClockIn]);
 }

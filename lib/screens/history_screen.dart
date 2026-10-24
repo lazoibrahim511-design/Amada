@@ -484,19 +484,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final hasApprovedMissingPunch = missingPunchReqs.isNotEmpty;
 
         List<String> missingPunchTimes = [];
+        final timeRegex = RegExp(r'(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)');
         for (var req in missingPunchReqs) {
           final duration = req.duration;
-          if (duration.contains('Clock In:') ||
-              duration.contains('Clock Out:')) {
-            final timeStr = duration
-                .replaceAll('Clock In:', '')
-                .replaceAll('Clock Out:', '')
-                .trim();
+          final matches = timeRegex.allMatches(duration);
+          for (var m in matches) {
+            final tStr = m.group(1)!;
             try {
-              final parsedTime =
-                  timeStr.contains('AM') || timeStr.contains('PM')
-                  ? DateFormat('hh:mm a').parse(timeStr)
-                  : DateFormat('HH:mm').parse(timeStr);
+              final parsedTime = tStr.contains('AM') || tStr.contains('PM')
+                  ? DateFormat('hh:mm a').parse(tStr)
+                  : DateFormat('HH:mm').parse(tStr);
               missingPunchTimes.add(DateFormat('HH:mm').format(parsedTime));
             } catch (_) {}
           }
