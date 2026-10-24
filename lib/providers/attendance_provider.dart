@@ -3131,44 +3131,47 @@ class AttendanceProvider with ChangeNotifier {
     final cleanId = empId.trim();
     if (cleanId.isEmpty) return [];
 
+    // Find matching employee to check all identifier variants (id, name, email)
+    final match = _employees.firstWhere(
+      (e) =>
+          e.id.toLowerCase() == cleanId.toLowerCase() ||
+          e.email.toLowerCase() == cleanId.toLowerCase() ||
+          e.name.toLowerCase() == cleanId.toLowerCase(),
+      orElse: () => CompanyEmployee(id: '', name: '', email: '', position: ''),
+    );
+
+    final candidateIds = <String>{cleanId.toLowerCase()};
+    if (match.id.isNotEmpty) candidateIds.add(match.id.toLowerCase());
+    if (match.name.isNotEmpty) candidateIds.add(match.name.toLowerCase());
+    if (match.email.isNotEmpty) candidateIds.add(match.email.toLowerCase());
+
     // 1. If requesting current user and in-memory records are present
-    if (cleanId.toLowerCase() == _employeeId.toLowerCase() && _records.isNotEmpty) {
+    if (candidateIds.contains(_employeeId.toLowerCase()) && _records.isNotEmpty) {
       return _records;
     }
 
-    // 2. Direct Firestore query
+    // 2. Direct Firestore query across candidate identifiers
     if (_firebaseService.isAvailable) {
-      final fetched = await _firebaseService.getUserRecords(cleanId);
-      if (fetched.isNotEmpty) {
-        return fetched;
-      }
-
-      // Check if cleanId matches an employee's name or email or alternative id
-      final match = _employees.firstWhere(
-        (e) => e.id.toLowerCase() == cleanId.toLowerCase() ||
-               e.email.toLowerCase() == cleanId.toLowerCase() ||
-               e.name.toLowerCase() == cleanId.toLowerCase(),
-        orElse: () => CompanyEmployee(id: '', name: '', email: '', position: ''),
-      );
-      if (match.id.isNotEmpty && match.id.toLowerCase() != cleanId.toLowerCase()) {
-        final altFetched = await _firebaseService.getUserRecords(match.id);
-        if (altFetched.isNotEmpty) {
-          return altFetched;
+      for (final idToTry in candidateIds) {
+        final fetched = await _firebaseService.getUserRecords(idToTry);
+        if (fetched.isNotEmpty) {
+          return fetched;
         }
       }
     }
 
     // 3. Check in-memory company records
     final fromAll = _allCompanyRecords
-        .where((r) => r.employeeId != null &&
-            r.employeeId!.trim().toLowerCase() == cleanId.toLowerCase())
+        .where((r) =>
+            r.employeeId != null &&
+            candidateIds.contains(r.employeeId!.trim().toLowerCase()))
         .toList();
     if (fromAll.isNotEmpty) {
       return fromAll;
     }
 
-    // 4. Fallback if cleanId matches current employee
-    if (cleanId.toLowerCase() == _employeeId.toLowerCase()) {
+    // 4. Fallback if candidate matches current employee
+    if (candidateIds.contains(_employeeId.toLowerCase())) {
       return _records;
     }
     return [];
@@ -3209,29 +3212,33 @@ class AttendanceProvider with ChangeNotifier {
     final cleanId = empId.trim();
     if (cleanId.isEmpty) return [];
 
-    if (_firebaseService.isAvailable) {
-      final fetched = await _firebaseService.getUserRequests(cleanId);
-      if (fetched.isNotEmpty) {
-        _allRequestsMap[cleanId] = fetched;
-        return fetched;
-      }
+    final match = _employees.firstWhere(
+      (e) =>
+          e.id.toLowerCase() == cleanId.toLowerCase() ||
+          e.email.toLowerCase() == cleanId.toLowerCase() ||
+          e.name.toLowerCase() == cleanId.toLowerCase(),
+      orElse: () => CompanyEmployee(id: '', name: '', email: '', position: ''),
+    );
 
-      final match = _employees.firstWhere(
-        (e) => e.id.toLowerCase() == cleanId.toLowerCase() ||
-               e.email.toLowerCase() == cleanId.toLowerCase(),
-        orElse: () => CompanyEmployee(id: '', name: '', email: '', position: ''),
-      );
-      if (match.id.isNotEmpty && match.id.toLowerCase() != cleanId.toLowerCase()) {
-        final altFetched = await _firebaseService.getUserRequests(match.id);
-        if (altFetched.isNotEmpty) {
-          _allRequestsMap[cleanId] = altFetched;
-          return altFetched;
+    final candidateIds = <String>{cleanId.toLowerCase()};
+    if (match.id.isNotEmpty) candidateIds.add(match.id.toLowerCase());
+    if (match.name.isNotEmpty) candidateIds.add(match.name.toLowerCase());
+    if (match.email.isNotEmpty) candidateIds.add(match.email.toLowerCase());
+
+    if (_firebaseService.isAvailable) {
+      for (final idToTry in candidateIds) {
+        final fetched = await _firebaseService.getUserRequests(idToTry);
+        if (fetched.isNotEmpty) {
+          _allRequestsMap[cleanId] = fetched;
+          return fetched;
         }
       }
     }
+
     final fromAll = _allCompanyRequests
-        .where((r) => r.employeeId != null &&
-            r.employeeId!.trim().toLowerCase() == cleanId.toLowerCase())
+        .where((r) =>
+            r.employeeId != null &&
+            candidateIds.contains(r.employeeId!.trim().toLowerCase()))
         .toList();
     if (fromAll.isNotEmpty) {
       _allRequestsMap[cleanId] = fromAll;

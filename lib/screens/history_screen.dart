@@ -36,11 +36,37 @@ class _HistoryScreenState extends State<HistoryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = Provider.of<AttendanceProvider>(context, listen: false);
-      final targetId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
+      final subordinates = _getSubordinates(provider);
+      final targetId = _resolveActiveEmployeeId(provider, subordinates);
       if (targetId.isNotEmpty) {
+        if (_selectedEmployeeId != targetId) {
+          setState(() {
+            _selectedEmployeeId = targetId;
+          });
+        }
         _loadSubordinateRecords(provider, targetId);
       }
     });
+  }
+
+  String _resolveActiveEmployeeId(
+    AttendanceProvider provider,
+    List<CompanyEmployee> subordinates,
+  ) {
+    if (_selectedEmployeeId != null &&
+        subordinates.any((e) => e.id == _selectedEmployeeId)) {
+      return _selectedEmployeeId!;
+    }
+    final current = provider.currentEmployee;
+    if (current != null &&
+        !AttendanceProvider.isSuperAdminUser(current) &&
+        subordinates.any((e) => e.id == current.id)) {
+      return current.id;
+    }
+    if (subordinates.isNotEmpty) {
+      return subordinates.first.id;
+    }
+    return current?.id ?? provider.employeeId;
   }
 
   @override
@@ -156,6 +182,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final provider = Provider.of<AttendanceProvider>(context);
 
     final subordinates = _getSubordinates(provider);
+    final activeEmpId = _resolveActiveEmployeeId(provider, subordinates);
+    if (_selectedEmployeeId != activeEmpId) {
+      _selectedEmployeeId = activeEmpId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && activeEmpId.isNotEmpty) {
+          _loadSubordinateRecords(provider, activeEmpId);
+        }
+      });
+    }
 
     // Monthly Report Data Compilation Logic
     List<Map<String, dynamic>> compiledData = [];
@@ -169,7 +204,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         (index) => DateTime(_reportMonth.year, _reportMonth.month, index + 1),
       );
 
-      final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
       final isCurrentUser = activeEmpId == provider.currentEmployee?.id ||
           activeEmpId == provider.employeeId;
 
@@ -1063,13 +1097,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           Expanded(
                             child: Align(
                               alignment: AlignmentDirectional.centerStart,
-                              child: provider.currentEmployee != null
+                              child: subordinates.isNotEmpty
                                   ? ConstrainedBox(
                                       constraints: const BoxConstraints(maxWidth: 320),
-                                      child: _buildEmployeeDropdown(provider, [
-                                        provider.currentEmployee!,
-                                        ...subordinates,
-                                      ]),
+                                      child: _buildEmployeeDropdown(provider, subordinates),
                                     )
                                   : const SizedBox.shrink(),
                             ),
@@ -1081,11 +1112,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _buildRefreshButton(provider),
+                                  _buildRefreshButton(provider, subordinates),
                                   const SizedBox(width: 8),
-                                  _buildExportButton(provider, compiledData),
+                                  _buildExportButton(provider, subordinates, compiledData),
                                   const SizedBox(width: 12),
-                                  _buildAddRequestButton(provider),
+                                  _buildAddRequestButton(provider, subordinates),
                                 ],
                               ),
                             ),
@@ -1098,20 +1129,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         children: [
                           Row(
                             children: [
-                              if (provider.currentEmployee != null) ...[
+                              if (subordinates.isNotEmpty) ...[
                                 Expanded(
-                                  child: _buildEmployeeDropdown(provider, [
-                                    provider.currentEmployee!,
-                                    ...subordinates,
-                                  ]),
+                                  child: _buildEmployeeDropdown(provider, subordinates),
                                 ),
                                 const SizedBox(width: 8),
                               ],
-                              _buildRefreshButton(provider),
+                              _buildRefreshButton(provider, subordinates),
                               const SizedBox(width: 8),
-                              _buildExportButton(provider, compiledData),
+                              _buildExportButton(provider, subordinates, compiledData),
                               const SizedBox(width: 8),
-                              _buildAddRequestButton(provider, isCompact: constraints.maxWidth < 420),
+                              _buildAddRequestButton(provider, subordinates, isCompact: constraints.maxWidth < 420),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -1489,6 +1517,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildReportTable(List<Map<String, dynamic>> compiledData) {
     final provider = Provider.of<AttendanceProvider>(context);
+    final subordinates = _getSubordinates(provider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final bodyTextColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
@@ -1597,9 +1626,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           Expanded(
                             child: RefreshIndicator(
                               onRefresh: () async {
-                                final activeEmpId = _selectedEmployeeId ??
-                                    provider.currentEmployee?.id ??
-                                    provider.employeeId;
+                                final activeEmpId = _resolveActiveEmployeeId(
+                                  provider,
+                                  subordinates,
+                                );
                                 if (activeEmpId.isNotEmpty) {
                                   _loadSubordinateRecords(provider, activeEmpId);
                                 }
@@ -2139,13 +2169,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
     AttendanceProvider provider,
     List<CompanyEmployee> subordinates,
   ) {
+    final seenIds = <String>{};
+    final uniqueSubordinates =
+        subordinates.where((e) => seenIds.add(e.id)).toList();
+    final activeId = _resolveActiveEmployeeId(provider, uniqueSubordinates);
+
     return GlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       child: Theme(
         data: ThemeData.dark().copyWith(canvasColor: const Color(0xFF1E293B)),
         child: DropdownMenu<String>(
-          initialSelection:
-              _selectedEmployeeId ?? provider.currentEmployee?.id,
+          key: ValueKey('emp_dropdown_${activeId}_${uniqueSubordinates.length}'),
+          initialSelection: activeId,
           enableFilter: true,
           enableSearch: true,
           expandedInsets: EdgeInsets.zero,
@@ -2180,7 +2215,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
-          dropdownMenuEntries: subordinates.map((emp) {
+          dropdownMenuEntries: uniqueSubordinates.map((emp) {
             return DropdownMenuEntry<String>(
               value: emp.id,
               label: '${emp.name} (${emp.position})',
@@ -2188,13 +2223,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
           }).toList(),
           onSelected: (val) {
             if (val != null) {
-              setState(() {
-                _selectedEmployeeId = val;
-                _selectedDate = null;
-                _subordinateRecords = [];
-                _subordinateRequests = [];
-              });
-              _loadSubordinateRecords(provider, val);
+              if (_selectedEmployeeId != val) {
+                setState(() {
+                  _selectedEmployeeId = val;
+                  _selectedDate = null;
+                  _subordinateRecords = [];
+                  _subordinateRequests = [];
+                });
+                _loadSubordinateRecords(provider, val);
+              } else if (_subordinateRecords.isEmpty) {
+                _loadSubordinateRecords(provider, val);
+              }
             }
           },
         ),
@@ -2202,7 +2241,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildRefreshButton(AttendanceProvider provider) {
+  Widget _buildRefreshButton(
+    AttendanceProvider provider,
+    List<CompanyEmployee> subordinates,
+  ) {
     return NeuIconButton(
       size: 44,
       variant: NeuButtonVariant.whitePill,
@@ -2220,9 +2262,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       onPressed: _isLoadingSubordinate
           ? null
           : () async {
-              final activeEmpId = _selectedEmployeeId ??
-                  provider.currentEmployee?.id ??
-                  provider.employeeId;
+              final activeEmpId = _resolveActiveEmployeeId(provider, subordinates);
               if (activeEmpId.isNotEmpty) {
                 _loadSubordinateRecords(provider, activeEmpId);
               }
@@ -2231,9 +2271,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildAddRequestButton(
-    AttendanceProvider provider, {
+    AttendanceProvider provider,
+    List<CompanyEmployee> subordinates, {
     bool isCompact = false,
   }) {
+    final activeEmpId = _resolveActiveEmployeeId(provider, subordinates);
     final isClosed = _selectedDate != null && provider.isMonthClosed(_selectedDate!);
     if (isCompact) {
       return NeuIconButton(
@@ -2254,10 +2296,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 showNewRequestDialog(
                   context: context,
                   provider: provider,
-                  initialEmployeeId: _selectedEmployeeId,
+                  initialEmployeeId: activeEmpId,
                   initialDate: _selectedDate,
                   onSubmitted: () {
-                    final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
                     _loadSubordinateRecords(provider, activeEmpId);
                   },
                 );
@@ -2278,10 +2319,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               showNewRequestDialog(
                 context: context,
                 provider: provider,
-                initialEmployeeId: _selectedEmployeeId,
+                initialEmployeeId: activeEmpId,
                 initialDate: _selectedDate,
                 onSubmitted: () {
-                  final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
                   _loadSubordinateRecords(provider, activeEmpId);
                 },
               );
@@ -2293,6 +2333,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildExportButton(
     AttendanceProvider provider,
+    List<CompanyEmployee> subordinates,
     List<Map<String, dynamic>> records,
   ) {
     return NeuIconButton(
@@ -2301,12 +2342,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
       tooltip: 'Export PDF',
       icon: const Icon(Icons.file_download_outlined, size: 20),
       onPressed: () async {
-        final employee = _selectedEmployeeId != null
-            ? provider.employees.firstWhere(
-                (e) => e.id == _selectedEmployeeId,
-                orElse: () => provider.currentEmployee!,
-              )
-            : provider.currentEmployee!;
+        final activeEmpId = _resolveActiveEmployeeId(provider, subordinates);
+        final employee = provider.employees.firstWhere(
+          (e) => e.id == activeEmpId,
+          orElse: () => provider.currentEmployee ?? CompanyEmployee(id: activeEmpId, name: 'Employee', email: '', position: ''),
+        );
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Exporting attendance history...')),
@@ -2573,13 +2613,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       NeuButton(
                                         onPressed: () {
                                           Navigator.of(ctx).pop();
+                                          final activeEmpId = _resolveActiveEmployeeId(provider, _getSubordinates(provider));
                                           showNewRequestDialog(
                                             context: context,
                                             provider: provider,
-                                            initialEmployeeId: _selectedEmployeeId,
+                                            initialEmployeeId: activeEmpId,
                                             initialDate: date,
                                             onSubmitted: () {
-                                              final activeEmpId = _selectedEmployeeId ?? provider.currentEmployee?.id ?? provider.employeeId;
                                               _loadSubordinateRecords(provider, activeEmpId);
                                             },
                                           );
@@ -2677,10 +2717,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
                                       if (confirm != true) return;
 
-                                      final empId = req.employeeId ??
-                                          _selectedEmployeeId ??
-                                          provider.currentEmployee?.id ??
-                                          provider.employeeId;
+                                      final activeEmpId = _resolveActiveEmployeeId(provider, _getSubordinates(provider));
+                                      final empId = req.employeeId ?? activeEmpId;
 
                                       await provider.deleteRequest(empId, req.id);
 
@@ -2689,9 +2727,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         rowData['requests'] = requests;
                                       });
 
-                                      final activeEmpId = _selectedEmployeeId ??
-                                          provider.currentEmployee?.id ??
-                                          provider.employeeId;
                                       _loadSubordinateRecords(provider, activeEmpId);
 
                                       if (context.mounted) {
