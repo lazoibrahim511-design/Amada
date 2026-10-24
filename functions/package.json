@@ -1,6 +1,6 @@
 {
   "name": "attendance-functions",
-  "description": "Cloud Functions for Attendance App",
+  "description": "Cloud Functions for Amada",
   "scripts": {
     "serve": "firebase serve --only functions",
     "shell": "firebase functions:shell",
