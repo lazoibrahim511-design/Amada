@@ -4254,7 +4254,7 @@ class AttendanceProvider with ChangeNotifier {
 
   Future<void> addStructure(dynamic struct) async {
     final OrgStructure item = (struct is OrgStructure)
-        ? (struct.companyCode != _currentCompanyCode
+        ? ((struct.companyCode.isEmpty || struct.companyCode == 'all') && _currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all'
             ? struct.copyWith(companyCode: _currentCompanyCode)
             : struct)
         : struct;
@@ -4283,7 +4283,7 @@ class AttendanceProvider with ChangeNotifier {
 
   Future<void> addShift(dynamic shift) async {
     final WorkShift item = (shift is WorkShift)
-        ? (shift.companyCode != _currentCompanyCode
+        ? ((shift.companyCode.isEmpty || shift.companyCode == 'all') && _currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all'
             ? shift.copyWith(companyCode: _currentCompanyCode)
             : shift)
         : shift;
@@ -4312,7 +4312,7 @@ class AttendanceProvider with ChangeNotifier {
 
   Future<void> addGroup(dynamic group) async {
     final EmployeeGroup item = (group is EmployeeGroup)
-        ? (group.companyCode != _currentCompanyCode
+        ? ((group.companyCode.isEmpty || group.companyCode == 'all') && _currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all'
             ? group.copyWith(companyCode: _currentCompanyCode)
             : group)
         : group;

@@ -1580,15 +1580,21 @@ DateTime? _parseRequestStartDate(String dateStr) {
       content: StatefulBuilder(
         builder: (context, setDialogState) {
           final isOvertime = selectedType == 'Overtime Approval';
+          final parsedDate = _parseRequestStartDate(dateController.text) ?? today;
+          final activeGroupId = provider.getGroupIdForDate(selectedEmployee, parsedDate) ??
+              selectedEmployee.groupId;
           final group = provider.groups.firstWhere(
-            (g) => g.id == selectedEmployee.groupId,
-            orElse: () => EmployeeGroup(
-              id: '',
-              name: 'None',
-              shiftId: '',
-              overtimeAllowed: false,
-              minOvertimeMinutes: 0,
-              maxOvertimeMinutes: 0,
+            (g) => g.id == activeGroupId,
+            orElse: () => provider.groups.firstWhere(
+              (g) => g.id == selectedEmployee.groupId,
+              orElse: () => EmployeeGroup(
+                id: '',
+                name: 'None',
+                shiftId: '',
+                overtimeAllowed: false,
+                minOvertimeMinutes: 0,
+                maxOvertimeMinutes: 0,
+              ),
             ),
           );
 
@@ -2212,7 +2218,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
                                 )
                                 .replaceAll(
                                   '{max}',
-                                  group.maxOvertimeMinutes.toString(),
+                                  group.maxOvertimeMinutes > 0
+                                      ? group.maxOvertimeMinutes.toString()
+                                      : '∞',
                                 ),
                             style: TextStyle(
                               color: Colors.white70,
@@ -2395,18 +2403,30 @@ DateTime? _parseRequestStartDate(String dateStr) {
                           return;
                         }
 
-                        if (minutes < group.minOvertimeMinutes ||
-                            minutes > group.maxOvertimeMinutes) {
+                        final submitDate = _parseRequestStartDate(dateController.text) ?? today;
+                        final submitGroupId = provider.getGroupIdForDate(selectedEmployee, submitDate) ??
+                            selectedEmployee.groupId;
+                        final submitGroup = provider.groups.firstWhere(
+                          (g) => g.id == submitGroupId,
+                          orElse: () => group,
+                        );
+
+                        if ((submitGroup.minOvertimeMinutes > 0 &&
+                                minutes < submitGroup.minOvertimeMinutes) ||
+                            (submitGroup.maxOvertimeMinutes > 0 &&
+                                minutes > submitGroup.maxOvertimeMinutes)) {
                           setDialogState(() {
                             errorMessage = provider
                                 .translate('overtime_limit_error')
                                 .replaceAll(
                                   '{min}',
-                                  group.minOvertimeMinutes.toString(),
+                                  submitGroup.minOvertimeMinutes.toString(),
                                 )
                                 .replaceAll(
                                   '{max}',
-                                  group.maxOvertimeMinutes.toString(),
+                                  submitGroup.maxOvertimeMinutes > 0
+                                      ? submitGroup.maxOvertimeMinutes.toString()
+                                      : '∞',
                                 );
                           });
                           return;

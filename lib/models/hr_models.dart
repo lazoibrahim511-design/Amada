@@ -937,7 +937,9 @@ class EmployeeGroup {
     if (!overtimeAllowed || dayExtraMinutes <= 0) return 0;
     if (dayExtraMinutes < minOvertimeMinutes) return 0;
 
-    final baseOt = dayExtraMinutes.clamp(0, maxOvertimeMinutes);
+    final baseOt = maxOvertimeMinutes > 0
+        ? dayExtraMinutes.clamp(0, maxOvertimeMinutes)
+        : dayExtraMinutes;
     final double standardRatio;
     if (isHoliday) {
       standardRatio = holidayOvertimeRatio;
