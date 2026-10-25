@@ -462,6 +462,26 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     final structures = provider.structures;
     final employees = provider.employees;
 
+    // Deduplicate structures by id and filter out empty ids
+    final uniqueStructures = <String, OrgStructure>{};
+    for (final s in structures) {
+      final cleanId = s.id.trim();
+      if (cleanId.isNotEmpty && !uniqueStructures.containsKey(cleanId)) {
+        uniqueStructures[cleanId] = s;
+      }
+    }
+    final validStructures = uniqueStructures.values.toList();
+
+    // Deduplicate employees by id and filter out empty ids
+    final uniqueEmployees = <String, CompanyEmployee>{};
+    for (final e in employees) {
+      final cleanId = e.id.trim();
+      if (cleanId.isNotEmpty && !uniqueEmployees.containsKey(cleanId)) {
+        uniqueEmployees[cleanId] = e;
+      }
+    }
+    final validEmployees = uniqueEmployees.values.toList();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -498,8 +518,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               onTap: () {
                 setState(() {
                   _selectedScope = 'structure';
-                  if (structures.isNotEmpty && _selectedStructureId == null) {
-                    _selectedStructureId = structures.first.id;
+                  if (validStructures.isNotEmpty &&
+                      (_selectedStructureId == null || !validStructures.any((s) => s.id == _selectedStructureId))) {
+                    _selectedStructureId = validStructures.first.id;
                   }
                   _selectedEmployeeId = null;
                 });
@@ -514,8 +535,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               onTap: () {
                 setState(() {
                   _selectedScope = 'employee';
-                  if (employees.isNotEmpty && _selectedEmployeeId == null) {
-                    _selectedEmployeeId = employees.first.id;
+                  if (validEmployees.isNotEmpty &&
+                      (_selectedEmployeeId == null || !validEmployees.any((e) => e.id == _selectedEmployeeId))) {
+                    _selectedEmployeeId = validEmployees.first.id;
                   }
                   _selectedStructureId = null;
                 });
@@ -523,7 +545,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               isDark: isDark,
             ),
 
-            if (_selectedScope == 'structure' && structures.isNotEmpty) ...[
+            if (_selectedScope == 'structure' && validStructures.isNotEmpty) ...[
               const SizedBox(width: 14),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -534,17 +556,19 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedStructureId ?? structures.first.id,
+                    value: validStructures.any((s) => s.id == _selectedStructureId)
+                        ? _selectedStructureId
+                        : validStructures.first.id,
                     dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: isDark ? Colors.white : const Color(0xFF0F172A),
                     ),
-                    items: structures
+                    items: validStructures
                         .map((s) => DropdownMenuItem(
                               value: s.id,
-                              child: Text(s.name),
+                              child: Text(s.name.isNotEmpty ? s.name : s.id),
                             ))
                         .toList(),
                     onChanged: (val) {
@@ -555,7 +579,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               ),
             ],
 
-            if (_selectedScope == 'employee' && employees.isNotEmpty) ...[
+            if (_selectedScope == 'employee' && validEmployees.isNotEmpty) ...[
               const SizedBox(width: 14),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -566,17 +590,19 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _selectedEmployeeId ?? employees.first.id,
+                    value: validEmployees.any((e) => e.id == _selectedEmployeeId)
+                        ? _selectedEmployeeId
+                        : validEmployees.first.id,
                     dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: isDark ? Colors.white : const Color(0xFF0F172A),
                     ),
-                    items: employees
+                    items: validEmployees
                         .map((e) => DropdownMenuItem(
                               value: e.id,
-                              child: Text(e.name),
+                              child: Text(e.name.isNotEmpty ? e.name : e.id),
                             ))
                         .toList(),
                     onChanged: (val) {
