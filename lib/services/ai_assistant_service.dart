@@ -347,7 +347,7 @@ CRITICAL LANGUAGE DIRECTIVE (MANDATORY):
 - You MUST generate your entire answer in authentic Sorani Kurdish (زمانی کوردی سۆرانی).
 - Every title, bullet point, explanation, analysis, number description, and advice MUST be written in Sorani Kurdish.
 - Even if the prompt is in English or Arabic, you MUST formulate and write your ENTIRE reply in fluent Sorani Kurdish.
-- Use natural Kurdish HR terms: ئامادەبوون، کاتژمێری زیادە، کەمی دەوام، مۆڵەتی بێ مووچە، مووچەی بنەڕەتی، لێبڕین، پاداشت، بەشەکان، دەوامەکان.
+- Output ONLY the final Kurdish answer. DO NOT output any English thinking process, planning notes, or scratchpads in your response.
 - DO NOT answer in English or Arabic.
 ''';
     } else if (cleanLang == 'ar' || cleanLang.startsWith('ar')) {
@@ -517,11 +517,30 @@ CRITICAL RULES:
         final candidates = decoded['candidates'] as List?;
         if (candidates != null && candidates.isNotEmpty) {
           final content = candidates[0]['content'];
-          final parts = content?['parts'] as List?;
-          if (parts != null && parts.isNotEmpty) {
-            final text = parts[0]['text']?.toString().trim();
-            if (text != null && text.isNotEmpty) {
+          final parts = (content?['parts'] as List?) ?? [];
+
+          // 1. Separate actual answer parts from internal thinking / reasoning (where thought == true)
+          final nonThoughtParts = parts.where((p) => p is Map && p['thought'] != true).toList();
+
+          if (nonThoughtParts.isNotEmpty) {
+            final text = nonThoughtParts
+                .map((p) => (p as Map)['text']?.toString() ?? '')
+                .where((t) => t.trim().isNotEmpty)
+                .join('\n\n')
+                .trim();
+            if (text.isNotEmpty) {
               return text;
+            }
+          }
+
+          // 2. Fallback if every part was marked as thought: use the last non-empty part
+          for (int i = parts.length - 1; i >= 0; i--) {
+            final p = parts[i];
+            if (p is Map) {
+              final text = p['text']?.toString().trim();
+              if (text != null && text.isNotEmpty) {
+                return text;
+              }
             }
           }
         }
