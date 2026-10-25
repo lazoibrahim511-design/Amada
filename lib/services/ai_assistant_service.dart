@@ -37,10 +37,17 @@ class AiAssistantService {
     _cachedApiVersion = null;
   }
 
-  /// Retrieves the API key from SharedPreferences, falling back to CompanyProfile key if available.
-  static Future<String?> getApiKey({String? profileKey}) async {
+  /// Retrieves the API key from SharedPreferences (per-user or global),
+  /// falling back to CompanyProfile key if available.
+  static Future<String?> getApiKey({String? profileKey, String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (userId != null && userId.trim().isNotEmpty) {
+        final userKey = prefs.getString('${_prefApiKey}_${userId.trim()}');
+        if (userKey != null && userKey.trim().isNotEmpty) {
+          return userKey.trim();
+        }
+      }
       final localKey = prefs.getString(_prefApiKey);
       if (localKey != null && localKey.trim().isNotEmpty) {
         return localKey.trim();
@@ -55,11 +62,15 @@ class AiAssistantService {
     return null;
   }
 
-  /// Saves the Gemini API key locally.
-  static Future<void> saveApiKey(String key) async {
+  /// Saves the Gemini API key locally and tied to the specific user who added it.
+  static Future<void> saveApiKey(String key, {String? userId}) async {
     resetModelCache();
+    final cleanKey = key.trim();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefApiKey, key.trim());
+    await prefs.setString(_prefApiKey, cleanKey);
+    if (userId != null && userId.trim().isNotEmpty) {
+      await prefs.setString('${_prefApiKey}_${userId.trim()}', cleanKey);
+    }
   }
 
   /// Dynamically queries Google Gemini ModelService.ListModels to detect candidate models
@@ -327,7 +338,36 @@ class AiAssistantService {
       throw Exception('Missing Gemini API key.');
     }
 
+    final cleanLang = language.trim().toLowerCase();
+    final String languageDirective;
+    if (cleanLang == 'ku' || cleanLang.startsWith('ku')) {
+      languageDirective = '''
+CRITICAL LANGUAGE DIRECTIVE (MANDATORY):
+- The user is viewing this application in KURDISH (زمانی کوردی سۆرانی).
+- You MUST generate your entire answer in authentic Sorani Kurdish (زمانی کوردی سۆرانی).
+- Every title, bullet point, explanation, analysis, number description, and advice MUST be written in Sorani Kurdish.
+- Even if the prompt is in English or Arabic, you MUST formulate and write your ENTIRE reply in fluent Sorani Kurdish.
+- Use natural Kurdish HR terms: ئامادەبوون، کاتژمێری زیادە، کەمی دەوام، مۆڵەتی بێ مووچە، مووچەی بنەڕەتی، لێبڕین، پاداشت، بەشەکان، دەوامەکان.
+- DO NOT answer in English or Arabic.
+''';
+    } else if (cleanLang == 'ar' || cleanLang.startsWith('ar')) {
+      languageDirective = '''
+CRITICAL LANGUAGE DIRECTIVE (MANDATORY):
+- The user is viewing this application in ARABIC (اللغة العربية).
+- You MUST generate your entire answer in professional Modern Standard Arabic (العربية الفصحى).
+- Even if the prompt is in English, you MUST formulate and write your ENTIRE reply in fluent Arabic.
+- DO NOT answer in English.
+''';
+    } else {
+      languageDirective = '''
+CRITICAL LANGUAGE DIRECTIVE:
+- Respond in clear, professional English.
+''';
+    }
+
     final systemInstruction = '''
+$languageDirective
+
 You are the Executive HR Intelligence Advisor and Chief People Analytics Officer for this company.
 You have direct, comprehensive access to verified real-time data regarding company structures, shifts, groups, employee attendance records, leaves, and payroll metrics provided below.
 
@@ -336,7 +376,7 @@ $companyContext
 =================================
 
 CRITICAL RULES:
-1. Always respond in the EXACT language used by the user (English, Arabic, or Kurdish). If the user writes in Kurdish, respond in fluent Sorani Kurdish. If in Arabic, respond in professional Arabic.
+1. STRICT LANGUAGE ENFORCEMENT: Follow the CRITICAL LANGUAGE DIRECTIVE above strictly without exception.
 2. Rely strictly on the real numbers, employees, departments, and shift data provided in the context above.
 3. When answering about a specific employee, cite their exact department, days worked, overtime, deficit, leaves, and payroll deductions.
 4. When answering about structures/departments, compare staff counts, punctuality, and overall health.
@@ -363,6 +403,7 @@ CRITICAL RULES:
           apiKey: cleanKey,
           modelName: modelName,
           apiVersion: apiVersion,
+          language: cleanLang,
         );
 
         // Cache the verified working model for rapid future calls
@@ -405,10 +446,21 @@ CRITICAL RULES:
     required String apiKey,
     required String modelName,
     required String apiVersion,
+    String language = 'en',
   }) async {
     final url = Uri.parse(
       'https://generativelanguage.googleapis.com/$apiVersion/models/$modelName:generateContent?key=$apiKey',
     );
+
+    final cleanLang = language.trim().toLowerCase();
+    final String promptWithLangHint;
+    if (cleanLang.startsWith('ku')) {
+      promptWithLangHint = '$prompt\n\n(تێبینی زۆر گرنگ: وەڵامەکەت دەبێت بە تەواوی بە زمانی کوردیی سۆرانی بێت)';
+    } else if (cleanLang.startsWith('ar')) {
+      promptWithLangHint = '$prompt\n\n(ملاحظة هامة: يجب أن تكون الإجابة كاملة باللغة العربية)';
+    } else {
+      promptWithLangHint = prompt;
+    }
 
     final List<Map<String, dynamic>> contents = [];
 
@@ -417,7 +469,7 @@ CRITICAL RULES:
       contents.add({
         'role': 'user',
         'parts': [
-          {'text': '$systemInstruction\n\nUser Question: $prompt'}
+          {'text': '$systemInstruction\n\nUser Question: $promptWithLangHint'}
         ],
       });
     } else {
@@ -429,7 +481,7 @@ CRITICAL RULES:
       contents.add({
         'role': 'user',
         'parts': [
-          {'text': prompt}
+          {'text': promptWithLangHint}
         ],
       });
     }

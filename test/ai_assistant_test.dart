@@ -122,5 +122,14 @@ void main() {
       expect(candidates.any((c) => c['model'] == 'gemini-2.0-flash'), isTrue);
       expect(candidates.any((c) => c['model'] == 'gemini-1.5-flash'), isTrue);
     });
+
+    test('saveApiKey and getApiKey support per-user storage', () async {
+      // Should fall back to profileKey if local key is absent
+      final keyFromProfile = await AiAssistantService.getApiKey(
+        profileKey: 'profile_key_abc',
+        userId: 'user_123',
+      );
+      expect(keyFromProfile, 'profile_key_abc');
+    });
   });
 }

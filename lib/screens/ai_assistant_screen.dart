@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/hr_models.dart';
 import '../providers/attendance_provider.dart';
 import '../services/ai_assistant_service.dart';
 
@@ -40,8 +41,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   Future<void> _loadApiKey() async {
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
+    final userId = provider.currentEmployee?.id ?? provider.currentEmployee?.email;
     final key = await AiAssistantService.getApiKey(
       profileKey: provider.companyProfile?.geminiApiKey,
+      userId: userId,
     );
     if (mounted) {
       setState(() => _apiKey = key);
@@ -229,13 +232,22 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   if (newKey.isNotEmpty) {
                     final messenger = ScaffoldMessenger.of(context);
                     final nav = Navigator.of(ctx);
-                    await AiAssistantService.saveApiKey(newKey);
-                    // Also sync with CompanyProfile in Firestore so all HR/Admins share it
+                    final userId = provider.currentEmployee?.id ?? provider.currentEmployee?.email;
+                    // Save locally and tied to the user who added it
+                    await AiAssistantService.saveApiKey(newKey, userId: userId);
+                    // Also sync with CompanyProfile in Firestore so it persists across sessions
                     try {
+                      CompanyProfile updatedProfile;
                       if (provider.companyProfile != null) {
-                        final updated = provider.companyProfile!.copyWith(geminiApiKey: newKey);
-                        await provider.firebaseService.saveCompanyProfile(updated);
+                        updatedProfile = provider.companyProfile!.copyWith(geminiApiKey: newKey);
+                      } else {
+                        updatedProfile = CompanyProfile(
+                          name: 'Company',
+                          address: '',
+                          geminiApiKey: newKey,
+                        );
                       }
+                      await provider.firebaseService.saveCompanyProfile(updatedProfile);
                     } catch (_) {}
                     if (!mounted) return;
                     setState(() => _apiKey = newKey);
@@ -707,45 +719,85 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 children: [
                   _buildStarterCard(
                     title: provider.translate('ai_chip_punctuality'),
-                    subtitle: 'Evaluate top punctuality and identify recurring delay patterns across shifts.',
+                    subtitle: provider.currentLanguage == 'ku'
+                        ? 'هەڵسەنگاندنی ئاستی پابەندبوون بە کات و دۆزینەوەی شێوازی دواکەوتن بەپێی دەوامەکان.'
+                        : (provider.currentLanguage == 'ar'
+                            ? 'تقييم الالتزام بالمواعيد واكتشاف أنماط التأخير عبر الورديات.'
+                            : 'Evaluate top punctuality and identify recurring delay patterns across shifts.'),
                     icon: Icons.schedule_rounded,
                     color: const Color(0xFF10B981),
-                    onTap: () => _sendMessage(
-                      'Give me a detailed attendance punctuality analysis for this month. Highlight top performers and employees with recurring delay patterns.',
-                    ),
+                    onTap: () {
+                      if (provider.currentLanguage == 'ku') {
+                        _sendMessage('شیکاری پابەندبوونی کات و ڕێژەی دواکەوتنی کارمەندان بکە بۆ ئەم مانگە.');
+                      } else if (provider.currentLanguage == 'ar') {
+                        _sendMessage('قدم تحليلاً مفصلاً لالتزام الموظفين بالمواعيد ونسب التأخير لهذا الشهر.');
+                      } else {
+                        _sendMessage('Give me a detailed attendance punctuality analysis for this month. Highlight top performers and employees with recurring delay patterns.');
+                      }
+                    },
                     isDark: isDark,
                   ),
                   const SizedBox(height: 10),
                   _buildStarterCard(
                     title: provider.translate('ai_chip_deficits'),
-                    subtitle: 'Identify highest attendance deficits, penalties, and underlying causes.',
+                    subtitle: provider.currentLanguage == 'ku'
+                        ? 'دەستنیشانکردنی زۆرترین کەمی کاتژمێری ئامادەبوون، سزاکان، و هۆکارە بنەڕەتییەکان.'
+                        : (provider.currentLanguage == 'ar'
+                            ? 'تحديد أعلى نسب عجز الحضور والجزاءات والأسباب الكامنة.'
+                            : 'Identify highest attendance deficits, penalties, and underlying causes.'),
                     icon: Icons.trending_down_rounded,
                     color: const Color(0xFFFF5C5C),
-                    onTap: () => _sendMessage(
-                      'Which employees have the highest attendance deficit hours or penalties this month? Break down the exact reasons and deductions.',
-                    ),
+                    onTap: () {
+                      if (provider.currentLanguage == 'ku') {
+                        _sendMessage('کێ زۆرترین کەمی کاتژمێری ئامادەبوونی هەیە لەم مانگەدا و هۆکارە سەرەکییەکان چین؟');
+                      } else if (provider.currentLanguage == 'ar') {
+                        _sendMessage('من هم الموظفون الأكثر عجزاً في ساعات الحضور أو الأكثر تعرضاً للخصومات هذا الشهر؟');
+                      } else {
+                        _sendMessage('Which employees have the highest attendance deficit hours or penalties this month? Break down the exact reasons and deductions.');
+                      }
+                    },
                     isDark: isDark,
                   ),
                   const SizedBox(height: 10),
                   _buildStarterCard(
                     title: provider.translate('ai_chip_departments'),
-                    subtitle: 'Examine staffing balance, working shifts, and attendance rates per structure.',
+                    subtitle: provider.currentLanguage == 'ku'
+                        ? 'پشکنینی دابەشبوونی کارمەندان، دەوامی کار، و ڕێژەی ئامادەبوون بەپێی بەشەکان.'
+                        : (provider.currentLanguage == 'ar'
+                            ? 'فحص توزيع الكادر وورديات العمل ونسب الحضور لكل قسم.'
+                            : 'Examine staffing balance, working shifts, and attendance rates per structure.'),
                     icon: Icons.account_tree_rounded,
                     color: const Color(0xFF6366F1),
-                    onTap: () => _sendMessage(
-                      'Give me an executive breakdown of all company structures and departments. How are employees distributed and which department is most active?',
-                    ),
+                    onTap: () {
+                      if (provider.currentLanguage == 'ku') {
+                        _sendMessage('شیکاری ئامادەبوون و ژمارەی کارمەندان بەپێی بەش و پێکهاتەکانی کۆمپانیا ڕوون بکەرەوە.');
+                      } else if (provider.currentLanguage == 'ar') {
+                        _sendMessage('قدم تقريراً شاملاً عن توزيع الموظفين ونسب الحضور في كل قسم وهيكل إداري.');
+                      } else {
+                        _sendMessage('Give me an executive breakdown of all company structures and departments. How are employees distributed and which department is most active?');
+                      }
+                    },
                     isDark: isDark,
                   ),
                   const SizedBox(height: 10),
                   _buildStarterCard(
                     title: provider.translate('ai_chip_unpaid_leaves'),
-                    subtitle: 'Audit hourly and daily unpaid leave requests and their payroll deductions.',
+                    subtitle: provider.currentLanguage == 'ku'
+                        ? 'وردبینیکردنی داواکاری مۆڵەتی بێ مووچەی کاتژمێری و ڕۆژانە و لێبڕینەکانی مووچە.'
+                        : (provider.currentLanguage == 'ar'
+                            ? 'تدقيق طلبات الإجازات غير مدفوعة الأجر (الساعية واليومية) وخصوماتها.'
+                            : 'Audit hourly and daily unpaid leave requests and their payroll deductions.'),
                     icon: Icons.event_busy_rounded,
                     color: const Color(0xFFF59E0B),
-                    onTap: () => _sendMessage(
-                      'Review all unpaid leave records (both daily and hourly) for this month. Summarize total hours and the deducted amounts.',
-                    ),
+                    onTap: () {
+                      if (provider.currentLanguage == 'ku') {
+                        _sendMessage('کورتەیەک لەسەر کاتژمێرەکانی مۆڵەتی بێ مووچە و بڕی لێبڕینەکانی ئەم مانگە بدە.');
+                      } else if (provider.currentLanguage == 'ar') {
+                        _sendMessage('لخص إجازات بدون راتب (اليومية والساعية) والمبالغ المخصومة لهذا الشهر.');
+                      } else {
+                        _sendMessage('Review all unpaid leave records (both daily and hourly) for this month. Summarize total hours and the deducted amounts.');
+                      }
+                    },
                     isDark: isDark,
                   ),
                 ],
@@ -1058,13 +1110,37 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             onPressed: () {
               if (index == 0) {
-                _sendMessage('Analyze employee punctuality and tardiness trends for this month.');
+                if (provider.currentLanguage == 'ku') {
+                  _sendMessage('شیکاری پابەندبوونی کات و ڕێژەی دواکەوتنی کارمەندان بکە بۆ ئەم مانگە.');
+                } else if (provider.currentLanguage == 'ar') {
+                  _sendMessage('قدم تحليلاً مفصلاً لالتزام الموظفين بالمواعيد ونسب التأخير لهذا الشهر.');
+                } else {
+                  _sendMessage('Analyze employee punctuality and tardiness trends for this month.');
+                }
               } else if (index == 1) {
-                _sendMessage('Who has the largest attendance deficit this month and what are the main reasons?');
+                if (provider.currentLanguage == 'ku') {
+                  _sendMessage('کێ زۆرترین کەمی کاتژمێری ئامادەبوونی هەیە لەم مانگەدا و هۆکارە سەرەکییەکان چین؟');
+                } else if (provider.currentLanguage == 'ar') {
+                  _sendMessage('من هم الموظفون الأكثر عجزاً في ساعات الحضور أو الأكثر تعرضاً للخصومات هذا الشهر؟');
+                } else {
+                  _sendMessage('Who has the largest attendance deficit this month and what are the main reasons?');
+                }
               } else if (index == 2) {
-                _sendMessage('Break down the attendance and staffing performance across each company structure/department.');
+                if (provider.currentLanguage == 'ku') {
+                  _sendMessage('شیکاری ئامادەبوون و ژمارەی کارمەندان بەپێی بەش و پێکهاتەکانی کۆمپانیا ڕوون بکەرەوە.');
+                } else if (provider.currentLanguage == 'ar') {
+                  _sendMessage('قدم تقريراً شاملاً عن توزيع الموظفين ونسب الحضور في كل قسم وهيكل إداري.');
+                } else {
+                  _sendMessage('Break down the attendance and staffing performance across each company structure/department.');
+                }
               } else if (index == 3) {
-                _sendMessage('Give me an overview of all unpaid leave deductions and taken hours this month.');
+                if (provider.currentLanguage == 'ku') {
+                  _sendMessage('کورتەیەک لەسەر کاتژمێرەکانی مۆڵەتی بێ مووچە و بڕی لێبڕینەکانی ئەم مانگە بدە.');
+                } else if (provider.currentLanguage == 'ar') {
+                  _sendMessage('لخص إجازات بدون راتب (اليومية والساعية) والمبالغ المخصومة لهذا الشهر.');
+                } else {
+                  _sendMessage('Give me an overview of all unpaid leave deductions and taken hours this month.');
+                }
               }
             },
           );
