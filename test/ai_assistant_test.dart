@@ -101,4 +101,26 @@ void main() {
       }
     });
   });
+
+  group('CompanyProfile copyWith and Model Fallback Tests', () {
+    test('CompanyProfile copyWith updates geminiApiKey and preserves other fields', () {
+      final initial = CompanyProfile(
+        name: 'Amada Corp',
+        address: 'Erbil',
+        email: 'info@amada.com',
+        geminiApiKey: 'old-key',
+      );
+      final updated = initial.copyWith(geminiApiKey: 'new-key');
+      expect(updated.geminiApiKey, 'new-key');
+      expect(updated.name, 'Amada Corp');
+      expect(updated.email, 'info@amada.com');
+    });
+
+    test('resolveCandidateModels includes standard fallback models', () async {
+      final candidates = await AiAssistantService.resolveCandidateModels('mock_dummy_key');
+      expect(candidates.isNotEmpty, isTrue);
+      expect(candidates.any((c) => c['model'] == 'gemini-2.0-flash'), isTrue);
+      expect(candidates.any((c) => c['model'] == 'gemini-1.5-flash'), isTrue);
+    });
+  });
 }

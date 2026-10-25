@@ -62,19 +62,35 @@ class AiAssistantService {
     await prefs.setString(_prefApiKey, key.trim());
   }
 
-  /// Dynamically queries Google Gemini ModelService.ListModels to detect which models
-  /// are supported by the user's specific API key and permissions.
-  static Future<Map<String, String>> resolveWorkingModel(String apiKey) async {
+  /// Dynamically queries Google Gemini ModelService.ListModels to detect candidate models
+  /// supported by the user's specific API key, ordered by stability and speed.
+  static Future<List<Map<String, String>>> resolveCandidateModels(String apiKey) async {
+    final candidates = <Map<String, String>>[];
+
     if (_cachedModel != null && _cachedApiVersion != null) {
-      return {'model': _cachedModel!, 'version': _cachedApiVersion!};
+      candidates.add({'model': _cachedModel!, 'version': _cachedApiVersion!});
     }
 
-    // 1. Try v1beta ListModels
+    // Standard high-reliability models that Google AI Studio provides for all free keys
+    const stablePreferences = [
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-flash-001',
+      'gemini-1.5-flash-002',
+      'gemini-1.5-flash-8b',
+      'gemini-1.5-pro',
+      'gemini-1.5-pro-latest',
+      'gemini-pro',
+    ];
+
+    // 1. Query v1beta ListModels
     try {
       final listUrl = Uri.parse(
         'https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey',
       );
-      final resp = await http.get(listUrl).timeout(const Duration(seconds: 12));
+      final resp = await http.get(listUrl).timeout(const Duration(seconds: 10));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -90,36 +106,20 @@ class AiAssistantService {
           }
         }
 
-        if (supported.isNotEmpty) {
-          const preferences = [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-flash-001',
-            'gemini-1.5-flash-002',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-exp',
-            'gemini-1.5-flash-8b',
-            'gemini-1.5-pro',
-            'gemini-1.5-pro-latest',
-            'gemini-pro',
-          ];
-
-          String chosen = supported.first;
-          for (final pref in preferences) {
-            if (supported.contains(pref)) {
-              chosen = pref;
-              break;
+        // Add stable preferences first if present in the user's supported models
+        for (final pref in stablePreferences) {
+          if (supported.contains(pref)) {
+            if (!candidates.any((c) => c['model'] == pref && c['version'] == 'v1beta')) {
+              candidates.add({'model': pref, 'version': 'v1beta'});
             }
           }
+        }
 
-          _cachedModel = chosen;
-          _cachedApiVersion = 'v1beta';
-          debugPrint('AI Assistant resolved model: $chosen on v1beta');
-          return {'model': chosen, 'version': 'v1beta'};
-        } else {
-          throw Exception(
-            'Your API key has access to the API, but no text generation models were found. Please generate a fresh API key from Google AI Studio (https://aistudio.google.com/app/apikey).',
-          );
+        // Then add any other discovered models (e.g. gemini-2.5-flash, etc.)
+        for (final s in supported) {
+          if (!candidates.any((c) => c['model'] == s)) {
+            candidates.add({'model': s, 'version': 'v1beta'});
+          }
         }
       } else {
         final errorJson = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -140,15 +140,15 @@ class AiAssistantService {
           (e.toString().contains('Google AI Studio') || e.toString().contains('Generative Language API'))) {
         rethrow;
       }
-      debugPrint('v1beta ListModels failed: $e');
+      debugPrint('v1beta ListModels note: $e');
     }
 
-    // 2. Try v1 ListModels
+    // 2. Query v1 ListModels as backup
     try {
       final listUrlV1 = Uri.parse(
         'https://generativelanguage.googleapis.com/v1/models?key=$apiKey',
       );
-      final resp = await http.get(listUrlV1).timeout(const Duration(seconds: 12));
+      final resp = await http.get(listUrlV1).timeout(const Duration(seconds: 8));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
@@ -158,21 +158,39 @@ class AiAssistantService {
           if (methods.contains('generateContent')) {
             final name = m['name']?.toString() ?? '';
             final cleanName = name.replaceFirst('models/', '');
-            _cachedModel = cleanName;
-            _cachedApiVersion = 'v1';
-            debugPrint('AI Assistant resolved model: $cleanName on v1');
-            return {'model': cleanName, 'version': 'v1'};
+            if (!candidates.any((c) => c['model'] == cleanName && c['version'] == 'v1')) {
+              candidates.add({'model': cleanName, 'version': 'v1'});
+            }
           }
         }
       }
     } catch (e) {
-      debugPrint('v1 ListModels failed: $e');
+      debugPrint('v1 ListModels note: $e');
     }
 
-    // Default fallback
-    _cachedModel = 'gemini-1.5-flash';
-    _cachedApiVersion = 'v1beta';
-    return {'model': 'gemini-1.5-flash', 'version': 'v1beta'};
+    // 3. Fallback candidates (in case ListModels fails or is blocked by CORS on web)
+    const fallbackList = [
+      {'model': 'gemini-2.0-flash', 'version': 'v1beta'},
+      {'model': 'gemini-1.5-flash', 'version': 'v1beta'},
+      {'model': 'gemini-1.5-flash-latest', 'version': 'v1beta'},
+      {'model': 'gemini-2.0-flash', 'version': 'v1'},
+      {'model': 'gemini-1.5-flash', 'version': 'v1'},
+      {'model': 'gemini-pro', 'version': 'v1beta'},
+    ];
+
+    for (final fb in fallbackList) {
+      if (!candidates.any((c) => c['model'] == fb['model'] && c['version'] == fb['version'])) {
+        candidates.add(fb);
+      }
+    }
+
+    return candidates;
+  }
+
+  /// Convenience method to resolve the top candidate model.
+  static Future<Map<String, String>> resolveWorkingModel(String apiKey) async {
+    final list = await resolveCandidateModels(apiKey);
+    return list.first;
   }
 
   /// Builds a rich, sanitized snapshot of the company data from AttendanceProvider.
@@ -306,18 +324,48 @@ CRITICAL RULES:
 7. Be concise, polite, analytical, and executive-ready.
 ''';
 
-    final resolved = await resolveWorkingModel(cleanKey);
-    final modelName = resolved['model']!;
-    final apiVersion = resolved['version']!;
+    final candidates = await resolveCandidateModels(cleanKey);
 
-    return await _executeGenerateContent(
-      prompt: prompt,
-      history: history,
-      systemInstruction: systemInstruction,
-      apiKey: cleanKey,
-      modelName: modelName,
-      apiVersion: apiVersion,
-    );
+    Exception? lastException;
+    for (final candidate in candidates) {
+      final modelName = candidate['model']!;
+      final apiVersion = candidate['version']!;
+
+      try {
+        final reply = await _executeGenerateContent(
+          prompt: prompt,
+          history: history,
+          systemInstruction: systemInstruction,
+          apiKey: cleanKey,
+          modelName: modelName,
+          apiVersion: apiVersion,
+        );
+
+        // Cache the verified working model for rapid future calls
+        _cachedModel = modelName;
+        _cachedApiVersion = apiVersion;
+        debugPrint('Gemini response generated successfully using $modelName ($apiVersion)');
+        return reply;
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        final errText = e.toString().toLowerCase();
+
+        // If this model is not found, not supported, or 404, smoothly try next candidate
+        if (errText.contains('not found') || errText.contains('404') || errText.contains('not supported')) {
+          resetModelCache();
+          debugPrint('Model $modelName ($apiVersion) returned 404/not found. Trying next candidate...');
+          continue;
+        }
+
+        // If key is invalid or quota is exceeded, fail immediately
+        rethrow;
+      }
+    }
+
+    throw lastException ??
+        Exception(
+          'Failed to connect to any Gemini model with this key. Please verify that your API key is created from Google AI Studio (https://aistudio.google.com/app/apikey).',
+        );
   }
 
   static Future<String> _executeGenerateContent({
@@ -401,11 +449,11 @@ CRITICAL RULES:
         final errorMessage = errorJson['error']?['message']?.toString() ?? 'Status ${response.statusCode}';
         debugPrint('Gemini API Error ($modelName / $apiVersion): $errorMessage');
 
-        // If the model was not found, reset cache and throw clean instructions
-        if (response.statusCode == 404 || errorMessage.contains('is not found')) {
+        // If the model was not found or not supported on this endpoint
+        if (response.statusCode == 404 || errorMessage.contains('is not found') || errorMessage.contains('not supported')) {
           resetModelCache();
           throw Exception(
-            'The model "$modelName" was not found on this key. Please verify that your API key is created from Google AI Studio (https://aistudio.google.com/app/apikey).',
+            'The model "$modelName" was not found or is not supported for API version $apiVersion: $errorMessage',
           );
         } else if (response.statusCode == 400 && errorMessage.contains('API key not valid')) {
           throw Exception(
