@@ -230,6 +230,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     final messenger = ScaffoldMessenger.of(context);
                     final nav = Navigator.of(ctx);
                     await AiAssistantService.saveApiKey(newKey);
+                    // Also sync with CompanyProfile in Firestore so all HR/Admins share it
+                    try {
+                      if (provider.companyProfile != null) {
+                        final updated = provider.companyProfile!.copyWith(geminiApiKey: newKey);
+                        await provider.firebaseService.saveCompanyProfile(updated);
+                      }
+                    } catch (_) {}
                     if (!mounted) return;
                     setState(() => _apiKey = newKey);
                     nav.pop();

@@ -1811,6 +1811,24 @@ class CompanyProfile {
       geminiApiKey: map['geminiApiKey'],
     );
   }
+
+  CompanyProfile copyWith({
+    String? name,
+    String? address,
+    String? email,
+    String? phone,
+    String? logoBase64,
+    String? geminiApiKey,
+  }) {
+    return CompanyProfile(
+      name: name ?? this.name,
+      address: address ?? this.address,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      logoBase64: logoBase64 ?? this.logoBase64,
+      geminiApiKey: geminiApiKey ?? this.geminiApiKey,
+    );
+  }
 }
 
 class PayrollAdjustment {
