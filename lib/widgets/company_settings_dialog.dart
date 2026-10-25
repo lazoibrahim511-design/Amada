@@ -102,6 +102,7 @@ class _CompanySettingsFormState extends State<CompanySettingsForm> {
       email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
       phone: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
       logoBase64: _logoBase64,
+      geminiApiKey: provider.companyProfile?.geminiApiKey,
     );
 
     await provider.firebaseService.saveCompanyProfile(newProfile);

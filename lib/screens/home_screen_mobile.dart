@@ -13,6 +13,7 @@ import 'chat_list_screen.dart';
 import 'face_auth_screen.dart';
 import '../widgets/company_settings_dialog.dart';
 import 'super_admin_screen.dart';
+import 'ai_assistant_screen.dart';
 
 class HomeScreenMobile extends StatelessWidget {
   const HomeScreenMobile({super.key});
@@ -93,6 +94,20 @@ class HomeScreenMobile extends StatelessWidget {
                               MaterialPageRoute(
                                 builder: (context) =>
                                     const HrManagementScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (provider.currentEmployee?.role == 'hr' || provider.currentEmployee?.role == 'admin' || provider.canEditCompanyInfo) ...[
+                        _buildHeaderButton(context, 
+                          icon: Icons.auto_awesome,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AiAssistantScreen(),
                               ),
                             );
                           },

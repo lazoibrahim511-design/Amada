@@ -16,6 +16,7 @@ import 'chat_list_screen.dart';
 import '../widgets/web_notifications_dialog.dart';
 import '../widgets/company_settings_dialog.dart';
 import 'super_admin_screen.dart';
+import 'ai_assistant_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialTab;
@@ -63,6 +64,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
       const RequestsScreen(initialSubordinateTab: true), // index 13: Approvals
       const HrManagementScreen(isEmbedded: true, initialTab: HrTab.device), // index 14: Device (ZKTeco)
       const HrManagementScreen(isEmbedded: true, initialTab: HrTab.periodicReport), // index 15: Periodic Report
+      const AiAssistantScreen(isEmbedded: true), // index 16: AI Assistant
     ];
     _loadSavedTab();
   }
@@ -346,6 +348,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                                 _buildPopupMenuItem(12, provider.translate('daily_report'), Icons.bar_chart),
                                 _buildPopupMenuItem(15, provider.translate('periodic_report'), Icons.assessment_outlined),
                                 _buildPopupMenuItem(14, provider.translate('device'), Icons.fingerprint),
+                                _buildPopupMenuItem(16, provider.translate('ai_assistant'), Icons.auto_awesome),
                               ],
                             ),
                           ),
@@ -356,6 +359,41 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
 
               const SizedBox(width: 16),
+
+              // AI Advisor Quick Button
+              if (provider.currentEmployee?.role == 'hr' || provider.currentEmployee?.role == 'admin' || provider.canEditCompanyInfo) ...[
+                Tooltip(
+                  message: provider.translate('ai_assistant'),
+                  child: InkWell(
+                    onTap: () => onTabSelected(16),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        size: 20,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
               
               // Chat Button
               InkWell(

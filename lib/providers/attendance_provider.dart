@@ -827,6 +827,7 @@ class AttendanceProvider with ChangeNotifier {
             l.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
       );
   List<Request> get requests => _allRequestsMap[_employeeId] ?? [];
+  List<Request> get allRequests => List.unmodifiable(_allCompanyRequests);
   String get currentLanguage => _currentLanguage;
   bool get isLoading => _isLoading;
   FirebaseService get firebaseService => _firebaseService;
@@ -890,6 +891,7 @@ class AttendanceProvider with ChangeNotifier {
         email: lic.ownerEmail ?? _companyProfile?.email,
         phone: lic.ownerPhone ?? _companyProfile?.phone,
         logoBase64: lic.logoBase64 ?? _companyProfile?.logoBase64,
+        geminiApiKey: _companyProfile?.geminiApiKey,
       );
     }
   }

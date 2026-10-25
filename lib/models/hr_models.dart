@@ -1779,6 +1779,7 @@ class CompanyProfile {
   final String? email;
   final String? phone;
   final String? logoBase64;
+  final String? geminiApiKey;
 
   CompanyProfile({
     required this.name,
@@ -1786,6 +1787,7 @@ class CompanyProfile {
     this.email,
     this.phone,
     this.logoBase64,
+    this.geminiApiKey,
   });
 
   Map<String, dynamic> toMap() {
@@ -1795,6 +1797,7 @@ class CompanyProfile {
       'email': email,
       'phone': phone,
       'logoBase64': logoBase64,
+      'geminiApiKey': geminiApiKey,
     };
   }
 
@@ -1805,6 +1808,7 @@ class CompanyProfile {
       email: map['email'],
       phone: map['phone'],
       logoBase64: map['logoBase64'],
+      geminiApiKey: map['geminiApiKey'],
     );
   }
 }
