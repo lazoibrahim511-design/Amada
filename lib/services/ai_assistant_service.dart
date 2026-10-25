@@ -68,7 +68,15 @@ class AiAssistantService {
     final candidates = <Map<String, String>>[];
 
     if (_cachedModel != null && _cachedApiVersion != null) {
-      candidates.add({'model': _cachedModel!, 'version': _cachedApiVersion!});
+      final cachedLower = _cachedModel!.toLowerCase();
+      if (!cachedLower.contains('tts') &&
+          !cachedLower.contains('audio') &&
+          !cachedLower.contains('embedding')) {
+        candidates.add({'model': _cachedModel!, 'version': _cachedApiVersion!});
+      } else {
+        _cachedModel = null;
+        _cachedApiVersion = null;
+      }
     }
 
     // Standard high-reliability models that Google AI Studio provides for all free keys
@@ -84,6 +92,18 @@ class AiAssistantService {
       'gemini-1.5-pro-latest',
       'gemini-pro',
     ];
+
+    // Helper to filter out non-chat models (audio, tts, embedding, imagen)
+    bool isChatModel(String name) {
+      final l = name.toLowerCase();
+      return !l.contains('tts') &&
+          !l.contains('audio') &&
+          !l.contains('embedding') &&
+          !l.contains('imagen') &&
+          !l.contains('aqa') &&
+          !l.contains('whisper') &&
+          !l.contains('realtime');
+    }
 
     // 1. Query v1beta ListModels
     try {
@@ -102,7 +122,9 @@ class AiAssistantService {
           if (methods.contains('generateContent')) {
             final name = m['name']?.toString() ?? '';
             final cleanName = name.replaceFirst('models/', '');
-            supported.add(cleanName);
+            if (isChatModel(cleanName)) {
+              supported.add(cleanName);
+            }
           }
         }
 
@@ -115,7 +137,7 @@ class AiAssistantService {
           }
         }
 
-        // Then add any other discovered models (e.g. gemini-2.5-flash, etc.)
+        // Then add any other discovered chat models
         for (final s in supported) {
           if (!candidates.any((c) => c['model'] == s)) {
             candidates.add({'model': s, 'version': 'v1beta'});
@@ -158,8 +180,10 @@ class AiAssistantService {
           if (methods.contains('generateContent')) {
             final name = m['name']?.toString() ?? '';
             final cleanName = name.replaceFirst('models/', '');
-            if (!candidates.any((c) => c['model'] == cleanName && c['version'] == 'v1')) {
-              candidates.add({'model': cleanName, 'version': 'v1'});
+            if (isChatModel(cleanName)) {
+              if (!candidates.any((c) => c['model'] == cleanName && c['version'] == 'v1')) {
+                candidates.add({'model': cleanName, 'version': 'v1'});
+              }
             }
           }
         }
@@ -350,10 +374,16 @@ CRITICAL RULES:
         lastException = e is Exception ? e : Exception(e.toString());
         final errText = e.toString().toLowerCase();
 
-        // If this model is not found, not supported, or 404, smoothly try next candidate
-        if (errText.contains('not found') || errText.contains('404') || errText.contains('not supported')) {
+        // If this model is not found, not supported, 404, or multiturn chat is disabled:
+        if (errText.contains('not found') ||
+            errText.contains('404') ||
+            errText.contains('not supported') ||
+            errText.contains('multiturn') ||
+            errText.contains('does not support chat') ||
+            errText.contains('chat is not enabled') ||
+            errText.contains('tts')) {
           resetModelCache();
-          debugPrint('Model $modelName ($apiVersion) returned 404/not found. Trying next candidate...');
+          debugPrint('Model $modelName ($apiVersion) incompatible ($errText). Trying next candidate...');
           continue;
         }
 
@@ -447,13 +477,21 @@ CRITICAL RULES:
       } else {
         final errorJson = jsonDecode(utf8.decode(response.bodyBytes));
         final errorMessage = errorJson['error']?['message']?.toString() ?? 'Status ${response.statusCode}';
+        final lowerMsg = errorMessage.toLowerCase();
         debugPrint('Gemini API Error ($modelName / $apiVersion): $errorMessage');
 
-        // If the model was not found or not supported on this endpoint
-        if (response.statusCode == 404 || errorMessage.contains('is not found') || errorMessage.contains('not supported')) {
+        // If the model was not found, not supported, or multiturn chat is not enabled
+        final isModelUnsupported = response.statusCode == 404 ||
+            lowerMsg.contains('is not found') ||
+            lowerMsg.contains('not supported') ||
+            lowerMsg.contains('multiturn') ||
+            lowerMsg.contains('chat is not enabled') ||
+            lowerMsg.contains('tts');
+
+        if (isModelUnsupported) {
           resetModelCache();
           throw Exception(
-            'The model "$modelName" was not found or is not supported for API version $apiVersion: $errorMessage',
+            'The model "$modelName" does not support chat on $apiVersion: $errorMessage',
           );
         } else if (response.statusCode == 400 && errorMessage.contains('API key not valid')) {
           throw Exception(
