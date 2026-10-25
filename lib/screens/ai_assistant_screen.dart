@@ -187,12 +187,28 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Get a free Gemini API key from Google AI Studio (aistudio.google.com).',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? Colors.white38 : Colors.black45,
-                    fontStyle: FontStyle.italic,
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF6366F1)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Get a free Gemini API key from Google AI Studio (aistudio.google.com/app/apikey). Do NOT use Firebase Web API keys.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4338CA),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

@@ -28,7 +28,14 @@ class AiMessage {
 
 class AiAssistantService {
   static const String _prefApiKey = 'gemini_api_key';
-  static const String _defaultModel = 'gemini-1.5-flash';
+  
+  static String? _cachedModel;
+  static String? _cachedApiVersion;
+
+  static void resetModelCache() {
+    _cachedModel = null;
+    _cachedApiVersion = null;
+  }
 
   /// Retrieves the API key from SharedPreferences, falling back to CompanyProfile key if available.
   static Future<String?> getApiKey({String? profileKey}) async {
@@ -50,8 +57,122 @@ class AiAssistantService {
 
   /// Saves the Gemini API key locally.
   static Future<void> saveApiKey(String key) async {
+    resetModelCache();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefApiKey, key.trim());
+  }
+
+  /// Dynamically queries Google Gemini ModelService.ListModels to detect which models
+  /// are supported by the user's specific API key and permissions.
+  static Future<Map<String, String>> resolveWorkingModel(String apiKey) async {
+    if (_cachedModel != null && _cachedApiVersion != null) {
+      return {'model': _cachedModel!, 'version': _cachedApiVersion!};
+    }
+
+    // 1. Try v1beta ListModels
+    try {
+      final listUrl = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey',
+      );
+      final resp = await http.get(listUrl).timeout(const Duration(seconds: 12));
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
+        final models = (data['models'] as List?) ?? [];
+        final supported = <String>[];
+
+        for (final m in models) {
+          final methods = (m['supportedGenerationMethods'] as List?) ?? [];
+          if (methods.contains('generateContent')) {
+            final name = m['name']?.toString() ?? '';
+            final cleanName = name.replaceFirst('models/', '');
+            supported.add(cleanName);
+          }
+        }
+
+        if (supported.isNotEmpty) {
+          const preferences = [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-latest',
+            'gemini-1.5-flash-001',
+            'gemini-1.5-flash-002',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-exp',
+            'gemini-1.5-flash-8b',
+            'gemini-1.5-pro',
+            'gemini-1.5-pro-latest',
+            'gemini-pro',
+          ];
+
+          String chosen = supported.first;
+          for (final pref in preferences) {
+            if (supported.contains(pref)) {
+              chosen = pref;
+              break;
+            }
+          }
+
+          _cachedModel = chosen;
+          _cachedApiVersion = 'v1beta';
+          debugPrint('AI Assistant resolved model: $chosen on v1beta');
+          return {'model': chosen, 'version': 'v1beta'};
+        } else {
+          throw Exception(
+            'Your API key has access to the API, but no text generation models were found. Please generate a fresh API key from Google AI Studio (https://aistudio.google.com/app/apikey).',
+          );
+        }
+      } else {
+        final errorJson = jsonDecode(utf8.decode(resp.bodyBytes));
+        final msg = errorJson['error']?['message']?.toString() ?? '';
+
+        if (resp.statusCode == 400 && msg.contains('API key not valid')) {
+          throw Exception(
+            'The provided Gemini API key is invalid. Please get a free API key directly from Google AI Studio (https://aistudio.google.com/app/apikey).',
+          );
+        } else if (msg.contains('has not been used in project') || msg.contains('is disabled')) {
+          throw Exception(
+            'Generative Language API is not enabled for this project. Please generate a free key from Google AI Studio (https://aistudio.google.com/app/apikey) or enable the Generative Language API in Google Cloud Console.',
+          );
+        }
+      }
+    } catch (e) {
+      if (e is Exception &&
+          (e.toString().contains('Google AI Studio') || e.toString().contains('Generative Language API'))) {
+        rethrow;
+      }
+      debugPrint('v1beta ListModels failed: $e');
+    }
+
+    // 2. Try v1 ListModels
+    try {
+      final listUrlV1 = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1/models?key=$apiKey',
+      );
+      final resp = await http.get(listUrlV1).timeout(const Duration(seconds: 12));
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
+        final models = (data['models'] as List?) ?? [];
+        for (final m in models) {
+          final methods = (m['supportedGenerationMethods'] as List?) ?? [];
+          if (methods.contains('generateContent')) {
+            final name = m['name']?.toString() ?? '';
+            final cleanName = name.replaceFirst('models/', '');
+            _cachedModel = cleanName;
+            _cachedApiVersion = 'v1';
+            debugPrint('AI Assistant resolved model: $cleanName on v1');
+            return {'model': cleanName, 'version': 'v1'};
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('v1 ListModels failed: $e');
+    }
+
+    // Default fallback
+    _cachedModel = 'gemini-1.5-flash';
+    _cachedApiVersion = 'v1beta';
+    return {'model': 'gemini-1.5-flash', 'version': 'v1beta'};
   }
 
   /// Builds a rich, sanitized snapshot of the company data from AttendanceProvider.
@@ -150,7 +271,8 @@ class AiAssistantService {
     return buffer.toString();
   }
 
-  /// Sends a conversational prompt to Gemini 1.5 Flash with the full company context and chat history.
+  /// Sends a conversational prompt to Gemini with dynamic model discovery,
+  /// full company context, and chat history.
   static Future<String> sendMessage({
     required String prompt,
     required List<AiMessage> history,
@@ -158,13 +280,10 @@ class AiAssistantService {
     required String apiKey,
     String language = 'en',
   }) async {
-    if (apiKey.trim().isEmpty) {
+    final cleanKey = apiKey.trim();
+    if (cleanKey.isEmpty) {
       throw Exception('Missing Gemini API key.');
     }
-
-    final url = Uri.parse(
-      'https://generativelanguage.googleapis.com/v1beta/models/$_defaultModel:generateContent?key=$apiKey',
-    );
 
     final systemInstruction = '''
 You are the Executive HR Intelligence Advisor and Chief People Analytics Officer for this company.
@@ -187,42 +306,79 @@ CRITICAL RULES:
 7. Be concise, polite, analytical, and executive-ready.
 ''';
 
+    final resolved = await resolveWorkingModel(cleanKey);
+    final modelName = resolved['model']!;
+    final apiVersion = resolved['version']!;
+
+    return await _executeGenerateContent(
+      prompt: prompt,
+      history: history,
+      systemInstruction: systemInstruction,
+      apiKey: cleanKey,
+      modelName: modelName,
+      apiVersion: apiVersion,
+    );
+  }
+
+  static Future<String> _executeGenerateContent({
+    required String prompt,
+    required List<AiMessage> history,
+    required String systemInstruction,
+    required String apiKey,
+    required String modelName,
+    required String apiVersion,
+  }) async {
+    final url = Uri.parse(
+      'https://generativelanguage.googleapis.com/$apiVersion/models/$modelName:generateContent?key=$apiKey',
+    );
+
     final List<Map<String, dynamic>> contents = [];
 
-    // Add recent history for conversational flow (up to last 10 turns)
-    final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
-    for (final msg in recentHistory) {
-      contents.add(msg.toGeminiPart());
+    if (apiVersion == 'v1') {
+      // v1 does not support top-level system_instruction, prepend to context
+      contents.add({
+        'role': 'user',
+        'parts': [
+          {'text': '$systemInstruction\n\nUser Question: $prompt'}
+        ],
+      });
+    } else {
+      // v1beta supports conversational history and system_instruction natively
+      final recentHistory = history.length > 10 ? history.sublist(history.length - 10) : history;
+      for (final msg in recentHistory) {
+        contents.add(msg.toGeminiPart());
+      }
+      contents.add({
+        'role': 'user',
+        'parts': [
+          {'text': prompt}
+        ],
+      });
     }
 
-    // Add the current user prompt
-    contents.add({
-      'role': 'user',
-      'parts': [
-        {'text': prompt}
-      ],
-    });
-
-    final body = jsonEncode({
-      'system_instruction': {
-        'parts': [
-          {'text': systemInstruction}
-        ]
-      },
+    final Map<String, dynamic> bodyMap = {
       'contents': contents,
       'generationConfig': {
         'temperature': 0.3,
         'maxOutputTokens': 2048,
         'topP': 0.95,
       },
-    });
+    };
+
+    if (apiVersion == 'v1beta') {
+      bodyMap['system_instruction'] = {
+        'parts': [
+          {'text': systemInstruction}
+        ]
+      };
+    }
 
     try {
       final response = await http
           .post(
             url,
             headers: {'Content-Type': 'application/json'},
-            body: body,
+            body: jsonEncode(bodyMap),
           )
           .timeout(const Duration(seconds: 45));
 
@@ -241,14 +397,24 @@ CRITICAL RULES:
         }
         return 'No response generated by the AI.';
       } else {
-        final errorJson = jsonDecode(response.body);
-        final errorMessage = errorJson['error']?['message'] ?? 'Status ${response.statusCode}';
-        debugPrint('Gemini API Error: $errorMessage');
-        if (response.statusCode == 400 && errorMessage.contains('API key not valid')) {
-          throw Exception('The provided Gemini API Key is invalid. Please verify your key.');
+        final errorJson = jsonDecode(utf8.decode(response.bodyBytes));
+        final errorMessage = errorJson['error']?['message']?.toString() ?? 'Status ${response.statusCode}';
+        debugPrint('Gemini API Error ($modelName / $apiVersion): $errorMessage');
+
+        // If the model was not found, reset cache and throw clean instructions
+        if (response.statusCode == 404 || errorMessage.contains('is not found')) {
+          resetModelCache();
+          throw Exception(
+            'The model "$modelName" was not found on this key. Please verify that your API key is created from Google AI Studio (https://aistudio.google.com/app/apikey).',
+          );
+        } else if (response.statusCode == 400 && errorMessage.contains('API key not valid')) {
+          throw Exception(
+            'The provided Gemini API Key is invalid. Please get a free key from Google AI Studio (https://aistudio.google.com/app/apikey).',
+          );
         } else if (response.statusCode == 429) {
           throw Exception('Gemini API quota exceeded or rate limited. Please try again shortly.');
         }
+
         throw Exception('AI request failed: $errorMessage');
       }
     } catch (e) {
