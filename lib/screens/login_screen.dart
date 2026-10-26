@@ -502,54 +502,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 12),
-
-                                  // Default Admin quick autofill chip
-                                  InkWell(
-                                    onTap: () {
-                                      final code = _companyCodeController.text.trim().toLowerCase();
-                                      final effectiveCode = code.isEmpty ? 'lazo' : code;
-                                      setState(() {
-                                        _identifierController.text = 'admin@$effectiveCode.com';
-                                        _passwordController.text = 'admin123';
-                                      });
-                                    },
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF2E65FF).withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: const Color(0xFF2E65FF).withValues(alpha: 0.25),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.key_rounded, size: 15, color: Color(0xFF2E65FF)),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              provider.translate(
-                                                'default_admin_chip',
-                                                params: {
-                                                  'email': 'admin@${_companyCodeController.text.trim().isEmpty ? 'lazo' : _companyCodeController.text.trim()}.com',
-                                                  'password': 'admin123',
-                                                },
-                                              ),
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF2E65FF),
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
+                                  const SizedBox(height: 24),
 
                                   // Primary Sign In Button
                                   SizedBox(
