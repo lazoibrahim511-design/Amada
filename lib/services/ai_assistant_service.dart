@@ -37,8 +37,12 @@ class AiAssistantService {
     _cachedApiVersion = null;
   }
 
+  /// Optional built-in default Gemini API key embedded in the application.
+  /// When set, users will never be prompted for an API key.
+  static const String defaultApiKey = '';
+
   /// Retrieves the API key from SharedPreferences (per-user or global),
-  /// falling back to CompanyProfile key if available.
+  /// falling back to CompanyProfile key, and finally defaultApiKey if available.
   static Future<String?> getApiKey({String? profileKey, String? userId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -59,6 +63,11 @@ class AiAssistantService {
     if (profileKey != null && profileKey.trim().isNotEmpty) {
       return profileKey.trim();
     }
+
+    if (defaultApiKey.trim().isNotEmpty) {
+      return defaultApiKey.trim();
+    }
+
     return null;
   }
 
