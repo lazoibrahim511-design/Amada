@@ -53,3 +53,8 @@ node_modules/
 firebase-debug.log*
 firestore-debug.log*
 .firebase/
+
+# Android Keystore & Secrets
+**/android/key.properties
+*.jks
+*.keystore

@@ -49,6 +49,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1059364112756',
     projectId: 'attendance-app-38291',
     storageBucket: 'attendance-app-38291.firebasestorage.app',
-    iosBundleId: 'com.attendance.attendanceApp',
+    iosBundleId: 'com.amada.attendance',
   );
 }

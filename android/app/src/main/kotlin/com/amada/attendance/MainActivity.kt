@@ -1,4 +1,4 @@
-package com.attendance.attendance_app
+package com.amada.attendance
 
 import io.flutter.embedding.android.FlutterActivity
 
