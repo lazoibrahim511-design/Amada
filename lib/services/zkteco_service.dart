@@ -26,8 +26,8 @@ class ZkTecoService extends ChangeNotifier {
   List<ZkDeviceConfig> _devices = [];
 
   // Global Settings
-  bool _autoSyncEnabled = false;
-  int _autoSyncIntervalMinutes = 15;
+  bool _autoSyncEnabled = true;
+  int _autoSyncIntervalMinutes = 5;
   int _cooldownMinutes = 3;
 
   // Status
@@ -77,8 +77,8 @@ class ZkTecoService extends ChangeNotifier {
     _cachedFirebase = firebase;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _autoSyncEnabled = prefs.getBool('zk_auto_sync') ?? false;
-      _autoSyncIntervalMinutes = prefs.getInt('zk_auto_sync_interval') ?? 15;
+      _autoSyncEnabled = prefs.getBool('zk_auto_sync') ?? true;
+      _autoSyncIntervalMinutes = prefs.getInt('zk_auto_sync_interval') ?? 5;
       _cooldownMinutes = prefs.getInt('zk_cooldown_minutes') ?? 3;
 
       final lastSyncMs = prefs.getInt('zk_last_sync_ms');
