@@ -54,24 +54,39 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
 
   Future<void> _handleStartBgService(AttendanceProvider provider) async {
     setState(() => _isBgActionLoading = true);
-    final success = await WindowsBackgroundService.startBackgroundService();
-    await Future.delayed(const Duration(milliseconds: 1000));
+    _zkService.startAutoSync(provider, FirebaseService());
+    setState(() => _autoSync = true);
+    await _zkService.saveSettings(
+      autoSync: true,
+      intervalMinutes: _syncInterval,
+      cooldownMinutes: _cooldown,
+      provider: provider,
+      firebase: FirebaseService(),
+    );
     await _loadBgStatus();
     setState(() => _isBgActionLoading = false);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(success ? provider.translate('bg_service_started_msg') : 'Failed to start background service'),
-        backgroundColor: success ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+        content: Text(provider.translate('bg_service_started_msg')),
+        backgroundColor: const Color(0xFF10B981),
       ),
     );
   }
 
   Future<void> _handleStopBgService(AttendanceProvider provider) async {
     setState(() => _isBgActionLoading = true);
+    _zkService.stopAutoSync();
+    setState(() => _autoSync = false);
+    await _zkService.saveSettings(
+      autoSync: false,
+      intervalMinutes: _syncInterval,
+      cooldownMinutes: _cooldown,
+      provider: provider,
+      firebase: FirebaseService(),
+    );
     await WindowsBackgroundService.stopBackgroundService();
-    await Future.delayed(const Duration(milliseconds: 500));
     await _loadBgStatus();
     setState(() => _isBgActionLoading = false);
 
@@ -742,18 +757,18 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
           NeuButton(
             onPressed: _isBgActionLoading
                 ? null
-                : () => (_bgStatus?.isRunning == true)
+                : () => _autoSync
                     ? _handleStopBgService(provider)
                     : _handleStartBgService(provider),
             isLoading: _isBgActionLoading,
             icon: Icon(
-              (_bgStatus?.isRunning == true) ? Icons.stop_rounded : Icons.play_arrow_rounded,
+              _autoSync ? Icons.stop_rounded : Icons.play_arrow_rounded,
               size: 18,
             ),
-            label: (_bgStatus?.isRunning == true)
+            label: _autoSync
                 ? provider.translate('stop_bg_service_btn')
                 : provider.translate('run_in_background_btn'),
-            variant: (_bgStatus?.isRunning == true)
+            variant: _autoSync
                 ? NeuButtonVariant.danger
                 : NeuButtonVariant.navy,
             height: 38,
@@ -1271,7 +1286,7 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     AttendanceProvider provider,
   ) {
     final isSupported = WindowsBackgroundService.isSupported;
-    final isRunning = _bgStatus?.isRunning ?? false;
+    final isRunning = _autoSync;
     final isAutoStart = _bgStatus?.isAutoStartEnabled ?? false;
     final count = _bgStatus?.runningPids.length ?? 0;
 
@@ -1451,6 +1466,15 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                       ? provider.translate('disable_autostart_btn')
                       : provider.translate('enable_autostart_btn'),
                   variant: NeuButtonVariant.whitePill,
+                  height: 36,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+                NeuButton(
+                  onPressed: () => WindowsBackgroundService.exitApp(),
+                  icon: const Icon(Icons.power_settings_new_rounded, size: 16),
+                  label: provider.translate('exit_app_btn'),
+                  variant: NeuButtonVariant.navy,
                   height: 36,
                   fontSize: 12,
                   padding: const EdgeInsets.symmetric(horizontal: 14),

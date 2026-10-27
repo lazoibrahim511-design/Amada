@@ -54,7 +54,7 @@ class WindowsBackgroundService {
           if (parts.length >= 2) {
             final pidStr = parts[1].replaceAll('"', '').trim();
             final procPid = int.tryParse(pidStr);
-            if (procPid != null) {
+            if (procPid != null && procPid != currentPid) {
               runningPids.add(procPid);
             }
           }
@@ -99,10 +99,13 @@ class WindowsBackgroundService {
     if (!isSupported) return 0;
     int stoppedCount = 0;
     try {
+      final currentPid = pid;
       final status = await getStatus();
       for (final procPid in status.runningPids) {
-        final res = await Process.run('taskkill', ['/f', '/pid', procPid.toString()]);
-        if (res.exitCode == 0) stoppedCount++;
+        if (procPid != currentPid) {
+          final res = await Process.run('taskkill', ['/f', '/pid', procPid.toString()]);
+          if (res.exitCode == 0) stoppedCount++;
+        }
       }
     } catch (e) {
       debugPrint('Error stopping background service: $e');
