@@ -306,10 +306,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                               // Sign Out Button
                               _buildSignOutCard(context, provider, isDark),
-                              const SizedBox(height: 16),
-
-                              // Delete Account (App Store Guideline 5.1.1(v) & Play Store Mandatory Compliance)
-                              _buildDeleteAccountCard(context, provider, isDark),
                               const SizedBox(height: 24),
                             ],
                           ),
@@ -2185,126 +2181,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  // --- DELETE ACCOUNT CARD (App Store & Play Store Compliance) ---
-  Widget _buildDeleteAccountCard(
-    BuildContext context,
-    AttendanceProvider provider,
-    bool isDark,
-  ) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _confirmDeleteAccount(context, provider, isDark),
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFFFF1F2),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isDark ? const Color(0xFFE11D48).withValues(alpha: 0.25) : const Color(0xFFFECDD3),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFE11D48).withValues(alpha: 0.12),
-                ),
-                child: const Icon(
-                  Icons.delete_forever_rounded,
-                  color: Color(0xFFE11D48),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      provider.translate('delete_account'),
-                      style: const TextStyle(
-                        color: Color(0xFFE11D48),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      provider.translate('delete_account_subtitle'),
-                      style: TextStyle(
-                        color: isDark ? const Color(0xFFFB7185).withValues(alpha: 0.7) : const Color(0xFFBE123C).withValues(alpha: 0.7),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFFE11D48),
-                size: 22,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _confirmDeleteAccount(BuildContext context, AttendanceProvider provider, bool isDark) {
-    showGlassDialog(
-      context: context,
-      title: provider.translate('delete_account_confirm_title'),
-      subtitle: provider.translate('delete_account'),
-      icon: Icons.warning_amber_rounded,
-      iconBackgroundColor: const [Color(0xFFE11D48), Color(0xFF9F1239)],
-      content: Text(
-        provider.translate('delete_account_confirm_desc'),
-        style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.45),
-      ),
-      actions: [
-        NeuButton(
-          label: provider.translate('cancel'),
-          variant: NeuButtonVariant.whitePill,
-          height: 38,
-          fontSize: 12,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          onPressed: () => Navigator.pop(context),
-        ),
-        const SizedBox(width: 8),
-        NeuButton(
-          label: provider.translate('delete_account_btn'),
-          variant: NeuButtonVariant.danger,
-          height: 38,
-          fontSize: 12,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          onPressed: () async {
-            Navigator.pop(context);
-            final currentEmp = provider.currentEmployee;
-            if (currentEmp != null) {
-              await provider.deleteEmployee(currentEmp.id, companyCode: currentEmp.companyCode);
-            }
-            await provider.logout();
-            if (context.mounted) {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(provider.translate('account_deleted_success')),
-                  backgroundColor: const Color(0xFF00BD96),
-                ),
-              );
-            }
-          },
-        ),
-      ],
     );
   }
 
