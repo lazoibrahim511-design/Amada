@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
@@ -271,28 +272,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const SizedBox(height: 24),
                               ],
 
-                              // Account Switcher (Testing Mode)
+                              // Section: Legal & Compliance (App Store & Play Store Policy)
                               _buildSectionTitle(
-                                icon: Icons.swap_horiz_rounded,
+                                icon: Icons.privacy_tip_outlined,
                                 iconColor: const Color(0xFF00BD96),
-                                title: provider.translate('switch_account'),
+                                title: provider.translate('privacy_policy'),
                                 textColor: secondaryTextColor,
                               ),
                               const SizedBox(height: 12),
-                              _buildAccountSwitcherCard(
-                                context,
-                                provider,
-                                isDark,
-                                cardBg,
-                                cardBorder,
-                                primaryTextColor,
-                                secondaryTextColor,
-                              ),
-                              const SizedBox(height: 28),
+                              _buildPrivacyPolicyCard(context, provider, isDark),
+                              const SizedBox(height: 24),
+
+                              // Account Switcher (Visible in Debug or for Super Admin)
+                              if (kDebugMode || currentEmp?.role == 'super_admin') ...[
+                                _buildSectionTitle(
+                                  icon: Icons.swap_horiz_rounded,
+                                  iconColor: const Color(0xFF00BD96),
+                                  title: provider.translate('switch_account'),
+                                  textColor: secondaryTextColor,
+                                ),
+                                const SizedBox(height: 12),
+                                _buildAccountSwitcherCard(
+                                  context,
+                                  provider,
+                                  isDark,
+                                  cardBg,
+                                  cardBorder,
+                                  primaryTextColor,
+                                  secondaryTextColor,
+                                ),
+                                const SizedBox(height: 28),
+                              ],
 
                               // Sign Out Button
                               _buildSignOutCard(context, provider, isDark),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 16),
+
+                              // Delete Account (App Store Guideline 5.1.1(v) & Play Store Mandatory Compliance)
+                              _buildDeleteAccountCard(context, provider, isDark),
+                              const SizedBox(height: 24),
                             ],
                           ),
                         ),
@@ -1997,6 +2015,296 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
       ),
+    );
+  }
+
+  // --- PRIVACY POLICY CARD ---
+  Widget _buildPrivacyPolicyCard(
+    BuildContext context,
+    AttendanceProvider provider,
+    bool isDark,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showPrivacyPolicyDialog(context, provider, isDark),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF00BD96).withValues(alpha: 0.14),
+                ),
+                child: const Icon(
+                  Icons.policy_rounded,
+                  color: Color(0xFF00BD96),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      provider.translate('privacy_policy'),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      provider.translate('privacy_policy_subtitle'),
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPrivacyPolicyDialog(BuildContext context, AttendanceProvider provider, bool isDark) {
+    showGlassDialog(
+      context: context,
+      title: provider.translate('privacy_policy'),
+      subtitle: 'Amada Workforce & Privacy Commitment',
+      icon: Icons.shield_rounded,
+      iconBackgroundColor: const [Color(0xFF00F0D8), Color(0xFF00BD96)],
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 380),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildPrivacySection(
+                icon: Icons.face_rounded,
+                title: '1. Facial Biometric Authentication',
+                body: 'Facial data is strictly used on-device to verify employee identity during clock-in and clock-out events. Mathematical biometric feature embeddings are encrypted and never sold, shared, or used for third-party tracking.',
+                isDark: isDark,
+              ),
+              const SizedBox(height: 14),
+              _buildPrivacySection(
+                icon: Icons.location_on_rounded,
+                title: '2. Location & Geofencing Verification',
+                body: 'Location access is requested exclusively while the application is in use during attendance check-ins to confirm presence within assigned office branches. Amada does NOT track or monitor your location in the background.',
+                isDark: isDark,
+              ),
+              const SizedBox(height: 14),
+              _buildPrivacySection(
+                icon: Icons.lock_outline_rounded,
+                title: '3. Data Security & Storage',
+                body: 'All employee profiles, shifts, and attendance timestamps are transmitted via encrypted TLS connections and stored securely in Google Cloud Firestore with multi-tenant company isolation.',
+                isDark: isDark,
+              ),
+              const SizedBox(height: 14),
+              _buildPrivacySection(
+                icon: Icons.delete_outline_rounded,
+                title: '4. User Rights & Data Deletion',
+                body: 'In accordance with Apple App Store and Google Play data privacy regulations, you have the right to request deletion of your biometric data, attendance logs, and account at any time using the "Delete Account & Data" option below.',
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        NeuButton(
+          label: provider.translate('ok'),
+          variant: NeuButtonVariant.primary,
+          height: 38,
+          fontSize: 12,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrivacySection({
+    required IconData icon,
+    required String title,
+    required String body,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: const Color(0xFF00E5CE)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.45,
+              color: isDark ? Colors.white70 : const Color(0xFF475569),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- DELETE ACCOUNT CARD (App Store & Play Store Compliance) ---
+  Widget _buildDeleteAccountCard(
+    BuildContext context,
+    AttendanceProvider provider,
+    bool isDark,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _confirmDeleteAccount(context, provider, isDark),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFFFF1F2),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? const Color(0xFFE11D48).withValues(alpha: 0.25) : const Color(0xFFFECDD3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFE11D48).withValues(alpha: 0.12),
+                ),
+                child: const Icon(
+                  Icons.delete_forever_rounded,
+                  color: Color(0xFFE11D48),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      provider.translate('delete_account'),
+                      style: const TextStyle(
+                        color: Color(0xFFE11D48),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      provider.translate('delete_account_subtitle'),
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFFFB7185).withValues(alpha: 0.7) : const Color(0xFFBE123C).withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFFE11D48),
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context, AttendanceProvider provider, bool isDark) {
+    showGlassDialog(
+      context: context,
+      title: provider.translate('delete_account_confirm_title'),
+      subtitle: provider.translate('delete_account'),
+      icon: Icons.warning_amber_rounded,
+      iconBackgroundColor: const [Color(0xFFE11D48), Color(0xFF9F1239)],
+      content: Text(
+        provider.translate('delete_account_confirm_desc'),
+        style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.45),
+      ),
+      actions: [
+        NeuButton(
+          label: provider.translate('cancel'),
+          variant: NeuButtonVariant.whitePill,
+          height: 38,
+          fontSize: 12,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          onPressed: () => Navigator.pop(context),
+        ),
+        const SizedBox(width: 8),
+        NeuButton(
+          label: provider.translate('delete_account_btn'),
+          variant: NeuButtonVariant.danger,
+          height: 38,
+          fontSize: 12,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          onPressed: () async {
+            Navigator.pop(context);
+            final currentEmp = provider.currentEmployee;
+            if (currentEmp != null) {
+              await provider.deleteEmployee(currentEmp.id, companyCode: currentEmp.companyCode);
+            }
+            await provider.logout();
+            if (context.mounted) {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(provider.translate('account_deleted_success')),
+                  backgroundColor: const Color(0xFF00BD96),
+                ),
+              );
+            }
+          },
+        ),
+      ],
     );
   }
 

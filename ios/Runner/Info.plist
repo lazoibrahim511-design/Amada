@@ -46,9 +46,11 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app requires access to the camera for Face Authentication during clock in/out.</string>
+	<string>Amada uses your camera to capture your photo for Face Authentication during attendance clock-in and to update your profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Amada requires access to your photo library to allow you to upload your profile photo and attach leave request documents.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app requires location access to verify your presence at the office work location and to detect the office Wi-Fi network.</string>
+	<string>Amada uses your location while using the app to verify your presence at the assigned company work location during attendance check-in.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
