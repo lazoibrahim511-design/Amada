@@ -20,4 +20,5 @@ class WindowsBackgroundService {
   static Future<int> stopBackgroundService() async => 0;
   static Future<bool> enableAutoStart() async => false;
   static Future<bool> disableAutoStart() async => false;
+  static void exitApp() {}
 }

@@ -54,7 +54,7 @@ class WindowsBackgroundService {
           if (parts.length >= 2) {
             final pidStr = parts[1].replaceAll('"', '').trim();
             final procPid = int.tryParse(pidStr);
-            if (procPid != null && procPid != currentPid) {
+            if (procPid != null) {
               runningPids.add(procPid);
             }
           }
@@ -70,6 +70,11 @@ class WindowsBackgroundService {
       isAutoStartEnabled: isAutoStart,
       runningPids: runningPids,
     );
+  }
+
+  /// Completely terminate application process
+  static void exitApp() {
+    exit(0);
   }
 
   /// Launch the app silently in background as an independent detached process

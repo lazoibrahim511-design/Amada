@@ -38,6 +38,16 @@ bool FlutterWindow::OnCreate() {
   // window is shown. It is a no-op if the first frame hasn't completed yet.
   flutter_controller_->ForceRedraw();
 
+  static const UINT showMsg = ::RegisterWindowMessage(L"AMADA_ATTENDANCE_SHOW_WINDOW");
+  typedef BOOL(WINAPI* ChangeWindowMessageFilterExPtr)(HWND, UINT, DWORD, PCHANGEFILTERSTRUCT);
+  HMODULE user32 = GetModuleHandle(L"user32.dll");
+  if (user32) {
+    auto changeFilter = (ChangeWindowMessageFilterExPtr)GetProcAddress(user32, "ChangeWindowMessageFilterEx");
+    if (changeFilter) {
+      changeFilter(GetHandle(), showMsg, 1 /* MSGFLT_ALLOW */, nullptr);
+    }
+  }
+
   return true;
 }
 
@@ -53,6 +63,17 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  static const UINT showMsg = ::RegisterWindowMessage(L"AMADA_ATTENDANCE_SHOW_WINDOW");
+  if (message == showMsg) {
+    ShowWindow(hwnd, SW_SHOW);
+    ShowWindow(hwnd, SW_RESTORE);
+    SetForegroundWindow(hwnd);
+    if (flutter_controller_) {
+      flutter_controller_->ForceRedraw();
+    }
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -64,6 +85,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_CLOSE:
+      ShowWindow(hwnd, SW_HIDE);
+      return 0;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
