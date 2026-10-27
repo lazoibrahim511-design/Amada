@@ -1171,6 +1171,28 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF10B981).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.desktop_windows_rounded, color: Color(0xFF10B981), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '24/7 Unattended Office Sync: Run "start_amada_zk_bridge.bat" on your office Windows PC to sync punches continuously to Firebase without keeping mobile phones open.',
+                    style: TextStyle(fontSize: 12, color: textColor, height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
