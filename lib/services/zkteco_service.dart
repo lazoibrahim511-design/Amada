@@ -829,14 +829,31 @@ class ZkTecoService extends ChangeNotifier {
   CompanyEmployee? _findMatchingEmployee(String deviceUserId, List<CompanyEmployee> employees) {
     final cleanId = deviceUserId.trim().toLowerCase();
 
+    // 1. Direct match (e.g. "101" == "101")
     for (var emp in employees) {
       if (emp.id.trim().toLowerCase() == cleanId) return emp;
     }
 
+    // 2. Suffix match after company prefix (e.g. "amada_101" -> "101", "lazo_101" -> "101", "EMP-101" -> "101")
+    for (var emp in employees) {
+      final parts = emp.id.trim().toLowerCase().split(RegExp(r'[_/\-]'));
+      if (parts.isNotEmpty && parts.last == cleanId) {
+        return emp;
+      }
+    }
+
+    // 3. Suffix numeric extraction (e.g. "amada_emp101" -> "101")
     final numericOnly = cleanId.replaceAll(RegExp(r'[^0-9]'), '');
     if (numericOnly.isNotEmpty) {
       final parsedNum = int.tryParse(numericOnly);
       for (var emp in employees) {
+        final parts = emp.id.trim().toLowerCase().split(RegExp(r'[_/\-]'));
+        if (parts.isNotEmpty) {
+          final lastNumeric = parts.last.replaceAll(RegExp(r'[^0-9]'), '');
+          if (lastNumeric.isNotEmpty && int.tryParse(lastNumeric) == parsedNum) {
+            return emp;
+          }
+        }
         final empNum = emp.id.replaceAll(RegExp(r'[^0-9]'), '');
         if (empNum.isNotEmpty && int.tryParse(empNum) == parsedNum) {
           return emp;
@@ -844,6 +861,7 @@ class ZkTecoService extends ChangeNotifier {
       }
     }
 
+    // 4. Exact name match fallback
     for (var emp in employees) {
       if (emp.name.trim().toLowerCase() == cleanId) return emp;
     }
