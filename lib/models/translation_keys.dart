@@ -1125,6 +1125,9 @@ class TranslationKeys {
       'delete_account_confirm_desc': 'Are you sure you want to delete your account? This will permanently remove your employee profile, biometric facial data, and personal attendance history in compliance with privacy regulations. This action cannot be undone.',
       'delete_account_btn': 'Delete My Account',
       'account_deleted_success': 'Your account and personal data have been deleted successfully.',
+      'hire_date': 'Start Date (Hire Date)',
+      'start_date_hint': 'All attendance records and payroll calculations will start from this date.',
+      'no_records_before_hire': 'Employee start date is {date}. No attendance records exist prior to this date.',
     },
     'ar': {
       'app_title': 'أمادا',
@@ -2251,6 +2254,9 @@ class TranslationKeys {
       'delete_account_confirm_desc': 'هل أنت متأكد من رغبتك في حذف حسابك؟ سيؤدي ذلك إلى حذف ملفك التعريفي وبيانات بصمة الوجه وسجلات حضورك نهائياً وفقاً للوائح الخصوصية. لا يمكن التراجع عن هذا الإجراء.',
       'delete_account_btn': 'حذف حسابي نهائياً',
       'account_deleted_success': 'تم حذف حسابك وبياناتك الشخصية بنجاح.',
+      'hire_date': 'تاريخ بدء العمل (التعيين)',
+      'start_date_hint': 'ستبدأ جميع سجلات الحضور وحسابات الرواتب من هذا التاريخ.',
+      'no_records_before_hire': 'تاريخ بدء عمل الموظف هو {date}. لا توجد سجلات حضور قبل هذا التاريخ.',
     },
     'ku': {
       'app_title': 'ئامادا',
@@ -3377,6 +3383,9 @@ class TranslationKeys {
       'delete_account_confirm_desc': 'دڵنیایت لە سڕینەوەی هەژمارەکەت؟ ئەمە دەبێتە هۆی سڕینەوەی تەواوەتی پڕۆفایلەکەت، داتای بایۆمەتری دەموچاو و مێژووی دەوامت بەپێی یاساکانی پاراستنی تایبەتمەندی. ئەم کردارە ناگەڕێندرێتەوە.',
       'delete_account_btn': 'سڕینەوەی هەژمارەکەم',
       'account_deleted_success': 'هەژمارەکەت و زانیارییە کەسییەکانت بە سەرکەوتوویی سڕانەوە.',
+      'hire_date': 'بەرواری دەستبەکاربوون',
+      'start_date_hint': 'تەواوی تۆمارەکانی دەوام و حیساباتی مووچە لەم بەروارەوە دەستپێدەکات.',
+      'no_records_before_hire': 'بەرواری دەستبەکاربوونی کارمەند {date}ە. هیچ تۆمارێکی دەوام پێش ئەم بەروارە نییە.',
     }
   };
 }

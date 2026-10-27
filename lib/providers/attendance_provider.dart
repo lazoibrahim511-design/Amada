@@ -2424,8 +2424,6 @@ class AttendanceProvider with ChangeNotifier {
     final foodAllowance = config.foodAllowance;
     final transportationAllowance = config.transportationAllowance;
     final otherAllowance = config.otherAllowance;
-    final totalAllowances =
-        foodAllowance + transportationAllowance + otherAllowance;
 
     // We will look up the group & shift per-day inside the loop.
 
@@ -2469,8 +2467,37 @@ class AttendanceProvider with ChangeNotifier {
     int earlyExitTier2Occurrences = 0;
     int earlyExitTier3Occurrences = 0;
 
+    // Respect Employee Start Date (Hire Date) and End Date
+    DateTime? empStart;
+    if (emp.startDate.isNotEmpty) {
+      try {
+        empStart = DateTime.parse(emp.startDate);
+      } catch (_) {}
+    }
+    DateTime? empEnd;
+    if (emp.endDate != null && emp.endDate!.isNotEmpty) {
+      try {
+        empEnd = DateTime.parse(emp.endDate!);
+      } catch (_) {}
+    }
+
     for (int day = 1; day <= daysInMonth; day++) {
       final date = DateTime(targetMonth.year, targetMonth.month, day);
+      final cleanDate = DateTime(date.year, date.month, date.day);
+
+      // Skip days before employee start date or after employee end date
+      if (empStart != null) {
+        final cleanStart = DateTime(empStart.year, empStart.month, empStart.day);
+        if (cleanDate.isBefore(cleanStart)) {
+          continue;
+        }
+      }
+      if (empEnd != null) {
+        final cleanEnd = DateTime(empEnd.year, empEnd.month, empEnd.day);
+        if (cleanDate.isAfter(cleanEnd)) {
+          continue;
+        }
+      }
       final activeGroupId = getGroupIdForDate(emp, date);
       final group = _groups.firstWhere(
         (g) => g.id == activeGroupId,
@@ -2984,10 +3011,49 @@ class AttendanceProvider with ChangeNotifier {
     final double insuranceEmployee = hasInsurance ? (insuranceSalary * 0.05) : 0.0;
     final double insuranceCompany = hasInsurance ? (insuranceSalary * 0.12) : 0.0;
 
+    double effectiveFoodAllowance = foodAllowance;
+    double effectiveTransportationAllowance = transportationAllowance;
+    double effectiveOtherAllowance = otherAllowance;
+
+    if (empStart != null) {
+      final cleanStart = DateTime(empStart.year, empStart.month, empStart.day);
+      final monthStart = DateTime(targetMonth.year, targetMonth.month, 1);
+      final monthEnd = DateTime(targetMonth.year, targetMonth.month, daysInMonth);
+
+      if (cleanStart.isAfter(monthEnd)) {
+        effectiveFoodAllowance = 0.0;
+        effectiveTransportationAllowance = 0.0;
+        effectiveOtherAllowance = 0.0;
+      } else if (cleanStart.isAfter(monthStart)) {
+        final activeDays = daysInMonth - (cleanStart.day - 1);
+        final factor = (activeDays / daysInMonth).clamp(0.0, 1.0);
+        effectiveFoodAllowance = foodAllowance * factor;
+        effectiveTransportationAllowance = transportationAllowance * factor;
+        effectiveOtherAllowance = otherAllowance * factor;
+      }
+    }
+    if (empEnd != null) {
+      final cleanEnd = DateTime(empEnd.year, empEnd.month, empEnd.day);
+      final monthStart = DateTime(targetMonth.year, targetMonth.month, 1);
+      final monthEnd = DateTime(targetMonth.year, targetMonth.month, daysInMonth);
+
+      if (cleanEnd.isBefore(monthStart)) {
+        effectiveFoodAllowance = 0.0;
+        effectiveTransportationAllowance = 0.0;
+        effectiveOtherAllowance = 0.0;
+      } else if (cleanEnd.isBefore(monthEnd)) {
+        final factor = (cleanEnd.day / daysInMonth).clamp(0.0, 1.0);
+        effectiveFoodAllowance = effectiveFoodAllowance * factor;
+        effectiveTransportationAllowance = effectiveTransportationAllowance * factor;
+        effectiveOtherAllowance = effectiveOtherAllowance * factor;
+      }
+    }
+    final effectiveTotalAllowances = effectiveFoodAllowance + effectiveTransportationAllowance + effectiveOtherAllowance;
+
     final double incrementalSalary =
         salaryCalcByDay +
         overtimeValue +
-        (daysWorked > 0 ? totalAllowances : 0.0) +
+        (daysWorked > 0 ? effectiveTotalAllowances : 0.0) +
         monthlyAdditions;
 
     // 5% insurance deduction decreases final net salary
@@ -3015,9 +3081,9 @@ class AttendanceProvider with ChangeNotifier {
       unpaidLeaveHours: unpaidLeaveHours,
       unpaidLeaveDeduction: unpaidLeaveDeduction,
       monthlyPenalties: totalPenalties,
-      foodAllowance: foodAllowance,
-      transportationAllowance: transportationAllowance,
-      otherAllowance: otherAllowance,
+      foodAllowance: effectiveFoodAllowance,
+      transportationAllowance: effectiveTransportationAllowance,
+      otherAllowance: effectiveOtherAllowance,
       monthlyAdditions: monthlyAdditions,
       monthlyDeductions: monthlyDeductions,
       hasInsurance: hasInsurance,

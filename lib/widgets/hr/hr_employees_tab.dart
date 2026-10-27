@@ -1959,6 +1959,11 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
     final annualLeaveBalanceController = TextEditingController(
       text: employee != null ? employee.annualLeaveBalance.toString() : '24.0',
     );
+    final startDateController = TextEditingController(
+      text: employee?.startDate.isNotEmpty == true
+          ? employee!.startDate
+          : nowStr,
+    );
     final groupStartDateController = TextEditingController(
       text: employee?.groupStartDate.isNotEmpty == true
           ? employee!.groupStartDate
@@ -2659,6 +2664,37 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       labelText: provider.translate('position_job_title'),
                       labelStyle: TextStyle(color: labelColor),
                       prefixIcon: Icon(Icons.badge_outlined, size: 18, color: iconColor),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Employee Start Date (Hire Date)
+                  InkWell(
+                    onTap: () async {
+                      final initial = DateTime.tryParse(startDateController.text) ?? DateTime.now();
+                      final picked = await showCompactDatePicker(
+                        context: context,
+                        initialDate: initial,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          startDateController.text = DateFormat('yyyy-MM-dd').format(picked);
+                        });
+                      }
+                    },
+                    child: IgnorePointer(
+                      child: TextField(
+                        controller: startDateController,
+                        style: TextStyle(color: textColor),
+                        decoration: InputDecoration(
+                          labelText: '${provider.translate('hire_date')} *',
+                          labelStyle: TextStyle(color: labelColor),
+                          prefixIcon: Icon(Icons.calendar_today_rounded, size: 18, color: iconColor),
+                          helperText: provider.translate('start_date_hint'),
+                          helperStyle: TextStyle(color: subtextColor, fontSize: 10),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -3483,6 +3519,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 position: pos.isNotEmpty ? pos : 'Team Member',
                 role: selectedRole,
                 password: passwordController.text.trim().isNotEmpty ? passwordController.text.trim() : employee.password,
+                startDate: startDateController.text.trim().isNotEmpty ? startDateController.text.trim() : employee.startDate,
                 structureId: selectedStructure,
                 overrideStructureId: true,
                 groupId: finalGroupId,
@@ -3533,7 +3570,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                     basicSalary: salaryVal,
                     workingHours: 160.0,
                     currency: 'USD',
-                    startDate: nowStr,
+                    startDate: startDateController.text.trim().isNotEmpty ? startDateController.text.trim() : nowStr,
                     endDate: null,
                     hasInsurance: false,
                     insuranceSalary: 0.0,
@@ -3554,7 +3591,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                 groupHistory: gHistory,
                 phoneNumber: phoneController.text.trim(),
                 disabled: isDisabled,
-                startDate: nowStr,
+                startDate: startDateController.text.trim().isNotEmpty ? startDateController.text.trim() : nowStr,
                 basicSalary: salaryVal,
                 workingHours: 160.0,
                 salaryHistory: initialHistory,

@@ -954,6 +954,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             primaryColor: primaryColor,
             secondaryColor: secondaryColor,
           ),
+
+          // Hire Date / Start Date
+          if (currentEmp?.startDate.isNotEmpty == true) ...[
+            _buildDivider(isDark),
+            _buildInfoRow(
+              context: context,
+              icon: Icons.calendar_today_rounded,
+              gradientColors: const [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+              title: provider.translate('hire_date'),
+              value: currentEmp!.startDate,
+              isDark: isDark,
+              primaryColor: primaryColor,
+              secondaryColor: secondaryColor,
+            ),
+          ],
         ],
       ),
     );

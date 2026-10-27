@@ -249,8 +249,30 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
 
       final dailyAuditLogs = <PeriodicDailyAudit>[];
 
+      DateTime? empStart;
+      if (emp.startDate.isNotEmpty) {
+        try {
+          empStart = DateTime.parse(emp.startDate);
+        } catch (_) {}
+      }
+      DateTime? empEnd;
+      if (emp.endDate != null && emp.endDate!.isNotEmpty) {
+        try {
+          empEnd = DateTime.parse(emp.endDate!);
+        } catch (_) {}
+      }
+
       for (int i = 0; i < totalDaysCount; i++) {
         final date = cleanStart.add(Duration(days: i));
+        final cleanDate = DateTime(date.year, date.month, date.day);
+        if (empStart != null) {
+          final sOnly = DateTime(empStart.year, empStart.month, empStart.day);
+          if (cleanDate.isBefore(sOnly)) continue;
+        }
+        if (empEnd != null) {
+          final eOnly = DateTime(empEnd.year, empEnd.month, empEnd.day);
+          if (cleanDate.isAfter(eOnly)) continue;
+        }
         final dateStrFormatted = DateFormat('MMMM d, yyyy').format(date);
         final shortDateStr = DateFormat('MMMM d').format(date);
 

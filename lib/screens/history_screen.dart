@@ -213,6 +213,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
         orElse: () => provider.currentEmployee ?? CompanyEmployee(id: activeEmpId, name: 'Employee', email: '', position: ''),
       );
 
+      // Respect Employee Start Date (Hire Date) and End Date
+      DateTime? empStart;
+      if (emp.startDate.isNotEmpty) {
+        try {
+          empStart = DateTime.parse(emp.startDate);
+        } catch (_) {}
+      }
+      DateTime? empEnd;
+      if (emp.endDate != null && emp.endDate!.isNotEmpty) {
+        try {
+          empEnd = DateTime.parse(emp.endDate!);
+        } catch (_) {}
+      }
+
+      if (empStart != null) {
+        final cleanStart = DateTime(empStart.year, empStart.month, empStart.day);
+        datesInPeriod.removeWhere((d) => DateTime(d.year, d.month, d.day).isBefore(cleanStart));
+      }
+      if (empEnd != null) {
+        final cleanEnd = DateTime(empEnd.year, empEnd.month, empEnd.day);
+        datesInPeriod.removeWhere((d) => DateTime(d.year, d.month, d.day).isAfter(cleanEnd));
+      }
+
       final List<AttendanceRecord> recordsToCompile;
       if (isCurrentUser) {
         // Current user: always prioritize live streaming records from provider.records
@@ -1669,7 +1692,32 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   physics: const AlwaysScrollableScrollPhysics(
                                     parent: BouncingScrollPhysics(),
                                   ),
-                                  child: Table(
+                                  child: compiledData.isEmpty
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 24),
+                                          alignment: Alignment.center,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.calendar_month_rounded,
+                                                size: 44,
+                                                color: bodyTextColor.withValues(alpha: 0.25),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Text(
+                                                provider.translate('no_records'),
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: bodyTextColor.withValues(alpha: 0.6),
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : Table(
                                   columnWidths: columnWidths,
                                   defaultVerticalAlignment:
                                       TableCellVerticalAlignment.middle,
