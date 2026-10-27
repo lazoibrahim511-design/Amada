@@ -22,9 +22,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
 
+  bool start_hidden = false;
+  for (const auto& arg : command_line_arguments) {
+    if (arg == "--silent" || arg == "--background") {
+      start_hidden = true;
+      break;
+    }
+  }
+
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
-  FlutterWindow window(project);
+  FlutterWindow window(project, start_hidden);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"Amada", origin, size)) {

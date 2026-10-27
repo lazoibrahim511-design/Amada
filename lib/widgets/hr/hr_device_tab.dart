@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/hr_models.dart';
 import '../../providers/attendance_provider.dart';
 import '../../services/firebase_service.dart';
+import '../../services/windows_background_service.dart';
 import '../../services/zkteco_service.dart';
 import '../glass_container.dart';
 import '../neu_button.dart';
@@ -29,6 +30,9 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
   bool _isFetchingUsers = false;
   String? _selectedDeviceForUsers;
 
+  BackgroundServiceStatus? _bgStatus;
+  bool _isBgActionLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -36,7 +40,67 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     _cooldown = _zkService.cooldownMinutes;
     _autoSync = _zkService.autoSyncEnabled;
 
+    _loadBgStatus();
     _zkService.addListener(_onServiceUpdate);
+  }
+
+  Future<void> _loadBgStatus() async {
+    if (!WindowsBackgroundService.isSupported) return;
+    final status = await WindowsBackgroundService.getStatus();
+    if (mounted) {
+      setState(() => _bgStatus = status);
+    }
+  }
+
+  Future<void> _handleStartBgService(AttendanceProvider provider) async {
+    setState(() => _isBgActionLoading = true);
+    final success = await WindowsBackgroundService.startBackgroundService();
+    await Future.delayed(const Duration(milliseconds: 1000));
+    await _loadBgStatus();
+    setState(() => _isBgActionLoading = false);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? provider.translate('bg_service_started_msg') : 'Failed to start background service'),
+        backgroundColor: success ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+      ),
+    );
+  }
+
+  Future<void> _handleStopBgService(AttendanceProvider provider) async {
+    setState(() => _isBgActionLoading = true);
+    await WindowsBackgroundService.stopBackgroundService();
+    await Future.delayed(const Duration(milliseconds: 500));
+    await _loadBgStatus();
+    setState(() => _isBgActionLoading = false);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(provider.translate('bg_service_stopped_msg')),
+        backgroundColor: const Color(0xFF3B82F6),
+      ),
+    );
+  }
+
+  Future<void> _handleToggleAutoStart(AttendanceProvider provider, bool enable) async {
+    setState(() => _isBgActionLoading = true);
+    final success = enable
+        ? await WindowsBackgroundService.enableAutoStart()
+        : await WindowsBackgroundService.disableAutoStart();
+    await _loadBgStatus();
+    setState(() => _isBgActionLoading = false);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(enable
+            ? provider.translate('bg_autostart_enabled_msg')
+            : provider.translate('bg_autostart_disabled_msg')),
+        backgroundColor: success ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+      ),
+    );
   }
 
   void _onServiceUpdate() {
@@ -674,6 +738,28 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
           fontSize: 12.5,
           padding: const EdgeInsets.symmetric(horizontal: 14),
         ),
+        if (WindowsBackgroundService.isSupported)
+          NeuButton(
+            onPressed: _isBgActionLoading
+                ? null
+                : () => (_bgStatus?.isRunning == true)
+                    ? _handleStopBgService(provider)
+                    : _handleStartBgService(provider),
+            isLoading: _isBgActionLoading,
+            icon: Icon(
+              (_bgStatus?.isRunning == true) ? Icons.stop_rounded : Icons.play_arrow_rounded,
+              size: 18,
+            ),
+            label: (_bgStatus?.isRunning == true)
+                ? provider.translate('stop_bg_service_btn')
+                : provider.translate('run_in_background_btn'),
+            variant: (_bgStatus?.isRunning == true)
+                ? NeuButtonVariant.danger
+                : NeuButtonVariant.navy,
+            height: 38,
+            fontSize: 12.5,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+          ),
       ],
     );
 
@@ -1171,28 +1257,212 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 12),
+          _buildWindowsBackgroundServiceSection(context, textColor, subtextColor, provider),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWindowsBackgroundServiceSection(
+    BuildContext context,
+    Color textColor,
+    Color subtextColor,
+    AttendanceProvider provider,
+  ) {
+    final isSupported = WindowsBackgroundService.isSupported;
+    final isRunning = _bgStatus?.isRunning ?? false;
+    final isAutoStart = _bgStatus?.isAutoStartEnabled ?? false;
+    final count = _bgStatus?.runningPids.length ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isRunning
+            ? const Color(0xFF10B981).withValues(alpha: 0.08)
+            : const Color(0xFF2E65FF).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isRunning
+              ? const Color(0xFF10B981).withValues(alpha: 0.3)
+              : const Color(0xFF2E65FF).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isRunning
+                      ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                      : const Color(0xFF2E65FF).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.desktop_windows_rounded,
+                  color: isRunning ? const Color(0xFF10B981) : const Color(0xFF2E65FF),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      provider.translate('bg_service_title'),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      provider.translate('bg_service_desc'),
+                      style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSupported)
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  tooltip: 'Refresh',
+                  onPressed: _isBgActionLoading ? null : _loadBgStatus,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          if (isSupported) ...[
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Icon(Icons.desktop_windows_rounded, color: Color(0xFF10B981), size: 18),
-                const SizedBox(width: 8),
-                Expanded(
+                // Status Chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isRunning
+                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isRunning
+                          ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                          : Colors.grey.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isRunning ? const Color(0xFF10B981) : Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isRunning
+                            ? provider.translate('bg_service_status_running', params: {'count': '$count'})
+                            : provider.translate('bg_service_status_stopped'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: isRunning ? const Color(0xFF10B981) : subtextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Auto Start Chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isAutoStart
+                        ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isAutoStart
+                          ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
+                          : Colors.grey.withValues(alpha: 0.25),
+                    ),
+                  ),
                   child: Text(
-                    '24/7 Unattended Office Sync: Run "start_amada_zk_bridge.bat" on your office Windows PC to sync punches continuously to Firebase without keeping mobile phones open.',
-                    style: TextStyle(fontSize: 12, color: textColor, height: 1.3),
+                    isAutoStart
+                        ? provider.translate('bg_service_autostart_enabled')
+                        : provider.translate('bg_service_autostart_disabled'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isAutoStart ? const Color(0xFF8B5CF6) : subtextColor,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (!isRunning)
+                  NeuButton(
+                    onPressed: _isBgActionLoading ? null : () => _handleStartBgService(provider),
+                    isLoading: _isBgActionLoading,
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: provider.translate('run_in_background_btn'),
+                    variant: NeuButtonVariant.primary,
+                    height: 36,
+                    fontSize: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  )
+                else
+                  NeuButton(
+                    onPressed: _isBgActionLoading ? null : () => _handleStopBgService(provider),
+                    isLoading: _isBgActionLoading,
+                    icon: const Icon(Icons.stop_rounded, size: 18),
+                    label: provider.translate('stop_bg_service_btn'),
+                    variant: NeuButtonVariant.danger,
+                    height: 36,
+                    fontSize: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                NeuButton(
+                  onPressed: _isBgActionLoading ? null : () => _handleToggleAutoStart(provider, !isAutoStart),
+                  isLoading: _isBgActionLoading,
+                  icon: Icon(
+                    isAutoStart ? Icons.power_settings_new_rounded : Icons.check_circle_outline_rounded,
+                    size: 16,
+                  ),
+                  label: isAutoStart
+                      ? provider.translate('disable_autostart_btn')
+                      : provider.translate('enable_autostart_btn'),
+                  variant: NeuButtonVariant.whitePill,
+                  height: 36,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+              ],
+            ),
+          ] else ...[
+            Text(
+              'Windows 24/7 Background Sync: Available when running the Windows Desktop application on your office PC. Download the Windows installer or launch "start_amada_zk_bridge.bat".',
+              style: TextStyle(fontSize: 12, color: subtextColor, height: 1.3),
+            ),
+          ],
         ],
       ),
     );

@@ -41,6 +41,7 @@ class ZkTecoService extends ChangeNotifier {
   final List<String> _syncLogs = [];
 
   Timer? _autoSyncTimer;
+  Timer? _initialSyncTimer;
   AttendanceProvider? _cachedProvider;
   FirebaseService? _cachedFirebase;
 
@@ -894,7 +895,7 @@ class ZkTecoService extends ChangeNotifier {
   void startAutoSync(AttendanceProvider provider, FirebaseService firebase, {bool triggerImmediately = true}) {
     stopAutoSync();
     if (triggerImmediately) {
-      Future.delayed(const Duration(seconds: 4), () async {
+      _initialSyncTimer = Timer(const Duration(seconds: 4), () async {
         if (_autoSyncEnabled && !_isSyncing) {
           debugPrint('Running initial ZKTeco auto-sync...');
           await syncAllDevices(provider: provider, firebase: firebase);
@@ -914,6 +915,8 @@ class ZkTecoService extends ChangeNotifier {
   }
 
   void stopAutoSync() {
+    _initialSyncTimer?.cancel();
+    _initialSyncTimer = null;
     _autoSyncTimer?.cancel();
     _autoSyncTimer = null;
   }

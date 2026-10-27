@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:attendance_app/main.dart';
+import 'package:attendance_app/services/zkteco_service.dart';
 
 void main() {
   testWidgets('Attendance App dashboard renders smoke test', (WidgetTester tester) async {
@@ -18,5 +19,8 @@ void main() {
           (w.data == 'Welcome Back' || (w.data?.contains('Welcome') ?? false))),
       findsWidgets,
     );
+
+    // Cancel background timers to cleanly dispose test
+    ZkTecoService.instance.stopAutoSync();
   });
 }

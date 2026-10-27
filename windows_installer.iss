@@ -27,13 +27,22 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "autostart"; Description: "Run 24/7 background sync service on Windows startup (no window needed)"; GroupDescription: "ZKTeco Background Service:"
 
 [Files]
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "run_background_service.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "install_as_service.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "stop_background_service.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Start Background Sync Service"; Filename: "{app}\run_background_service.vbs"
+Name: "{group}\Stop Background Sync Service"; Filename: "{app}\stop_background_service.bat"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "AmadaZkBackgroundSync"; ValueData: """{app}\{#MyAppExeName}"" --silent"; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
