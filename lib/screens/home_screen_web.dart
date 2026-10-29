@@ -179,7 +179,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -187,7 +187,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                       style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF6366F1),
+                        color: Color(0xFF10B981),
                       ),
                     ),
                   ),
@@ -248,7 +248,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                   const Icon(
                     Icons.calendar_today_rounded,
                     size: 15,
-                    color: Color(0xFF6366F1),
+                    color: Color(0xFF10B981),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -273,7 +273,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
+                backgroundColor: const Color(0xFF10B981),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -424,7 +424,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                 label: 'Duration',
                 time: durationStr,
                 icon: Icons.timer_outlined,
-                color: const Color(0xFF6366F1),
+                color: const Color(0xFF10B981),
                 isDark: isDark,
               ),
             ],
@@ -445,7 +445,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                 const Icon(
                   Icons.schedule_rounded,
                   size: 15,
-                  color: Color(0xFF6366F1),
+                  color: Color(0xFF10B981),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -654,7 +654,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+          color: const Color(0xFF10B981).withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -662,7 +662,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
           style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF6366F1),
+            color: Color(0xFF10B981),
           ),
         ),
       ),
@@ -779,7 +779,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                         gradient: LinearGradient(
                           colors: isToday
-                              ? const [Color(0xFF6366F1), Color(0xFF8B5CF6)]
+                              ? const [Color(0xFF00F0D8), Color(0xFF00BD96)]
                               : (isDark
                                   ? const [Color(0xFF3B82F6), Color(0xFF60A5FA)]
                                   : const [Color(0xFF4F46E5), Color(0xFF818CF8)]),
@@ -829,7 +829,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
         ),
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF6366F1),
+          foregroundColor: const Color(0xFF10B981),
         ),
       ),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -973,7 +973,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
             title: provider.translate('new_request'),
             subtitle: 'Apply for Leave, Permission, Overtime',
             icon: Icons.post_add_rounded,
-            color: const Color(0xFF6366F1),
+            color: const Color(0xFF10B981),
             isDark: isDark,
             onTap: () {
               showNewRequestDialog(context: context, provider: provider);
@@ -1115,7 +1115,7 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 13,
-            color: Color(0xFF6366F1),
+            color: Color(0xFF10B981),
           ),
         ),
       ),
@@ -1148,8 +1148,8 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
                     icon: const Icon(Icons.add_rounded, size: 16),
                     label: Text(provider.translate('submit_request')),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF6366F1),
-                      side: const BorderSide(color: Color(0xFF6366F1)),
+                      foregroundColor: const Color(0xFF10B981),
+                      side: const BorderSide(color: Color(0xFF10B981)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),

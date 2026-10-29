@@ -160,10 +160,16 @@ class _PayrollAdjustmentDialogContentState
         : _deductionCategories.first;
 
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
-    final availableEmps = provider.employees;
+    final seenInitIds = <String>{};
+    final availableEmps = provider.employees
+        .where((e) => e.id.trim().isNotEmpty && seenInitIds.add(e.id.trim().toLowerCase()))
+        .toList();
 
     if (widget.initialEmployee != null) {
-      _selectedEmployee = widget.initialEmployee;
+      _selectedEmployee = availableEmps.firstWhere(
+        (e) => e.id.trim().toLowerCase() == widget.initialEmployee!.id.trim().toLowerCase(),
+        orElse: () => widget.initialEmployee!,
+      );
     } else if (availableEmps.isNotEmpty) {
       _selectedEmployee = availableEmps.first;
     }
@@ -285,7 +291,17 @@ class _PayrollAdjustmentDialogContentState
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = Provider.of<AttendanceProvider>(context);
-    final employees = provider.employees;
+    final seenIds = <String>{};
+    final employees = provider.employees
+        .where((e) => e.id.trim().isNotEmpty && seenIds.add(e.id.trim().toLowerCase()))
+        .toList();
+
+    if (_selectedEmployee != null &&
+        !employees.any((e) => e.id.trim().toLowerCase() == _selectedEmployee!.id.trim().toLowerCase())) {
+      _selectedEmployee = employees.isNotEmpty ? employees.first : null;
+    } else if (_selectedEmployee == null && employees.isNotEmpty) {
+      _selectedEmployee = employees.first;
+    }
 
     final isAddition = _type == 'addition';
     final accentColor = isAddition
@@ -558,16 +574,17 @@ class _PayrollAdjustmentDialogContentState
                             ),
                           ),
                           child: DropdownButtonHideUnderline(
-                            child: DropdownButton<CompanyEmployee>(
-                              value: employees.contains(_selectedEmployee)
-                                  ? _selectedEmployee
-                                  : (employees.isNotEmpty ? employees.first : null),
+                            child: DropdownButton<String>(
+                              value: _selectedEmployee != null &&
+                                      employees.any((e) => e.id.trim().toLowerCase() == _selectedEmployee!.id.trim().toLowerCase())
+                                  ? _selectedEmployee!.id
+                                  : (employees.isNotEmpty ? employees.first.id : null),
                               isExpanded: true,
                               dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                               hint: Text(provider.translate('select_employee')),
                               items: employees.map((emp) {
-                                return DropdownMenuItem<CompanyEmployee>(
-                                  value: emp,
+                                return DropdownMenuItem<String>(
+                                  value: emp.id,
                                   child: Row(
                                     children: [
                                       CircleAvatar(
@@ -614,12 +631,16 @@ class _PayrollAdjustmentDialogContentState
                                   ),
                                 );
                               }).toList(),
-                              onChanged: (emp) {
-                                if (emp != null) {
+                              onChanged: (empId) {
+                                if (empId != null) {
+                                  final matchingEmp = employees.firstWhere(
+                                    (e) => e.id.trim().toLowerCase() == empId.trim().toLowerCase(),
+                                    orElse: () => employees.first,
+                                  );
                                   setState(() {
-                                    _selectedEmployee = emp;
-                                    _currency = emp.salaryCurrency.isNotEmpty
-                                        ? emp.salaryCurrency
+                                    _selectedEmployee = matchingEmp;
+                                    _currency = matchingEmp.salaryCurrency.isNotEmpty
+                                        ? matchingEmp.salaryCurrency
                                         : 'USD';
                                   });
                                 }

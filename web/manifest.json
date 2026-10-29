@@ -1,11 +1,11 @@
 {
-    "name": "Amada",
+    "name": "Amada Attendance",
     "short_name": "Amada",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F172A",
+    "theme_color": "#00E5CE",
+    "description": "Amada Attendance & HR Management System",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

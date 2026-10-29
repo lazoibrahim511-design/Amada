@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/platform_helper.dart';
 import 'home_screen.dart';
 import 'history_screen.dart';
 import 'payroll_screen.dart';
@@ -105,7 +106,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
       debugPrint('Failed to save tab: $e');
     }
 
-    if (!kIsWeb && _pageController.hasClients && index < 5) {
+    if (!isWebOrDesktopPlatform && _pageController.hasClients && index < 5) {
       if ((_pageController.page?.round() ?? _selectedIndex) != index) {
         _isPageAnimating = true;
         try {
@@ -143,8 +144,8 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 800;
-              final isMobileApp = !kIsWeb && !isDesktop;
+              final isDesktop = isWebOrDesktopPlatform || constraints.maxWidth >= 800;
+              final isMobileApp = !isDesktop;
 
               // Ensure PageView stays synchronized if returning from embedded desktop tabs
               if (isMobileApp && _selectedIndex < 5) {
@@ -305,7 +306,6 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _buildTopNavItem(0, provider.translate('home'), Icons.home_filled),
-                      if (!kIsWeb) _buildTopNavItem(1, provider.translate('clock'), Icons.access_time_filled),
                       _buildTopNavItem(2, provider.translate('history'), Icons.history),
                       _buildTopNavItem(3, provider.translate('payroll'), Icons.attach_money),
                       _buildTopNavItem(4, provider.translate('requests'), Icons.description),
@@ -370,15 +370,18 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? const [Color(0xFF00F0D8), Color(0xFF00CBB4)]
+                              : const [Color(0xFF00E5CE), Color(0xFF00BFA5)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                            color: (isDark ? const Color(0xFF00F0D8) : const Color(0xFF00E5CE))
+                                .withValues(alpha: 0.35),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -387,7 +390,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                       child: const Icon(
                         Icons.auto_awesome,
                         size: 20,
-                        color: Colors.white,
+                        color: Color(0xFF0A2342),
                       ),
                     ),
                   ),
@@ -426,10 +429,27 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                     color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.chat_bubble_outline,
-                    size: 20,
-                    color: isDark ? Colors.white : const Color(0xFF64748B),
+                  child: Stack(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 20,
+                        color: isDark ? Colors.white : const Color(0xFF64748B),
+                      ),
+                      if (provider.hasUnreadMessages)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEF4444),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -454,18 +474,19 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
                         size: 20,
                         color: isDark ? Colors.white : const Color(0xFF64748B),
                       ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFEF4444),
-                            shape: BoxShape.circle,
+                      if (provider.unreadNotificationCount > 0)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEF4444),
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),

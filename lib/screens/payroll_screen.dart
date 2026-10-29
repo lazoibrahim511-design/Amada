@@ -1,6 +1,6 @@
 import 'dart:ui' show PointerDeviceKind;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/platform_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
@@ -233,7 +233,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (kIsWeb)
+                        if (isWebOrDesktopLayout(context))
                           _buildWebPayrollTable(context, provider)
                         else ...[
                           // Main Earnings Card
@@ -691,8 +691,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       ),
                     ],
 
-                          // Extra padding for bottom bar
-                          if (!kIsWeb) SizedBox(height: 120),
+                          // Extra padding for mobile bottom bar
+                          if (!isWebOrDesktopLayout(context)) const SizedBox(height: 120),
                         ],
                       ],
                     ),

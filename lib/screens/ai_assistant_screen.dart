@@ -143,10 +143,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.key_rounded, color: Color(0xFF6366F1), size: 22),
+                  child: const Icon(Icons.key_rounded, color: Color(0xFF10B981), size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -193,13 +193,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF6366F1)),
+                      const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF10B981)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -207,7 +207,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4338CA),
+                            color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF065F46),
                           ),
                         ),
                       ),
@@ -223,7 +223,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
+                  backgroundColor: const Color(0xFF10B981),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
@@ -312,20 +312,20 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                  color: const Color(0xFF00E5CE).withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+            child: const Icon(Icons.auto_awesome, color: Color(0xFF0A2342), size: 20),
           ),
           const SizedBox(width: 12),
           Column(
@@ -393,20 +393,20 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                  color: const Color(0xFF00E5CE).withValues(alpha: 0.35),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+            child: const Icon(Icons.auto_awesome, color: Color(0xFF0A2342), size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -552,7 +552,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4)),
+                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -586,7 +586,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4)),
+                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -633,18 +633,18 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF6366F1)
+              ? const Color(0xFF10B981)
               : (isDark ? const Color(0xFF1E293B) : Colors.white),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFF6366F1)
+                ? const Color(0xFF10B981)
                 : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.25),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -695,13 +695,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                    color: const Color(0xFF00E5CE).withValues(alpha: 0.35),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -710,7 +710,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               child: const Icon(
                 Icons.auto_awesome,
                 size: 38,
-                color: Colors.white,
+                color: Color(0xFF0A2342),
               ),
             ),
             const SizedBox(height: 20),
@@ -793,7 +793,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                             ? 'فحص توزيع الكادر وورديات العمل ونسب الحضور لكل قسم.'
                             : 'Examine staffing balance, working shifts, and attendance rates per structure.'),
                     icon: Icons.account_tree_rounded,
-                    color: const Color(0xFF6366F1),
+                    color: const Color(0xFF00BD96),
                     onTap: () {
                       if (provider.currentLanguage == 'ku') {
                         _sendMessage('شیکاری ئامادەبوون و ژمارەی کارمەندان بەپێی بەش و پێکهاتەکانی کۆمپانیا ڕوون بکەرەوە.');
@@ -931,18 +931,18 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                      colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                        color: const Color(0xFF00E5CE).withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
+                  child: const Icon(Icons.auto_awesome, color: Color(0xFF0A2342), size: 16),
                 ),
                 const SizedBox(width: 10),
               ],
@@ -952,7 +952,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   decoration: BoxDecoration(
                     color: isUser
-                        ? const Color(0xFF6366F1)
+                        ? const Color(0xFF10B981)
                         : (isDark ? const Color(0xFF1E293B) : Colors.white),
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(18),
@@ -1071,11 +1071,11 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
               ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 14),
+            child: const Icon(Icons.auto_awesome, color: Color(0xFF0A2342), size: 14),
           ),
           const SizedBox(width: 12),
           Text(
@@ -1092,7 +1092,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             height: 12,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
             ),
           ),
         ],
@@ -1238,19 +1238,19 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             Container(
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                    color: const Color(0xFF00E5CE).withValues(alpha: 0.35),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: IconButton(
-                icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                icon: const Icon(Icons.send_rounded, color: Color(0xFF0A2342), size: 18),
                 onPressed: _isLoading ? null : () => _sendMessage(),
               ),
             ),
@@ -1295,7 +1295,7 @@ class _FormattedAiText extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF6366F1),
+              color: const Color(0xFF10B981),
             ),
           ),
         ));
@@ -1323,7 +1323,7 @@ class _FormattedAiText extends StatelessWidget {
               Text(
                 '• ',
                 style: const TextStyle(
-                  color: Color(0xFF6366F1),
+                  color: Color(0xFF10B981),
                   fontWeight: FontWeight.bold,
                   fontSize: 15,
                 ),
@@ -1347,7 +1347,7 @@ class _FormattedAiText extends StatelessWidget {
               Text(
                 '$numPrefix ',
                 style: const TextStyle(
-                  color: Color(0xFF6366F1),
+                  color: Color(0xFF10B981),
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),
@@ -1391,7 +1391,7 @@ class _FormattedAiText extends StatelessWidget {
         text: parts[i],
         style: TextStyle(
           fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          color: isBold ? (isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5)) : baseColor,
+          color: isBold ? (isDark ? const Color(0xFF34D399) : const Color(0xFF059669)) : baseColor,
           fontSize: 13.5,
           height: 1.45,
         ),

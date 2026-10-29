@@ -44,6 +44,15 @@ class WebNotificationsDialog extends StatefulWidget {
 
 class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
   bool _showOnlyUnread = false;
+  late bool _isPermissionGranted;
+  late bool _isPermissionDenied;
+
+  @override
+  void initState() {
+    super.initState();
+    _isPermissionGranted = isWebNotificationPermissionGranted();
+    _isPermissionDenied = getWebNotificationPermissionStatus() == 'denied';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -340,18 +349,22 @@ class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
 
                     const Divider(height: 1),
 
-                    // Enable Desktop Notifications Card (Web only)
-                    if (kIsWeb)
+                    // Enable Desktop Notifications Card (Web only, shown only when not yet granted)
+                    if (kIsWeb && !_isPermissionGranted)
                       Container(
                         margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF00BD96).withValues(alpha: 0.10)
-                              : const Color(0xFF00E5CE).withValues(alpha: 0.08),
+                          color: _isPermissionDenied
+                              ? const Color(0xFFEF4444).withValues(alpha: 0.08)
+                              : (isDark
+                                  ? const Color(0xFF00BD96).withValues(alpha: 0.10)
+                                  : const Color(0xFF00E5CE).withValues(alpha: 0.08)),
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color: const Color(0xFF00BD96).withValues(alpha: isDark ? 0.35 : 0.25),
+                            color: _isPermissionDenied
+                                ? const Color(0xFFEF4444).withValues(alpha: isDark ? 0.35 : 0.25)
+                                : const Color(0xFF00BD96).withValues(alpha: isDark ? 0.35 : 0.25),
                             width: 1.0,
                           ),
                         ),
@@ -361,13 +374,20 @@ class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF00BD96).withValues(alpha: 0.18),
+                                color: (_isPermissionDenied
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFF00BD96))
+                                    .withValues(alpha: 0.18),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
-                                Icons.laptop_mac_rounded,
+                              child: Icon(
+                                _isPermissionDenied
+                                    ? Icons.notifications_off_rounded
+                                    : Icons.laptop_mac_rounded,
                                 size: 18,
-                                color: Color(0xFF00BD96),
+                                color: _isPermissionDenied
+                                    ? const Color(0xFFEF4444)
+                                    : const Color(0xFF00BD96),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -376,7 +396,9 @@ class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Browser Alerts',
+                                    _isPermissionDenied
+                                        ? 'Notifications Blocked'
+                                        : 'Browser Alerts',
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: primaryTextColor,
@@ -384,7 +406,9 @@ class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
                                     ),
                                   ),
                                   Text(
-                                    'Enable live desktop notifications for alerts',
+                                    _isPermissionDenied
+                                        ? 'Allow alerts in your browser address bar settings'
+                                        : 'Enable live desktop notifications for alerts',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: secondaryTextColor,
@@ -394,17 +418,34 @@ class _WebNotificationsDialogState extends State<WebNotificationsDialog> {
                                 ],
                               ),
                             ),
-                            NeuButton(
-                              label: 'Enable',
-                              variant: NeuButtonVariant.primary,
-                              height: 32,
-                              fontSize: 11,
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
-                              onPressed: () async {
-                                HapticFeedback.lightImpact();
-                                await requestWebNotificationPermission();
-                              },
-                            ),
+                            if (!_isPermissionDenied)
+                              NeuButton(
+                                label: 'Enable',
+                                variant: NeuButtonVariant.primary,
+                                height: 32,
+                                fontSize: 11,
+                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                onPressed: () async {
+                                  HapticFeedback.lightImpact();
+                                  await requestWebNotificationPermission();
+                                  if (mounted) {
+                                    setState(() {
+                                      _isPermissionGranted = isWebNotificationPermissionGranted();
+                                      _isPermissionDenied = getWebNotificationPermissionStatus() == 'denied';
+                                    });
+                                  }
+                                },
+                              )
+                            else
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                tooltip: 'Dismiss',
+                                onPressed: () {
+                                  setState(() {
+                                    _isPermissionGranted = true;
+                                  });
+                                },
+                              ),
                           ],
                         ),
                       ),

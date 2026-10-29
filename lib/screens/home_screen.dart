@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/platform_helper.dart';
 
 import 'home_screen_mobile.dart';
 import 'home_screen_web.dart';
@@ -9,7 +9,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    if (isWebOrDesktopLayout(context)) {
       return const HomeScreenWeb();
     } else {
       return const HomeScreenMobile();

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../../utils/platform_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -672,7 +672,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     }).toList();
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20.0, 0, 20.0, kIsWeb ? 20.0 : 80.0),
+      padding: EdgeInsets.fromLTRB(20.0, 0, 20.0, isWebOrDesktopLayout(context) ? 20.0 : 80.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -712,7 +712,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
           Expanded(
             child: displayedRows.isEmpty
                 ? _buildEmptyState(context, isDark, textColor)
-                : (kIsWeb || MediaQuery.of(context).size.width >= 900)
+                : (isWebOrDesktopLayout(context) || MediaQuery.of(context).size.width >= 900)
                     ? _buildWebReportTable(context, displayedRows, isDark, textColor)
                     : _buildMobileReportList(context, displayedRows, isDark, textColor),
           ),

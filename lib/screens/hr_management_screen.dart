@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/platform_helper.dart';
 
 import 'hr_management_screen_mobile.dart';
 import 'hr_management_screen_web.dart';
@@ -29,7 +29,7 @@ class HrManagementScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    if (isWebOrDesktopLayout(context)) {
       return HrManagementScreenWeb(
         initialTab: initialTab,
         isEmbedded: isEmbedded,

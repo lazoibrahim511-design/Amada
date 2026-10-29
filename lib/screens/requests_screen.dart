@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/platform_helper.dart';
 import '../widgets/glass_dialog.dart';
 import 'package:provider/provider.dart';
 import '../widgets/glass_container.dart';
@@ -631,7 +631,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: kIsWeb ? 1200 : double.infinity,
+              maxWidth: isWebOrDesktopLayout(context) ? 1200 : double.infinity,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -723,8 +723,8 @@ DateTime? _parseRequestStartDate(String dateStr) {
                       : _buildMyRequestsList(provider),
                 ),
 
-                // Spacer for bottom nav bar
-                if (!kIsWeb) SizedBox(height: 80),
+                // Spacer for mobile bottom nav bar
+                if (!isWebOrDesktopLayout(context)) const SizedBox(height: 80),
               ],
             ),
           ),

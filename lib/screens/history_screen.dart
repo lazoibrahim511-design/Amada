@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/platform_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
@@ -1209,8 +1209,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         ],
                       ),
               ),
-              // Spacer for bottom nav bar
-              if (!kIsWeb) SizedBox(height: 80),
+              // Spacer for mobile bottom nav bar
+              if (!isWebOrDesktopLayout(context)) const SizedBox(height: 80),
             ],
           ),
         ),
