@@ -51,6 +51,8 @@
 	<string>Amada requires access to your photo library to allow you to upload your profile photo and attach leave request documents.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Amada uses your location while using the app to verify your presence at the assigned company work location during attendance check-in.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Amada requires location access to verify your workplace attendance check-in accurately.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
