@@ -19,6 +19,7 @@
     }
   ],
   "hosting": {
+    "site": "attendance-app-38291",
     "public": "build/web",
     "ignore": [
       "firebase.json",
@@ -27,7 +28,7 @@
     ],
     "rewrites": [
       {
-        "source": "**",
+        "source": "!/privacy.html",
         "destination": "/index.html"
       }
     ]

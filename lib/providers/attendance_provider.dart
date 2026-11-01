@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:geolocator/geolocator.dart';
@@ -1596,8 +1596,24 @@ class AttendanceProvider with ChangeNotifier {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(channel);
 
-      _currentDeviceFcmToken = await messaging.getToken();
-      String? token = _currentDeviceFcmToken;
+      String? token;
+      try {
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+          String? apnsToken = await messaging.getAPNSToken();
+          int retries = 0;
+          while (apnsToken == null && retries < 5) {
+            await Future.delayed(const Duration(milliseconds: 1000));
+            apnsToken = await messaging.getAPNSToken();
+            retries++;
+          }
+          debugPrint('FCM: iOS APNs token state: ${apnsToken != null ? "Acquired" : "Null (Check APNs setup in Xcode & Firebase)"}');
+        }
+        token = await messaging.getToken();
+        _currentDeviceFcmToken = token;
+        debugPrint('FCM: Device Token successfully registered: $token');
+      } catch (e) {
+        debugPrint('FCM: Error getting registration token: $e');
+      }
       if (token != null && currentEmployee != null) {
         // Disassociate this hardware token from any other employee who previously used this device
         for (var emp in _employees) {

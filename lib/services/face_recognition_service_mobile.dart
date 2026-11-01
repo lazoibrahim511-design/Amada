@@ -9,6 +9,10 @@ class FaceRecognitionService {
   FaceDetector? _faceDetector;
   Interpreter? _interpreter;
   bool _isInitialized = false;
+  String? _modelInitError;
+
+  bool get isModelLoaded => _interpreter != null;
+  String? get modelInitError => _modelInitError;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -31,8 +35,9 @@ class FaceRecognitionService {
     // Initialize TFLite Interpreter if available
     try {
       _interpreter = await Interpreter.fromAsset('assets/models/mobilefacenet.tflite');
-      debugPrint('FaceRecognitionService: TFLite model loaded successfully');
+      debugPrint('FaceRecognitionService: TFLite MobileFaceNet model loaded successfully');
     } catch (e) {
+      _modelInitError = e.toString();
       debugPrint('FaceRecognitionService: TFLite model load note ($e), using resilient biometric feature extractor');
     }
     _isInitialized = true;
@@ -59,6 +64,12 @@ class FaceRecognitionService {
       return null;
     }
 
+    // CRITICAL: On iOS (iPhone 14 Pro etc.), camera pictures are captured in landscape sensor buffer with EXIF orientation (tag 6).
+    // Without bakeOrientation, the decoded pixels are rotated 90° sideways, causing:
+    // 1) ML Kit bounding box coordinates to misalign with the pixel buffer.
+    // 2) MobileFaceNet to receive a sideways face on iOS vs an upright face on Android, resulting in mismatched embeddings!
+    originalImage = img.bakeOrientation(originalImage);
+
     img.Image faceCrop;
 
     // 1. Try ML Kit face detector on Android/iOS if available
@@ -69,10 +80,13 @@ class FaceRecognitionService {
         if (faces.isNotEmpty) {
           final face = faces.first;
           final boundingBox = face.boundingBox;
-          final x = max(0, boundingBox.left.toInt());
-          final y = max(0, boundingBox.top.toInt());
-          final width = min(originalImage.width - x, boundingBox.width.toInt());
-          final height = min(originalImage.height - y, boundingBox.height.toInt());
+          // Add 12% padding around the bounding box so the entire face (chin/forehead/cheeks) is captured
+          final padX = (boundingBox.width * 0.12).toInt();
+          final padY = (boundingBox.height * 0.12).toInt();
+          final x = max(0, boundingBox.left.toInt() - padX);
+          final y = max(0, boundingBox.top.toInt() - padY);
+          final width = min(originalImage.width - x, boundingBox.width.toInt() + (padX * 2));
+          final height = min(originalImage.height - y, boundingBox.height.toInt() + (padY * 2));
           if (width > 20 && height > 20) {
             faceCrop = img.copyCrop(originalImage, x: x, y: y, width: width, height: height);
           } else {
@@ -105,6 +119,7 @@ class FaceRecognitionService {
     }
 
     // 3. Fallback: Extract pure Dart 192-dimensional spatial & gradient biometric features
+    debugPrint('FaceRecognitionService: WARNING - TFLite interpreter not available. Using pure Dart spatial biometric fallback.');
     return _extractSpatialGradientFeatures(resizedFace);
   }
 

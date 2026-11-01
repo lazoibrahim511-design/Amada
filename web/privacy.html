@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Amada Attendance</title>
+  <style>
+    :root {
+      --primary: #0A2342;
+      --accent: #00BD96;
+      --accent-light: #E6FAF5;
+      --text-main: #1E293B;
+      --text-muted: #64748B;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --border: #E2E8F0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      background-color: var(--bg);
+      color: var(--text-main);
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 840px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 48px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+    }
+
+    .header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: var(--accent-light);
+      color: var(--accent);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      color: var(--primary);
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .meta {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      color: var(--primary);
+      margin-top: 36px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    p {
+      margin-bottom: 14px;
+      color: #334155;
+    }
+
+    ul {
+      margin: 12px 0 20px 24px;
+      color: #334155;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .highlight-box {
+      background: #F1F5F9;
+      border-left: 4px solid var(--accent);
+      padding: 16px 20px;
+      border-radius: 0 10px 10px 0;
+      margin: 18px 0;
+    }
+
+    .highlight-box p {
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    .footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 16px 10px;
+      }
+      .container {
+        padding: 24px 18px;
+        border-radius: 12px;
+      }
+      h1 {
+        font-size: 1.7rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <span class="badge">Legal & Privacy Commitment</span>
+    <h1>Privacy Policy</h1>
+    <div class="meta">
+      <strong>Application:</strong> Amada Attendance &bull; 
+      <strong>Developer:</strong> Amada Apps &bull; 
+      <strong>Last Updated:</strong> November 1, 2026
+    </div>
+  </div>
+
+  <p>
+    Amada Apps ("we", "our", or "us") is dedicated to protecting the privacy, confidentiality, and security of our users. This Privacy Policy outlines the types of personal, biometric, and device data collected by the <strong>Amada Attendance</strong> mobile application, how that data is used, and the measures we take to safeguard your information.
+  </p>
+
+  <h2>1. Information We Collect</h2>
+  <p>To provide accurate workforce management, attendance tracking, and shift verification, Amada Attendance collects the following data categories:</p>
+  <ul>
+    <li>
+      <strong>Employee Profile Data:</strong> Full name, employee ID, job position, department, and work email address provided by your company administrator to maintain organizational directories.
+    </li>
+    <li>
+      <strong>Camera & Facial Biometric Authentication:</strong> The application requests access to your front camera strictly to capture facial photos for identity verification during attendance clock-in and clock-out events.
+    </li>
+    <li>
+      <strong>Location Data (Precise & Approximate):</strong> Location access is requested exclusively while actively using the application to confirm employee presence within authorized workplace branches or designated job sites.
+    </li>
+    <li>
+      <strong>Network / Wi-Fi State:</strong> The app may inspect the Wi-Fi network identifier (SSID/BSSID) during check-in to verify that clock-in occurs on authorized company premises.
+    </li>
+    <li>
+      <strong>Push Notification Tokens:</strong> Device registration tokens (via Firebase Cloud Messaging and Apple APNs) are collected to deliver shift reminders, leave request status updates, and emergency workplace alerts.
+    </li>
+  </ul>
+
+  <div class="highlight-box">
+    <p><strong>Strict No-Tracking Guarantee:</strong> Amada Attendance does NOT track or monitor employee physical location in the background. Location checks only occur at the exact moment you perform an attendance action.</p>
+  </div>
+
+  <h2>2. Biometric Data Processing & Protection</h2>
+  <p>
+    Facial verification is an essential tool to prevent identity fraud and buddy-punching in workforce environments. Our approach adheres to strict privacy standards:
+  </p>
+  <ul>
+    <li>Facial detection and feature extraction occur on-device.</li>
+    <li>Only mathematical numerical feature embeddings (vectors) are securely stored to verify identity. Raw facial photographs are never used for commercial profiling.</li>
+    <li>Biometric data is encrypted in transit and at rest and is never sold, leased, or shared with third-party advertisers or external data brokers.</li>
+  </ul>
+
+  <h2>3. How We Use Information</h2>
+  <p>Collected information is utilized strictly for legitimate business management purposes:</p>
+  <ul>
+    <li>Verifying employee attendance, punctuality, and work hours.</li>
+    <li>Processing company leave requests, overtime approvals, and shift rotations.</li>
+    <li>Ensuring fair payroll calculation based on verified attendance timestamps.</li>
+    <li>Providing secure authentication into your personal workforce account.</li>
+  </ul>
+
+  <h2>4. Data Storage & Security Standards</h2>
+  <p>
+    All communication between the Amada Attendance mobile app and our backend infrastructure is encrypted using Transport Layer Security (TLS 1.2+). Data is securely persisted in enterprise-grade Google Cloud Firestore infrastructure with robust access controls and multi-tenant organizational isolation.
+  </p>
+
+  <h2>5. User Rights & Data Deletion</h2>
+  <p>
+    In compliance with Apple App Store and Google Play Developer Program Policies, employees and organizations maintain full control over their personal data:
+  </p>
+  <ul>
+    <li>
+      <strong>Face ID Removal:</strong> Employees or managers can remove stored facial biometric data directly from the in-app Profile screen at any time.
+    </li>
+    <li>
+      <strong>Account & Data Deletion:</strong> You have the right to request permanent deletion of your profile, attendance history, and biometric data either via the in-app "Delete Account" feature or by contacting your HR administrator or our privacy team.
+    </li>
+  </ul>
+
+  <h2>6. Children's Privacy</h2>
+  <p>
+    Amada Attendance is an enterprise business application designed exclusively for workforce operations and is not intended for use by individuals under the age of 18.
+  </p>
+
+  <h2>7. Policy Updates</h2>
+  <p>
+    We may periodically update this policy to reflect operational, legal, or technical changes. Any revisions will be published on this page with an updated effective date.
+  </p>
+
+  <h2>8. Contact Information</h2>
+  <p>
+    If you have any questions, inquiries, or requests regarding this Privacy Policy or your data privacy rights, please contact our data protection team:
+  </p>
+  <p>
+    <strong>Email:</strong> <a href="mailto:support@amada.com">support@amada.com</a><br>
+    <strong>Organization:</strong> Amada Apps
+  </p>
+
+  <div class="footer">
+    &copy; 2026 Amada Apps. All rights reserved.
+  </div>
+</div>
+
+</body>
+</html>
+
