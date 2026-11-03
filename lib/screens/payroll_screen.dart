@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import '../utils/platform_helper.dart';
@@ -1605,12 +1606,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
         closedByEmail: provider.currentEmployee?.email,
       );
       if (context.mounted && success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            content: Text(provider.translate('month_closed_success')),
-          ),
+        AppSnackBar.success(
+          context,
+          provider.translate('month_closed_success'),
         );
       }
     }
@@ -1741,12 +1739,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
         reason: reasonController.text.trim(),
       );
       if (context.mounted && success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            content: Text(provider.translate('month_reopened_success')),
-          ),
+        AppSnackBar.success(
+          context,
+          provider.translate('month_reopened_success'),
         );
       }
     }
@@ -1835,8 +1830,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
               .map((emp) => provider.generatePayrollReport(emp, provider.selectedMonth))
               .toList();
           if (reports.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(provider.translate('no_payroll_export'))),
+            AppSnackBar.warning(
+              context,
+              provider.translate('no_payroll_export'),
             );
             return;
           }
@@ -1865,21 +1861,18 @@ class _PayrollScreenState extends State<PayrollScreen> {
               );
             }
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF10B981),
-                  content: Text(
-                    value == 'all_payslips'
-                        ? provider.translate('all_payslips_downloaded')
-                        : provider.translate('export_success'),
-                  ),
-                ),
+              AppSnackBar.success(
+                context,
+                value == 'all_payslips'
+                    ? provider.translate('all_payslips_downloaded')
+                    : provider.translate('export_success'),
               );
             }
           } catch (e) {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${provider.translate('export_failed')}$e')),
+              AppSnackBar.error(
+                context,
+                '${provider.translate('export_failed')}$e',
               );
             }
           }
@@ -2108,11 +2101,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
           child: NeuButton(
             onPressed: isClosed
                 ? () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(provider.translate('cannot_modify_closed_month')),
-                        backgroundColor: Colors.amber.shade800,
-                      ),
+                    AppSnackBar.warning(
+                      context,
+                      provider.translate('cannot_modify_closed_month'),
                     );
                   }
                 : () => showPayrollAdjustmentDialog(
@@ -2137,11 +2128,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
           child: NeuButton(
             onPressed: isClosed
                 ? () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(provider.translate('cannot_modify_closed_month')),
-                        backgroundColor: Colors.amber.shade800,
-                      ),
+                    AppSnackBar.warning(
+                      context,
+                      provider.translate('cannot_modify_closed_month'),
                     );
                   }
                 : () => showPayrollAdjustmentDialog(

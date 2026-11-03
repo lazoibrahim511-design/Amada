@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
@@ -110,11 +111,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (matchingEmp != null) {
         if (matchingEmp.faceEmbedding == null || matchingEmp.faceEmbedding!.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(provider.translate('no_face_id_enrolled_for_emp', params: {'name': matchingEmp.name})),
-              backgroundColor: Colors.orangeAccent,
-            ),
+          AppSnackBar.warning(
+            context,
+            provider.translate('no_face_id_enrolled_for_emp', params: {'name': matchingEmp.name}),
           );
           return;
         }
@@ -480,10 +479,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                       TextButton(
                                         onPressed: () {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(provider.translate('reset_password_contact_hr')),
-                                            ),
+                                          AppSnackBar.info(
+                                            context,
+                                            provider.translate('reset_password_contact_hr'),
                                           );
                                         },
                                         style: TextButton.styleFrom(

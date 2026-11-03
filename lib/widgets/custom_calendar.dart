@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -372,7 +371,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
         break;
       case DayStatus.none:
         statusLabel = 'No Record';
-        statusColor = (Theme.of(context).brightness == Brightness.dark ? Colors.white38 : Colors.black38);
+        statusColor = (Theme.of(context).brightness == Brightness.dark ? Colors.white38 : const Color(0xFF94A3B8));
         break;
     }
 
@@ -380,7 +379,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Attendance Details',
-      barrierColor: Colors.black.withValues(alpha: 0.45),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       transitionDuration: const Duration(milliseconds: 300),
       transitionBuilder: (ctx, anim, secondAnim, child) {
         final curved = CurvedAnimation(
@@ -388,43 +387,57 @@ class _CustomCalendarState extends State<CustomCalendar> {
           curve: Curves.easeOutCubic,
         );
         return ScaleTransition(
-          scale: Tween<double>(begin: 0.88, end: 1.0).animate(curved),
+          scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
           child: FadeTransition(opacity: curved, child: child),
         );
       },
       pageBuilder: (ctx, anim, secondAnim) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final dialogBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+        final cardBorderColor = isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : const Color(0xFFE2E8F0);
+        final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+        final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+        final surfaceBg = isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : const Color(0xFFF8FAFC);
+        final surfaceBorder = isDark
+            ? Colors.white.withValues(alpha: 0.10)
+            : const Color(0xFFE2E8F0);
+
         return Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
             child: Material(
               color: Colors.transparent,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(28),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.18)),
-                          ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.06)),
-                        ],
-                      ),
-                      border: Border.all(
-                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.22)),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 32,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: 440,
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+                ),
+                decoration: BoxDecoration(
+                  color: dialogBg,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: cardBorderColor,
+                    width: 1.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.4)
+                          : Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 32,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 12),
                     ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -440,21 +453,28 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [
-                                      Color(0xFF2E65FF),
-                                      Color(0xFF8236FE),
+                                      Color(0xFF00F0D8),
+                                      Color(0xFF00BD96),
                                     ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF00BD96).withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
                                 ),
-                                child: Icon(
+                                child: const Icon(
                                   Icons.calendar_month_rounded,
-                                  color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                  color: Color(0xFF0A2342),
                                   size: 22,
                                 ),
                               ),
-                              SizedBox(width: 14),
+                              const SizedBox(width: 14),
                               // Title & subtitle
                               Expanded(
                                 child: Column(
@@ -463,19 +483,17 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                     Text(
                                       dateLabel,
                                       style: TextStyle(
-                                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                        color: textColor,
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: -0.3,
                                       ),
                                     ),
-                                    SizedBox(height: 2),
+                                    const SizedBox(height: 2),
                                     Text(
                                       'Attendance Details',
                                       style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.6,
-                                        ),
+                                        color: subtextColor,
                                         fontSize: 12,
                                         fontWeight: FontWeight.w500,
                                       ),
@@ -491,16 +509,16 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                   height: 34,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.12)),
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : const Color(0xFFF1F5F9),
                                     border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.2,
-                                      ),
+                                      color: cardBorderColor,
                                     ),
                                   ),
                                   child: Icon(
                                     Icons.close_rounded,
-                                    color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
                                     size: 16,
                                   ),
                                 ),
@@ -513,7 +531,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
                         Divider(
                           height: 1,
                           thickness: 1,
-                          color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.12)),
+                          color: cardBorderColor,
                         ),
 
                         // ── Body ─────────────────────────────────────────
@@ -528,26 +546,30 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                   vertical: 9,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.18),
+                                  color: statusColor.withValues(alpha: isDark ? 0.18 : 0.10),
                                   borderRadius: BorderRadius.circular(30),
                                   border: Border.all(
-                                    color: statusColor.withValues(alpha: 0.5),
+                                    color: statusColor.withValues(alpha: isDark ? 0.5 : 0.35),
                                     width: 1.2,
                                   ),
                                 ),
                                 child: Text(
                                   statusLabel,
                                   style: TextStyle(
-                                    color: statusColor == (Theme.of(context).brightness == Brightness.dark ? Colors.white38 : Colors.black38)
-                                        ? (Theme.of(context).brightness == Brightness.dark ? Colors.white54 : Colors.black54)
-                                        : statusColor,
+                                    color: status == DayStatus.none
+                                        ? subtextColor
+                                        : (isDark
+                                            ? statusColor
+                                            : (statusColor == const Color(0xFFFF5C5C)
+                                                ? const Color(0xFFDC2626)
+                                                : statusColor)),
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.2,
                                   ),
                                 ),
                               ),
-                              SizedBox(height: 18),
+                              const SizedBox(height: 18),
 
                               // Sessions list (Dynamic list of all daily sessions)
                               Builder(
@@ -556,15 +578,16 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                     return Column(
                                       children: [
                                         _buildDetailRow(
-                                          iconColor: const Color(0xFF2EBD96),
-                                          icon:
-                                              Icons.arrow_circle_right_rounded,
+                                          context: ctx,
+                                          iconColor: const Color(0xFF10B981),
+                                          icon: Icons.arrow_circle_right_rounded,
                                           label: 'Check In',
                                           value: '--:-- --',
                                         ),
-                                        SizedBox(height: 10),
+                                        const SizedBox(height: 10),
                                         _buildDetailRow(
-                                          iconColor: const Color(0xFFFF6B6B),
+                                          context: ctx,
+                                          iconColor: const Color(0xFFEF4444),
                                           icon: Icons.arrow_circle_left_rounded,
                                           label: 'Check Out',
                                           value: '--:-- --',
@@ -630,13 +653,9 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                             decoration: BoxDecoration(
                                               borderRadius:
                                                   BorderRadius.circular(16),
-                                              color: Colors.white.withValues(
-                                                alpha: 0.05,
-                                              ),
+                                              color: surfaceBg,
                                               border: Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.08,
-                                                ),
+                                                color: surfaceBorder,
                                               ),
                                             ),
                                             child: Row(
@@ -648,12 +667,12 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                   decoration: BoxDecoration(
                                                     shape: BoxShape.circle,
                                                     color: const Color(
-                                                      0xFF2E65FF,
-                                                    ).withValues(alpha: 0.15),
+                                                      0xFF00BD96,
+                                                    ).withValues(alpha: isDark ? 0.18 : 0.12),
                                                     border: Border.all(
                                                       color: const Color(
-                                                        0xFF2E65FF,
-                                                      ).withValues(alpha: 0.35),
+                                                        0xFF00BD96,
+                                                      ).withValues(alpha: isDark ? 0.45 : 0.3),
                                                       width: 1.2,
                                                     ),
                                                   ),
@@ -661,14 +680,14 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                   child: Text(
                                                     '${idx + 1}',
                                                     style: TextStyle(
-                                                      color: Color(0xFF5B9BFF),
+                                                      color: isDark ? const Color(0xFF00F0D8) : const Color(0xFF00897B),
                                                       fontSize: 12,
                                                       fontWeight:
                                                           FontWeight.bold,
                                                     ),
                                                   ),
                                                 ),
-                                                SizedBox(width: 14),
+                                                const SizedBox(width: 14),
                                                 // Times Info
                                                 Expanded(
                                                   child: Column(
@@ -678,23 +697,22 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                     children: [
                                                       Row(
                                                         children: [
-                                                          Icon(
+                                                          const Icon(
                                                             Icons
                                                                 .arrow_circle_right_rounded,
                                                             color: Color(
-                                                              0xFF2EBD96,
+                                                              0xFF10B981,
                                                             ),
                                                             size: 14,
                                                           ),
-                                                          SizedBox(
+                                                          const SizedBox(
                                                             width: 4,
                                                           ),
                                                           Text(
                                                             'In: $checkInStr',
                                                             style:
                                                                 TextStyle(
-                                                                  color: Colors
-                                                                      .white,
+                                                                  color: textColor,
                                                                   fontSize: 13,
                                                                   fontWeight:
                                                                       FontWeight
@@ -703,18 +721,18 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                           ),
                                                         ],
                                                       ),
-                                                      SizedBox(height: 4),
+                                                      const SizedBox(height: 4),
                                                       Row(
                                                         children: [
-                                                          Icon(
+                                                          const Icon(
                                                             Icons
                                                                 .arrow_circle_left_rounded,
                                                             color: Color(
-                                                              0xFFFF6B6B,
+                                                              0xFFEF4444,
                                                             ),
                                                             size: 14,
                                                           ),
-                                                          SizedBox(
+                                                          const SizedBox(
                                                             width: 4,
                                                           ),
                                                           Text(
@@ -727,14 +745,10 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                                       idx ==
                                                                           sortedRecords.length -
                                                                               1
-                                                                  ? const Color(
-                                                                      0xFF00FF87,
-                                                                    )
-                                                                  : ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black))
-                                                                        .withValues(
-                                                                          alpha:
-                                                                              0.8,
-                                                                        ),
+                                                                  ? (isDark
+                                                                      ? const Color(0xFF00FF87)
+                                                                      : const Color(0xFF059669))
+                                                                  : textColor,
                                                               fontSize: 13,
                                                               fontWeight:
                                                                   FontWeight
@@ -746,7 +760,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                     ],
                                                   ),
                                                 ),
-                                                SizedBox(width: 10),
+                                                const SizedBox(width: 10),
                                                 // Duration
                                                 Column(
                                                   crossAxisAlignment:
@@ -755,22 +769,19 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                     Text(
                                                       'Duration',
                                                       style: TextStyle(
-                                                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black))
-                                                            .withValues(
-                                                              alpha: 0.4,
-                                                            ),
+                                                        color: subtextColor,
                                                         fontSize: 10,
                                                         fontWeight:
                                                             FontWeight.w500,
                                                       ),
                                                     ),
-                                                    SizedBox(height: 2),
+                                                    const SizedBox(height: 2),
                                                     Text(
                                                       rec.durationString,
                                                       style: TextStyle(
-                                                        color: Color(
-                                                          0xFF00FF87,
-                                                        ),
+                                                        color: isDark
+                                                            ? const Color(0xFF00FF87)
+                                                            : const Color(0xFF059669),
                                                         fontSize: 13,
                                                         fontWeight:
                                                             FontWeight.bold,
@@ -787,16 +798,17 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                   );
                                 },
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
 
                               // Shift Time row
                               _buildDetailRow(
-                                iconColor: const Color(0xFF5B9BFF),
+                                context: ctx,
+                            iconColor: isDark ? const Color(0xFF00F0D8) : const Color(0xFF00BD96),
                                 icon: Icons.access_time_rounded,
                                 label: 'Shift Time',
                                 value: shiftTimeStr,
                               ),
-                              SizedBox(height: 14),
+                              const SizedBox(height: 14),
 
                               // Total Hours card
                               Container(
@@ -809,8 +821,8 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                   borderRadius: BorderRadius.circular(18),
                                   gradient: const LinearGradient(
                                     colors: [
-                                      Color(0xFF4A6FE3),
-                                      Color(0xFF8B5FD8),
+                                      Color(0xFF00BD96),
+                                      Color(0xFF0F766E),
                                     ],
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
@@ -818,7 +830,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                   boxShadow: [
                                     BoxShadow(
                                       color: const Color(
-                                        0xFF4A6FE3,
+                                        0xFF00BD96,
                                       ).withValues(alpha: 0.35),
                                       blurRadius: 16,
                                       offset: const Offset(0, 6),
@@ -831,17 +843,17 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                       'Total Hours',
                                       style: TextStyle(
                                         color: Colors.white.withValues(
-                                          alpha: 0.75,
+                                          alpha: 0.85,
                                         ),
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    SizedBox(height: 6),
+                                    const SizedBox(height: 6),
                                     Text(
                                       totalHoursStr,
-                                      style: TextStyle(
-                                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                      style: const TextStyle(
+                                        color: Colors.white,
                                         fontSize: 30,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: -0.5,
@@ -853,7 +865,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
 
                               // Overtime Request Card Section
                               if (extraMinutes > 0) ...[
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Builder(
                                   builder: (context) {
                                     final provider =
@@ -875,6 +887,16 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                     } catch (_) {}
 
                                     if (otRequest == null) {
+                                      final otBg = isDark
+                                          ? Colors.white.withValues(alpha: 0.06)
+                                          : const Color(0xFFFFFBEB);
+                                      final otBorder = isDark
+                                          ? Colors.white.withValues(alpha: 0.10)
+                                          : const Color(0xFFFDE68A);
+                                      final otAccent = isDark
+                                          ? const Color(0xFFFFB74D)
+                                          : const Color(0xFFD97706);
+
                                       return Container(
                                         width: double.infinity,
                                         padding: const EdgeInsets.all(16),
@@ -882,13 +904,9 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                           borderRadius: BorderRadius.circular(
                                             18,
                                           ),
-                                          color: Colors.white.withValues(
-                                            alpha: 0.08,
-                                          ),
+                                          color: otBg,
                                           border: Border.all(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.12,
-                                            ),
+                                            color: otBorder,
                                           ),
                                         ),
                                         child: Column(
@@ -902,14 +920,14 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                   children: [
                                                     Icon(
                                                       Icons.more_time,
-                                                      color: Color(0xFFFF9800),
+                                                      color: otAccent,
                                                       size: 20,
                                                     ),
-                                                    SizedBox(width: 8),
+                                                    const SizedBox(width: 8),
                                                     Text(
                                                       'Extra Time Detected',
                                                       style: TextStyle(
-                                                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                                        color: textColor,
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.bold,
@@ -920,14 +938,14 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                 Text(
                                                   '${extraMinutes ~/ 60}h ${extraMinutes % 60}m',
                                                   style: TextStyle(
-                                                    color: Color(0xFFFF9800),
+                                                    color: otAccent,
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.bold,
                                                   ),
                                                 ),
                                               ],
                                             ),
-                                            SizedBox(height: 12),
+                                            const SizedBox(height: 12),
                                             GestureDetector(
                                               onTap: () {
                                                 provider.submitRequest(
@@ -944,31 +962,44 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                       'Overtime approval requested successfully!',
                                                     ),
                                                     backgroundColor: Color(
-                                                      0xFF2E65FF,
+                                                      0xFF00BD96,
                                                     ),
                                                   ),
                                                 );
                                               },
                                               child: Container(
-                                                height: 40,
+                                                height: 42,
                                                 alignment: Alignment.center,
                                                 decoration: BoxDecoration(
                                                   gradient:
                                                       const LinearGradient(
                                                         colors: [
-                                                          Color(0xFF2E65FF),
-                                                          Color(0xFF8236FE),
+                                                          Color(0xFF00F0D8),
+                                                          Color(0xFF00BD96),
                                                         ],
+                                                        begin: Alignment.topLeft,
+                                                        end: Alignment.bottomRight,
                                                       ),
                                                   borderRadius:
-                                                      BorderRadius.circular(12),
+                                                      BorderRadius.circular(14),
+                                                  border: Border.all(
+                                                    color: const Color(0xFF80FFF3).withValues(alpha: 0.45),
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: const Color(0xFF00BD96).withValues(alpha: 0.35),
+                                                      blurRadius: 10,
+                                                      offset: const Offset(0, 3),
+                                                    ),
+                                                  ],
                                                 ),
-                                                child: Text(
+                                                child: const Text(
                                                   'Request Overtime',
                                                   style: TextStyle(
-                                                    color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                                    color: Color(0xFF0A2342),
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 13,
+                                                    letterSpacing: 0.2,
                                                   ),
                                                 ),
                                               ),
@@ -979,21 +1010,21 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                     }
 
                                     // Display status of existing request
-                                    Color statusColor;
+                                    Color reqStatusColor;
                                     String statusText;
                                     IconData statusIcon;
 
                                     if (otRequest.status == 'Approved') {
-                                      statusColor = const Color(0xFF00FF87);
+                                      reqStatusColor = const Color(0xFF10B981);
                                       statusText =
                                           'Overtime Approved (${otRequest.duration})';
                                       statusIcon = Icons.check_circle_rounded;
                                     } else if (otRequest.status == 'Rejected') {
-                                      statusColor = const Color(0xFFFF5C5C);
+                                      reqStatusColor = const Color(0xFFEF4444);
                                       statusText = 'Overtime Request Rejected';
                                       statusIcon = Icons.cancel_rounded;
                                     } else {
-                                      statusColor = const Color(0xFF5B9BFF);
+                                      reqStatusColor = const Color(0xFF3B82F6);
                                       statusText = 'Overtime Request Pending';
                                       statusIcon =
                                           Icons.hourglass_empty_rounded;
@@ -1007,12 +1038,12 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                       ),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(18),
-                                        color: statusColor.withValues(
-                                          alpha: 0.12,
+                                        color: reqStatusColor.withValues(
+                                          alpha: isDark ? 0.12 : 0.08,
                                         ),
                                         border: Border.all(
-                                          color: statusColor.withValues(
-                                            alpha: 0.35,
+                                          color: reqStatusColor.withValues(
+                                            alpha: isDark ? 0.35 : 0.25,
                                           ),
                                           width: 1.2,
                                         ),
@@ -1021,15 +1052,15 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                         children: [
                                           Icon(
                                             statusIcon,
-                                            color: statusColor,
+                                            color: reqStatusColor,
                                             size: 20,
                                           ),
-                                          SizedBox(width: 10),
+                                          const SizedBox(width: 10),
                                           Expanded(
                                             child: Text(
                                               statusText,
                                               style: TextStyle(
-                                                color: statusColor,
+                                                color: reqStatusColor,
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold,
                                               ),
@@ -1044,7 +1075,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
 
                               // Deficit Request Card Section
                               if (deficitMinutes > 0) ...[
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Builder(
                                   builder: (context) {
                                     final provider =
@@ -1066,6 +1097,16 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                     } catch (_) {}
 
                                     if (leaveRequest == null) {
+                                      final defBg = isDark
+                                          ? Colors.white.withValues(alpha: 0.06)
+                                          : const Color(0xFFFEF2F2);
+                                      final defBorder = isDark
+                                          ? Colors.white.withValues(alpha: 0.10)
+                                          : const Color(0xFFFECACA);
+                                      final defAccent = isDark
+                                          ? const Color(0xFFFF5C5C)
+                                          : const Color(0xFFDC2626);
+
                                       return Container(
                                         width: double.infinity,
                                         padding: const EdgeInsets.all(16),
@@ -1073,13 +1114,9 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                           borderRadius: BorderRadius.circular(
                                             18,
                                           ),
-                                          color: Colors.white.withValues(
-                                            alpha: 0.08,
-                                          ),
+                                          color: defBg,
                                           border: Border.all(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.12,
-                                            ),
+                                            color: defBorder,
                                           ),
                                         ),
                                         child: Column(
@@ -1093,14 +1130,14 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                   children: [
                                                     Icon(
                                                       Icons.warning_amber_rounded,
-                                                      color: Color(0xFFFF5C5C),
+                                                      color: defAccent,
                                                       size: 20,
                                                     ),
-                                                    SizedBox(width: 8),
+                                                    const SizedBox(width: 8),
                                                     Text(
                                                       'Deficit Detected',
                                                       style: TextStyle(
-                                                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                                        color: textColor,
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.bold,
@@ -1111,14 +1148,14 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                 Text(
                                                   '${deficitMinutes ~/ 60}h ${deficitMinutes % 60}m',
                                                   style: TextStyle(
-                                                    color: Color(0xFFFF5C5C),
+                                                    color: defAccent,
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.bold,
                                                   ),
                                                 ),
                                               ],
                                             ),
-                                            SizedBox(height: 12),
+                                            const SizedBox(height: 12),
                                             GestureDetector(
                                               onTap: () {
                                                 provider.submitRequest(
@@ -1135,31 +1172,44 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                                       'Hourly leave requested successfully!',
                                                     ),
                                                     backgroundColor: Color(
-                                                      0xFF2E65FF,
+                                                      0xFF00BD96,
                                                     ),
                                                   ),
                                                 );
                                               },
                                               child: Container(
-                                                height: 40,
+                                                height: 42,
                                                 alignment: Alignment.center,
                                                 decoration: BoxDecoration(
                                                   gradient:
                                                       const LinearGradient(
                                                         colors: [
-                                                          Color(0xFF2E65FF),
-                                                          Color(0xFF8236FE),
+                                                          Color(0xFF00F0D8),
+                                                          Color(0xFF00BD96),
                                                         ],
+                                                        begin: Alignment.topLeft,
+                                                        end: Alignment.bottomRight,
                                                       ),
                                                   borderRadius:
-                                                      BorderRadius.circular(12),
+                                                      BorderRadius.circular(14),
+                                                  border: Border.all(
+                                                    color: const Color(0xFF80FFF3).withValues(alpha: 0.45),
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: const Color(0xFF00BD96).withValues(alpha: 0.35),
+                                                      blurRadius: 10,
+                                                      offset: const Offset(0, 3),
+                                                    ),
+                                                  ],
                                                 ),
-                                                child: Text(
+                                                child: const Text(
                                                   'Request Hourly Leave',
                                                   style: TextStyle(
-                                                    color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                                                    color: Color(0xFF0A2342),
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 13,
+                                                    letterSpacing: 0.2,
                                                   ),
                                                 ),
                                               ),
@@ -1170,21 +1220,21 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                     }
 
                                     // Display status of existing request
-                                    Color statusColor;
+                                    Color reqStatusColor;
                                     String statusText;
                                     IconData statusIcon;
 
                                     if (leaveRequest.status == 'Approved') {
-                                      statusColor = const Color(0xFF00FF87);
+                                      reqStatusColor = const Color(0xFF10B981);
                                       statusText =
                                           'Hourly Leave Approved (${leaveRequest.duration})';
                                       statusIcon = Icons.check_circle_rounded;
                                     } else if (leaveRequest.status == 'Rejected') {
-                                      statusColor = const Color(0xFFFF5C5C);
+                                      reqStatusColor = const Color(0xFFEF4444);
                                       statusText = 'Hourly Leave Rejected';
                                       statusIcon = Icons.cancel_rounded;
                                     } else {
-                                      statusColor = const Color(0xFF5B9BFF);
+                                      reqStatusColor = const Color(0xFF3B82F6);
                                       statusText = 'Hourly Leave Pending';
                                       statusIcon =
                                           Icons.hourglass_empty_rounded;
@@ -1198,12 +1248,12 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                       ),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(18),
-                                        color: statusColor.withValues(
-                                          alpha: 0.12,
+                                        color: reqStatusColor.withValues(
+                                          alpha: isDark ? 0.12 : 0.08,
                                         ),
                                         border: Border.all(
-                                          color: statusColor.withValues(
-                                            alpha: 0.35,
+                                          color: reqStatusColor.withValues(
+                                            alpha: isDark ? 0.35 : 0.25,
                                           ),
                                           width: 1.2,
                                         ),
@@ -1212,15 +1262,15 @@ class _CustomCalendarState extends State<CustomCalendar> {
                                         children: [
                                           Icon(
                                             statusIcon,
-                                            color: statusColor,
+                                            color: reqStatusColor,
                                             size: 20,
                                           ),
-                                          SizedBox(width: 10),
+                                          const SizedBox(width: 10),
                                           Expanded(
                                             child: Text(
                                               statusText,
                                               style: TextStyle(
-                                                color: statusColor,
+                                                color: reqStatusColor,
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold,
                                               ),
@@ -1249,17 +1299,29 @@ class _CustomCalendarState extends State<CustomCalendar> {
 
   /// Builds a single detail info row (Check In, Check Out, Shift Time).
   Widget _buildDetailRow({
+    BuildContext? context,
     required Color iconColor,
     required IconData icon,
     required String label,
     required String value,
   }) {
+    final ctx = context ?? this.context;
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    final surfaceBg = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : const Color(0xFFF8FAFC);
+    final surfaceBorder = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFE2E8F0);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.07)),
-        border: Border.all(color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.1))),
+        color: surfaceBg,
+        border: Border.all(color: surfaceBorder),
       ),
       child: Row(
         children: [
@@ -1268,28 +1330,28 @@ class _CustomCalendarState extends State<CustomCalendar> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.2),
+              color: iconColor.withValues(alpha: isDark ? 0.2 : 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: iconColor, size: 22),
           ),
-          SizedBox(width: 14),
+          const SizedBox(width: 14),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
                 style: TextStyle(
-                  color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.55)),
+                  color: subtextColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              SizedBox(height: 3),
+              const SizedBox(height: 3),
               Text(
                 value,
                 style: TextStyle(
-                  color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
+                  color: textColor,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),

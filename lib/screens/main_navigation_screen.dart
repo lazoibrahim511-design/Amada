@@ -1,5 +1,7 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/platform_helper.dart';
 import 'home_screen.dart';
 import 'history_screen.dart';
@@ -642,32 +644,46 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
 
 
   Widget _buildBottomNavigationBar(AttendanceProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return ClipRRect(
       borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(32),
-        topRight: Radius.circular(32),
+        topLeft: Radius.circular(28),
+        topRight: Radius.circular(28),
       ),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
         child: Container(
           padding: EdgeInsets.only(
-            left: 12,
-            right: 12,
-            top: 16,
-            bottom: bottomPadding > 0 ? bottomPadding + 8 : 16,
+            left: 10,
+            right: 10,
+            top: 10,
+            bottom: bottomPadding > 0 ? bottomPadding + 6 : 14,
           ),
           decoration: BoxDecoration(
-            color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.12)),
+            color: isDark
+                ? const Color(0xFF0F172A).withValues(alpha: 0.92)
+                : Colors.white.withValues(alpha: 0.94),
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(32),
-              topRight: Radius.circular(32),
+              topLeft: Radius.circular(28),
+              topRight: Radius.circular(28),
             ),
-            border: Border.all(
-              color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.2)),
-              width: 1,
+            border: Border(
+              top: BorderSide(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE2E8F0).withValues(alpha: 0.9),
+                width: 1,
+              ),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -675,7 +691,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
               _buildNavItem(
                 0,
                 Icons.home_outlined,
-                Icons.home,
+                Icons.home_rounded,
                 provider.translate('home'),
               ),
               if (!kIsWeb)
@@ -688,7 +704,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
               _buildNavItem(
                 2,
                 Icons.history_outlined,
-                Icons.history,
+                Icons.history_rounded,
                 provider.translate('history'),
               ),
               _buildNavItem(
@@ -716,68 +732,95 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
     IconData filledIcon,
     String label,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _selectedIndex == index;
     final icon = isSelected ? filledIcon : outlineIcon;
 
     return GestureDetector(
-      onTap: () => onTabSelected(index),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTabSelected(index);
+      },
       behavior: HitTestBehavior.opaque,
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 240),
+        duration: const Duration(milliseconds: 220),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, anim) => FadeTransition(
           opacity: anim,
           child: ScaleTransition(
-            scale: Tween<double>(begin: 0.92, end: 1.0).animate(anim),
+            scale: Tween<double>(begin: 0.90, end: 1.0).animate(anim),
             child: child,
           ),
         ),
         child: isSelected
             ? Container(
                 key: ValueKey('nav_sel_$index'),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.2)),
-                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(22),
                   border: Border.all(
-                    color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.15)),
+                    color: Colors.white.withValues(alpha: 0.35),
                     width: 1,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00BD96).withValues(alpha: isDark ? 0.40 : 0.30),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)), size: 20),
-                    const SizedBox(width: 5),
+                    Icon(
+                      icon,
+                      color: const Color(0xFF0A2342),
+                      size: 19,
+                    ),
+                    const SizedBox(width: 6),
                     Text(
                       label,
-                      style: TextStyle(
-                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      style: const TextStyle(
+                        color: Color(0xFF0A2342),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
                       ),
                     ),
                   ],
                 ),
               )
-            : SizedBox(
+            : Padding(
                 key: ValueKey('nav_unsel_$index'),
-                width: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(icon, color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7)), size: 20),
+                    Icon(
+                      icon,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      size: 22,
+                    ),
                     const SizedBox(height: 3),
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: ((Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7)),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ),
                   ],
@@ -831,16 +874,15 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
           } else if (val != provider.currentCompanyCode) {
             await provider.setCompanyCode(val);
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    val == 'all'
-                        ? provider.translate('all_companies_master')
-                        : 'Workspace: ${val.toUpperCase()}',
-                  ),
-                  duration: const Duration(seconds: 2),
-                  backgroundColor: const Color(0xFF8B5CF6),
-                ),
+              AppSnackBar.show(
+                context,
+                message: val == 'all'
+                    ? provider.translate('all_companies_master')
+                    : 'Workspace: ${val.toUpperCase()}',
+                type: AppSnackBarType.info,
+                icon: Icons.business_rounded,
+                duration: const Duration(seconds: 2),
+                backgroundColor: const Color(0xFF7C3AED),
               );
             }
           }

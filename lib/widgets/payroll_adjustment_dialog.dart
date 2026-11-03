@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -21,20 +22,17 @@ Future<void> showPayrollAdjustmentDialog({
     provider.isHRManager
   );
   if (!isAllowed) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(provider.translate('access_denied_adjustments')),
-      ),
+    AppSnackBar.error(
+      context,
+      provider.translate('access_denied_adjustments'),
     );
     return;
   }
 
   if (initialMonth != null && provider.isMonthClosed(initialMonth)) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(provider.translate('cannot_modify_closed_month')),
-        backgroundColor: Colors.amber.shade800,
-      ),
+    AppSnackBar.warning(
+      context,
+      provider.translate('cannot_modify_closed_month'),
     );
     return;
   }
@@ -221,16 +219,18 @@ class _PayrollAdjustmentDialogContentState
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
     if (!_formKey.currentState!.validate()) return;
     if (_selectedEmployee == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.translate('select_employee_error'))),
+      AppSnackBar.warning(
+        context,
+        provider.translate('select_employee_error'),
       );
       return;
     }
 
     final double amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
     if (amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.translate('valid_amount_error'))),
+      AppSnackBar.warning(
+        context,
+        provider.translate('valid_amount_error'),
       );
       return;
     }
@@ -241,12 +241,9 @@ class _PayrollAdjustmentDialogContentState
     final monthStr = DateFormat('yyyy-MM').format(_selectedDate);
 
     if (provider.isMonthClosedStr(monthStr)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.amber.shade800,
-          content: Text(provider.translate('cannot_modify_closed_month')),
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppSnackBar.warning(
+        context,
+        provider.translate('cannot_modify_closed_month'),
       );
       return;
     }
@@ -275,14 +272,10 @@ class _PayrollAdjustmentDialogContentState
           .replaceAll('{type}', typeLabel)
           .replaceAll('{amount}', amountLabel)
           .replaceAll('{name}', _selectedEmployee!.name);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: _type == 'addition'
-              ? const Color(0xFF10B981)
-              : const Color(0xFFEF4444),
-          content: Text(msg),
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppSnackBar.show(
+        context,
+        message: msg,
+        type: _type == 'addition' ? AppSnackBarType.success : AppSnackBarType.error,
       );
     }
   }
@@ -1062,10 +1055,9 @@ Future<void> showManageAdjustmentsDialog({
     currentUser.email == 'admin@company.com'
   );
   if (!isAllowed) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(provider.translate('access_denied_adjustments')),
-      ),
+    AppSnackBar.error(
+      context,
+      provider.translate('access_denied_adjustments'),
     );
     return;
   }
@@ -1359,12 +1351,9 @@ class _ManageAdjustmentsDialogContent extends StatelessWidget {
                                       ),
                                       onPressed: () async {
                                         if (provider.isMonthClosedStr(adj.month)) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              backgroundColor: Colors.amber.shade800,
-                                              content: Text(provider.translate('cannot_modify_closed_month')),
-                                              behavior: SnackBarBehavior.floating,
-                                            ),
+                                          AppSnackBar.warning(
+                                            context,
+                                            provider.translate('cannot_modify_closed_month'),
                                           );
                                           return;
                                         }

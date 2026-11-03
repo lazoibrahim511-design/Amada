@@ -48,16 +48,22 @@ Future<T?> showGlassDialog<T>({
           ? Colors.white.withValues(alpha: 0.1)
           : const Color(0xFFE2E8F0);
 
+      final screenWidth = MediaQuery.of(ctx).size.width;
+      final isSmallScreen = screenWidth < 500;
+
       return Directionality(
         textDirection: textDirection,
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 12.0 : 20.0,
+              vertical: isSmallScreen ? 16.0 : 24.0,
+            ),
             child: Material(
               color: Colors.transparent,
               child: Container(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(ctx).size.height * 0.88,
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.90,
                   maxWidth: 620,
                 ),
                 decoration: BoxDecoration(
@@ -147,9 +153,9 @@ Future<T?> showGlassDialog<T>({
                     Flexible(
                       child: SingleChildScrollView(
                         padding: EdgeInsets.fromLTRB(
-                          20,
-                          18,
-                          20,
+                          isSmallScreen ? 14 : 20,
+                          16,
+                          isSmallScreen ? 14 : 20,
                           actions != null ? 8 : 20,
                         ),
                         child: content,

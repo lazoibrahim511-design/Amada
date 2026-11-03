@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../utils/platform_helper.dart';
@@ -2371,11 +2372,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
         icon: Icon(isClosed ? Icons.lock_outline : Icons.add, size: 20),
         onPressed: isClosed
             ? () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(provider.translate('cannot_modify_closed_month')),
-                    backgroundColor: Colors.amber.shade800,
-                  ),
+                AppSnackBar.warning(
+                  context,
+                  provider.translate('cannot_modify_closed_month'),
                 );
               }
             : () {
@@ -2394,11 +2393,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return NeuButton(
       onPressed: isClosed
           ? () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(provider.translate('cannot_modify_closed_month')),
-                  backgroundColor: Colors.amber.shade800,
-                ),
+              AppSnackBar.warning(
+                context,
+                provider.translate('cannot_modify_closed_month'),
               );
             }
           : () {
@@ -2434,8 +2431,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
           orElse: () => provider.currentEmployee ?? CompanyEmployee(id: activeEmpId, name: 'Employee', email: '', position: ''),
         );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Exporting attendance history...')),
+        AppSnackBar.info(
+          context,
+          'Exporting attendance history...',
         );
 
         await ExportService.exportHistoryToPdf(
@@ -2816,15 +2814,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       _loadSubordinateRecords(provider, activeEmpId);
 
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              provider.translate(
-                                                  'request_deleted'),
-                                            ),
-                                            backgroundColor: Colors.redAccent,
-                                          ),
+                                        AppSnackBar.error(
+                                          context,
+                                          provider.translate('request_deleted'),
                                         );
                                       }
                                     },

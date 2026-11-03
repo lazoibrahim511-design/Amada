@@ -237,6 +237,25 @@ class _MyAppState extends State<MyApp> {
                 primaryColor: const Color(0xFF00E5CE),
                 onPrimaryColor: const Color(0xFF0A2342),
               ),
+              snackBarTheme: SnackBarThemeData(
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                elevation: 6,
+                backgroundColor: const Color(0xFF1E293B),
+                contentTextStyle: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontFamily: provider.currentLanguage == 'ku'
+                      ? 'UniQaidar'
+                      : provider.currentLanguage == 'ar'
+                          ? 'NotoSansArabic'
+                          : 'Inter',
+                  fontFamilyFallback: const ['UniQaidar', 'Speda', 'NotoSansArabic', 'NotoSans'],
+                ),
+                actionTextColor: const Color(0xFF00E5CE),
+              ),
             ),
             darkTheme: ThemeData(
               fontFamily: provider.currentLanguage == 'ku'
@@ -318,6 +337,25 @@ class _MyAppState extends State<MyApp> {
                 isDark: true,
                 primaryColor: const Color(0xFF00F0D8),
                 onPrimaryColor: const Color(0xFF0A2342),
+              ),
+              snackBarTheme: SnackBarThemeData(
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                elevation: 6,
+                backgroundColor: const Color(0xFF1E293B),
+                contentTextStyle: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontFamily: provider.currentLanguage == 'ku'
+                      ? 'UniQaidar'
+                      : provider.currentLanguage == 'ar'
+                          ? 'NotoSansArabic'
+                          : 'Inter',
+                  fontFamilyFallback: const ['UniQaidar', 'Speda', 'NotoSansArabic', 'NotoSans'],
+                ),
+                actionTextColor: const Color(0xFF00F0D8),
               ),
             ),
             locale: Locale(provider.currentLanguage),

@@ -12,7 +12,7 @@ class FaceRecognitionService {
     try {
       if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('blob:')) {
         final resp = await http.get(Uri.parse(imagePath));
-        return getFaceEmbeddingFromBytes(resp.bodyBytes);
+        return await getFaceEmbeddingFromBytes(resp.bodyBytes);
       }
       return null;
     } catch (e) {

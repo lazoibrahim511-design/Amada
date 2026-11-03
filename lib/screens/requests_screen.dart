@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import '../utils/platform_helper.dart';
 import '../widgets/glass_dialog.dart';
@@ -108,11 +109,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
     final emp = targetEmployee ?? provider.currentEmployee;
 
     if (provider.isDateStringInClosedMonth(date)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.translate('cannot_modify_closed_month')),
-          backgroundColor: Colors.amber.shade800,
-        ),
+      AppSnackBar.warning(
+        context,
+        provider.translate('cannot_modify_closed_month'),
       );
       return;
     }
@@ -163,13 +162,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
             final limit = group.missedPunchLimitPerMonth;
 
             if (limit > 0 && count >= limit) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Limit reached: You can only submit $limit Missed Punch requests per month.',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
+              AppSnackBar.error(
+                context,
+                'Limit reached: You can only submit $limit Missed Punch requests per month.',
               );
               return;
             }
@@ -219,15 +214,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
               final msg = errPattern
                   .replaceAll('{days}', minNotice.toString())
                   .replaceAll('{date}', formattedEarliest);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    msg.isNotEmpty && !msg.contains('{')
-                        ? msg
-                        : 'Annual leave requires at least $minNotice days advance notice. Earliest available date is $formattedEarliest.',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
+              AppSnackBar.error(
+                context,
+                msg.isNotEmpty && !msg.contains('{')
+                    ? msg
+                    : 'Annual leave requires at least $minNotice days advance notice. Earliest available date is $formattedEarliest.',
               );
               return;
             }
@@ -238,13 +229,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
           if (limit > 0) {
             final difference = today.difference(reqDate).inDays;
             if (difference > limit) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Deadline passed: You can only submit Annual Leave requests up to $limit days after the date.',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
+              AppSnackBar.error(
+                context,
+                'Deadline passed: You can only submit Annual Leave requests up to $limit days after the date.',
               );
               return;
             }
@@ -281,15 +268,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
               final msg = errPattern
                   .replaceAll('{limit}', maxPerMonth.toString())
                   .replaceAll('{period}', effectivePeriod);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    msg.isNotEmpty && !msg.contains('{')
-                        ? msg
-                        : 'Limit reached: You can only apply for $maxPerMonth Annual Leave requests per $effectivePeriod.',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
+              AppSnackBar.error(
+                context,
+                msg.isNotEmpty && !msg.contains('{')
+                    ? msg
+                    : 'Limit reached: You can only apply for $maxPerMonth Annual Leave requests per $effectivePeriod.',
               );
               return;
             }
@@ -314,13 +297,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
         if (minMins > 0 && reqMinutes < minMins) {
           final formattedMin = formatMinutesToHoursAndMinutes(minMins);
           final errPattern = provider.translate('hourly_leave_min_error');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                errPattern.replaceAll('{duration}', formattedMin),
-              ),
-              backgroundColor: Colors.red,
-            ),
+          AppSnackBar.error(
+            context,
+            errPattern.replaceAll('{duration}', formattedMin),
           );
           return;
         }
@@ -329,13 +308,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
         if (maxMins > 0 && reqMinutes > maxMins) {
           final formattedMax = formatMinutesToHoursAndMinutes(maxMins);
           final errPattern = provider.translate('hourly_leave_max_error');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                errPattern.replaceAll('{duration}', formattedMax),
-              ),
-              backgroundColor: Colors.red,
-            ),
+          AppSnackBar.error(
+            context,
+            errPattern.replaceAll('{duration}', formattedMax),
           );
           return;
         }
@@ -825,6 +800,102 @@ DateTime? _parseRequestStartDate(String dateStr) {
     );
   }
 
+  Future<void> _confirmAndDeleteRequest({
+    required BuildContext context,
+    required AttendanceProvider provider,
+    required String employeeId,
+    required String requestId,
+    VoidCallback? onDeleted,
+  }) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.redAccent,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                provider.translate('delete_request'),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          provider.translate('confirm_delete_request'),
+          style: TextStyle(
+            color: isDark ? Colors.white70 : const Color(0xFF64748B),
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(false),
+            child: Text(
+              provider.translate('cancel'),
+              style: TextStyle(
+                color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(c).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Text(
+              provider.translate('delete'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await provider.deleteRequest(employeeId, requestId);
+    onDeleted?.call();
+
+    if (context.mounted) {
+      AppSnackBar.error(
+        context,
+        provider.translate('request_deleted'),
+      );
+    }
+  }
+
   Widget _buildMyRequestsList(AttendanceProvider provider) {
     final List<Request> requests = provider.requests;
 
@@ -938,17 +1009,12 @@ DateTime? _parseRequestStartDate(String dateStr) {
                       onTap: () async {
                         final empId = provider.currentEmployee?.id;
                         if (empId != null) {
-                          await provider.deleteRequest(empId, request.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  provider.translate('request_deleted'),
-                                ),
-                                backgroundColor: Colors.redAccent,
-                              ),
-                            );
-                          }
+                          await _confirmAndDeleteRequest(
+                            context: context,
+                            provider: provider,
+                            employeeId: empId,
+                            requestId: request.id,
+                          );
                         }
                       },
                       child: Container(
@@ -1102,21 +1168,13 @@ DateTime? _parseRequestStartDate(String dateStr) {
                       children: [
                         GestureDetector(
                           onTap: () async {
-                            await provider.deleteRequest(
-                              employee.id,
-                              request.id,
+                            await _confirmAndDeleteRequest(
+                              context: context,
+                              provider: provider,
+                              employeeId: employee.id,
+                              requestId: request.id,
+                              onDeleted: () => _loadAllSubordinateRequests(provider),
                             );
-                            _loadAllSubordinateRequests(provider);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    provider.translate('request_deleted'),
-                                  ),
-                                  backgroundColor: Colors.redAccent,
-                                ),
-                              );
-                            }
                           },
                           child: Container(
                             padding: const EdgeInsets.all(6),
@@ -1362,11 +1420,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
                           GestureDetector(
                             onTap: () async {
                               if (provider.isDateStringInClosedMonth(request.date)) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(provider.translate('cannot_modify_closed_month')),
-                                    backgroundColor: Colors.amber.shade800,
-                                  ),
+                                AppSnackBar.warning(
+                                  context,
+                                  provider.translate('cannot_modify_closed_month'),
                                 );
                                 return;
                               }
@@ -1378,13 +1434,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
                               );
                               _loadAllSubordinateRequests(provider);
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    '${employee.name}\'s request rejected.',
-                                  ),
-                                  backgroundColor: Colors.redAccent,
-                                ),
+                              AppSnackBar.error(
+                                context,
+                                '${employee.name}\'s request rejected.',
                               );
                             },
                             child: Container(
@@ -1429,11 +1481,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
                           GestureDetector(
                             onTap: () async {
                               if (provider.isDateStringInClosedMonth(request.date)) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(provider.translate('cannot_modify_closed_month')),
-                                    backgroundColor: Colors.amber.shade800,
-                                  ),
+                                AppSnackBar.warning(
+                                  context,
+                                  provider.translate('cannot_modify_closed_month'),
                                 );
                                 return;
                               }
@@ -1449,15 +1499,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
                               );
                               _loadAllSubordinateRequests(provider);
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    nextStatus == 'Approved'
-                                        ? '${employee.name}\'s request approved.'
-                                        : '${employee.name}\'s request approved and forwarded to HR Manager.',
-                                  ),
-                                  backgroundColor: const Color(0xFF10B981),
-                                ),
+                              AppSnackBar.success(
+                                context,
+                                nextStatus == 'Approved'
+                                    ? '${employee.name}\'s request approved.'
+                                    : '${employee.name}\'s request approved and forwarded to HR Manager.',
                               );
                             },
                             child: Container(
@@ -2612,17 +2658,13 @@ DateTime? _parseRequestStartDate(String dateStr) {
                       if (!context.mounted) return;
                       Navigator.pop(context);
                       final isForSelf = selectedEmployee.id == currentUser.id;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isForSelf
-                                ? provider.translate('submit_success')
-                                : provider
-                                    .translate('submit_success_for')
-                                    .replaceAll('{name}', selectedEmployee.name),
-                          ),
-                          backgroundColor: const Color(0xFF2EBD96),
-                        ),
+                      AppSnackBar.success(
+                        context,
+                        isForSelf
+                            ? provider.translate('submit_success')
+                            : provider
+                                .translate('submit_success_for')
+                                .replaceAll('{name}', selectedEmployee.name),
                       );
                     },
                     child: Text(

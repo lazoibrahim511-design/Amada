@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
@@ -35,31 +36,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     });
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Color(0xFF0A2342), size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '$title copied to clipboard!',
-                style: const TextStyle(
-                  color: Color(0xFF0A2342),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        backgroundColor: const Color(0xFF00E5CE),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin: const EdgeInsets.all(16),
-      ),
+    AppSnackBar.success(
+      context,
+      '$title copied to clipboard!',
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -1516,37 +1496,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (result != null && result is List<double> && context.mounted) {
                         final duplicate = provider.findDuplicateFaceEmployee(result, excludeEmployeeId: currentEmp.id);
                         if (duplicate != null) {
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Row(
-                                children: [
-                                  const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      provider.translate('duplicate_face_detected').replaceAll('{name}', duplicate.name),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: const Color(0xFFEF4444),
-                              duration: const Duration(seconds: 4),
-                            ),
+                          AppSnackBar.warning(
+                            scaffoldMessenger,
+                            provider.translate('duplicate_face_detected').replaceAll('{name}', duplicate.name),
                           );
                           return;
                         }
                         await provider.updateEmployeeFaceEmbedding(currentEmp.id, result);
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Row(
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: Colors.white),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(provider.translate('face_id_enrolled_success'))),
-                              ],
-                            ),
-                            backgroundColor: const Color(0xFF10B981),
-                          ),
+                        AppSnackBar.success(
+                          scaffoldMessenger,
+                          provider.translate('face_id_enrolled_success'),
                         );
                       }
                     },
@@ -1589,11 +1548,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Navigator.pop(ctx);
                               await provider.updateEmployeeFaceEmbedding(currentEmp.id, null);
                               if (context.mounted) {
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(provider.translate('face_id_removed_success')),
-                                    backgroundColor: Colors.blueGrey,
-                                  ),
+                                AppSnackBar.info(
+                                  scaffoldMessenger,
+                                  provider.translate('face_id_removed_success'),
                                 );
                               }
                             },
@@ -1639,37 +1596,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (result != null && result is List<double> && context.mounted) {
                     final duplicate = provider.findDuplicateFaceEmployee(result, excludeEmployeeId: currentEmp.id);
                     if (duplicate != null) {
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  provider.translate('duplicate_face_detected').replaceAll('{name}', duplicate.name),
-                                ),
-                              ),
-                            ],
-                          ),
-                          backgroundColor: const Color(0xFFEF4444),
-                          duration: const Duration(seconds: 4),
-                        ),
+                      AppSnackBar.warning(
+                        scaffoldMessenger,
+                        provider.translate('duplicate_face_detected').replaceAll('{name}', duplicate.name),
                       );
                       return;
                     }
                     await provider.updateEmployeeFaceEmbedding(currentEmp.id, result);
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: [
-                            const Icon(Icons.check_circle_rounded, color: Colors.white),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(provider.translate('face_id_enrolled_success'))),
-                          ],
-                        ),
-                        backgroundColor: const Color(0xFF10B981),
-                      ),
+                    AppSnackBar.success(
+                      scaffoldMessenger,
+                      provider.translate('face_id_enrolled_success'),
                     );
                   }
                 },
@@ -2336,21 +2272,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (context.mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile picture updated successfully!'),
-            backgroundColor: Color(0xFF00BD96),
-          ),
+        AppSnackBar.success(
+          context,
+          'Profile picture updated successfully!',
         );
       }
     } catch (e) {
       debugPrint('Error saving profile image: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update profile picture: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
+        AppSnackBar.error(
+          context,
+          'Failed to update profile picture: $e',
         );
       }
     }
@@ -2438,11 +2370,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           } catch (e) {
                             debugPrint('Camera error: $e');
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Camera not supported or available on this device. Please choose from gallery.'),
-                                  backgroundColor: Colors.orange,
-                                ),
+                              AppSnackBar.warning(
+                                context,
+                                'Camera not supported or available on this device. Please choose from gallery.',
                               );
                             }
                           }
@@ -2510,11 +2440,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         } catch (e) {
                           debugPrint('Gallery picker error: $e');
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Failed to pick image: $e'),
-                                backgroundColor: const Color(0xFFEF4444),
-                              ),
+                            AppSnackBar.error(
+                              context,
+                              'Failed to pick image: $e',
                             );
                           }
                         }
@@ -2573,11 +2501,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     await provider.updateProfileImage(null);
                     if (context.mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Profile picture removed!'),
-                          backgroundColor: Color(0xFFEF4444),
-                        ),
+                      AppSnackBar.info(
+                        context,
+                        'Profile picture removed!',
                       );
                     }
                   },
@@ -2709,40 +2635,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final confirmPass = confirmPasswordController.text.trim();
 
             if (newPass.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please enter a new password'),
-                  backgroundColor: Color(0xFFEF4444),
-                ),
+              AppSnackBar.warning(
+                context,
+                'Please enter a new password',
               );
               return;
             }
             if (newPass.length < 6) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Password must be at least 6 characters long'),
-                  backgroundColor: Color(0xFFEF4444),
-                ),
+              AppSnackBar.warning(
+                context,
+                'Password must be at least 6 characters long',
               );
               return;
             }
             if (newPass != confirmPass) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Passwords do not match'),
-                  backgroundColor: Color(0xFFEF4444),
-                ),
+              AppSnackBar.error(
+                context,
+                'Passwords do not match',
               );
               return;
             }
 
             provider.updatePassword(newPass);
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(provider.translate('pwd_success')),
-                backgroundColor: const Color(0xFF00BD96),
-              ),
+            AppSnackBar.success(
+              context,
+              provider.translate('pwd_success'),
             );
           },
         ),

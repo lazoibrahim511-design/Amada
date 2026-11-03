@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/hr_models.dart';
@@ -139,13 +140,9 @@ void _addNewRequestHelper({
           final limit = group.missedPunchLimitPerMonth;
 
           if (limit > 0 && count >= limit) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Limit reached: You can only submit $limit Missed Punch requests per month.',
-                ),
-                backgroundColor: Colors.red,
-              ),
+            AppSnackBar.error(
+              context,
+              'Limit reached: You can only submit $limit Missed Punch requests per month.',
             );
             return;
           }
@@ -195,15 +192,11 @@ void _addNewRequestHelper({
             final msg = errPattern
                 .replaceAll('{days}', minNotice.toString())
                 .replaceAll('{date}', formattedEarliest);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  msg.isNotEmpty && !msg.contains('{')
-                      ? msg
-                      : 'Annual leave requires at least $minNotice days advance notice. Earliest available date is $formattedEarliest.',
-                ),
-                backgroundColor: Colors.red,
-              ),
+            AppSnackBar.error(
+              context,
+              msg.isNotEmpty && !msg.contains('{')
+                  ? msg
+                  : 'Annual leave requires at least $minNotice days advance notice. Earliest available date is $formattedEarliest.',
             );
             return;
           }
@@ -214,13 +207,9 @@ void _addNewRequestHelper({
         if (limit > 0) {
           final difference = today.difference(reqDate).inDays;
           if (difference > limit) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Deadline passed: You can only submit Annual Leave requests up to $limit days after the date.',
-                ),
-                backgroundColor: Colors.red,
-              ),
+            AppSnackBar.error(
+              context,
+              'Deadline passed: You can only submit Annual Leave requests up to $limit days after the date.',
             );
             return;
           }
@@ -257,15 +246,11 @@ void _addNewRequestHelper({
             final msg = errPattern
                 .replaceAll('{limit}', maxPerMonth.toString())
                 .replaceAll('{period}', effectivePeriod);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  msg.isNotEmpty && !msg.contains('{')
-                      ? msg
-                      : 'Limit reached: You can only apply for $maxPerMonth Annual Leave requests per $effectivePeriod.',
-                ),
-                backgroundColor: Colors.red,
-              ),
+            AppSnackBar.error(
+              context,
+              msg.isNotEmpty && !msg.contains('{')
+                  ? msg
+                  : 'Limit reached: You can only apply for $maxPerMonth Annual Leave requests per $effectivePeriod.',
             );
             return;
           }
@@ -290,13 +275,9 @@ void _addNewRequestHelper({
       if (minMins > 0 && reqMinutes < minMins) {
         final formattedMin = formatMinutesToHoursAndMinutes(minMins);
         final errPattern = provider.translate('hourly_leave_min_error');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              errPattern.replaceAll('{duration}', formattedMin),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        AppSnackBar.error(
+          context,
+          errPattern.replaceAll('{duration}', formattedMin),
         );
         return;
       }
@@ -305,13 +286,9 @@ void _addNewRequestHelper({
       if (maxMins > 0 && reqMinutes > maxMins) {
         final formattedMax = formatMinutesToHoursAndMinutes(maxMins);
         final errPattern = provider.translate('hourly_leave_max_error');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              errPattern.replaceAll('{duration}', formattedMax),
-            ),
-            backgroundColor: Colors.red,
-          ),
+        AppSnackBar.error(
+          context,
+          errPattern.replaceAll('{duration}', formattedMax),
         );
         return;
       }
@@ -321,11 +298,9 @@ void _addNewRequestHelper({
   }
 
   if (provider.isDateStringInClosedMonth(date)) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(provider.translate('cannot_modify_closed_month')),
-        backgroundColor: Colors.amber.shade800,
-      ),
+    AppSnackBar.warning(
+      context,
+      provider.translate('cannot_modify_closed_month'),
     );
     return;
   }
@@ -1445,17 +1420,13 @@ Future<void> showNewRequestDialog({
                     Navigator.pop(context);
                     final isForSelf =
                         selectedEmployee.id == currentUser.id;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          isForSelf
-                              ? provider.translate('submit_success')
-                              : provider
-                                  .translate('submit_success_for')
-                                  .replaceAll('{name}', selectedEmployee.name),
-                        ),
-                        backgroundColor: const Color(0xFF2EBD96),
-                      ),
+                    AppSnackBar.success(
+                      context,
+                      isForSelf
+                          ? provider.translate('submit_success')
+                          : provider
+                              .translate('submit_success_for')
+                              .replaceAll('{name}', selectedEmployee.name),
                     );
                   },
                   child: Text(

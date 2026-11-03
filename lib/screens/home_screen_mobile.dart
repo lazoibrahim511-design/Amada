@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -493,12 +494,11 @@ class HomeScreenMobile extends StatelessWidget {
                     onTap: () async {
                       final locError = await provider.verifyLocation();
                       if (locError != null && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(locError),
-                            backgroundColor: const Color(0xFFFF5C5C),
-                            duration: const Duration(seconds: 4),
-                          ),
+                        AppSnackBar.show(
+                          context,
+                          message: locError,
+                          type: AppSnackBarType.error,
+                          icon: Icons.location_off_rounded,
                         );
                         return;
                       }
@@ -516,11 +516,11 @@ class HomeScreenMobile extends StatelessWidget {
                         
                         if (success != true) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(provider.translate('face_auth_failed')),
-                                backgroundColor: Colors.redAccent,
-                              )
+                            AppSnackBar.show(
+                              context,
+                              message: provider.translate('face_auth_failed'),
+                              type: AppSnackBarType.error,
+                              icon: Icons.face_retouching_off_rounded,
                             );
                           }
                           return;
@@ -530,20 +530,14 @@ class HomeScreenMobile extends StatelessWidget {
                       final error = await provider.clockIn();
                       if (!context.mounted) return;
                       if (error == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(provider.translate('success_clock_in')),
-                            backgroundColor: const Color(0xFF2EBD96),
-                            duration: const Duration(seconds: 2),
-                          ),
+                        AppSnackBar.success(
+                          context,
+                          provider.translate('success_clock_in'),
                         );
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(error),
-                            backgroundColor: const Color(0xFFFF5C5C),
-                            duration: const Duration(seconds: 4),
-                          ),
+                        AppSnackBar.error(
+                          context,
+                          error,
                         );
                       }
                     },
@@ -556,12 +550,11 @@ class HomeScreenMobile extends StatelessWidget {
                     onTap: () async {
                       final locError = await provider.verifyLocation();
                       if (locError != null && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(locError),
-                            backgroundColor: const Color(0xFFFF5C5C),
-                            duration: const Duration(seconds: 4),
-                          ),
+                        AppSnackBar.show(
+                          context,
+                          message: locError,
+                          type: AppSnackBarType.error,
+                          icon: Icons.location_off_rounded,
                         );
                         return;
                       }
@@ -579,11 +572,11 @@ class HomeScreenMobile extends StatelessWidget {
                         
                         if (success != true) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(provider.translate('face_auth_failed')),
-                                backgroundColor: Colors.redAccent,
-                              )
+                            AppSnackBar.show(
+                              context,
+                              message: provider.translate('face_auth_failed'),
+                              type: AppSnackBarType.error,
+                              icon: Icons.face_retouching_off_rounded,
                             );
                           }
                           return;
@@ -593,28 +586,19 @@ class HomeScreenMobile extends StatelessWidget {
                       final result = await provider.clockOut();
                       if (!context.mounted) return;
                       if (result == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(provider.translate('success_clock_out')),
-                            backgroundColor: const Color(0xFF2EBD96),
-                            duration: const Duration(seconds: 2),
-                          ),
+                        AppSnackBar.success(
+                          context,
+                          provider.translate('success_clock_out'),
                         );
                       } else if (result == 'missed_checkin') {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(provider.translate('missed_check_in_msg')),
-                            backgroundColor: const Color(0xFFFFA726), // Orange warning
-                            duration: const Duration(seconds: 4),
-                          ),
+                        AppSnackBar.warning(
+                          context,
+                          provider.translate('missed_check_in_msg'),
                         );
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(result),
-                            backgroundColor: const Color(0xFFFF5C5C),
-                            duration: const Duration(seconds: 4),
-                          ),
+                        AppSnackBar.error(
+                          context,
+                          result,
                         );
                       }
                     },

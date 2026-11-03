@@ -1,3 +1,4 @@
+import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -105,15 +106,14 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     } catch (e) {
       if (mounted) {
         final errMsg = e.toString().replaceFirst('Exception: ', '');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFFF4B4B),
-            content: Text(errMsg),
-            action: SnackBarAction(
-              label: 'Configure Key',
-              textColor: Colors.white,
-              onPressed: () => _showApiKeyDialog(),
-            ),
+        AppSnackBar.show(
+          context,
+          message: errMsg,
+          type: AppSnackBarType.error,
+          action: SnackBarAction(
+            label: 'Configure Key',
+            textColor: Colors.white,
+            onPressed: () => _showApiKeyDialog(),
           ),
         );
       }
@@ -252,11 +252,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     if (!mounted) return;
                     setState(() => _apiKey = newKey);
                     nav.pop();
-                    messenger.showSnackBar(
-                      SnackBar(
-                        backgroundColor: const Color(0xFF10B981),
-                        content: Text(provider.translate('ai_key_saved')),
-                      ),
+                    AppSnackBar.success(
+                      messenger,
+                      provider.translate('ai_key_saved'),
                     );
                   }
                 },
@@ -278,21 +276,33 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return Directionality(
       textDirection: textDir,
       child: Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFFCFDFD),
         appBar: widget.isEmbedded ? null : _buildAppBar(context, provider, isDark),
-        body: Column(
-          children: [
-            if (widget.isEmbedded) _buildEmbeddedHeader(context, provider, isDark),
-            _buildScopeSelector(context, provider, isDark),
-            Expanded(
-              child: _messages.isEmpty
-                  ? _buildEmptyState(context, provider, isDark)
-                  : _buildMessageList(context, provider, isDark),
-            ),
-            if (_isLoading) _buildLoadingIndicator(context, provider, isDark),
-            _buildQuickPromptChips(context, provider, isDark),
-            _buildInputArea(context, provider, isDark),
-          ],
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: !isDark
+                ? const LinearGradient(
+                    colors: [Color(0xFFFCFDFD), Color(0xFFEDF2FE), Color(0xFFE0EAFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isDark ? const Color(0xFF0F172A) : null,
+          ),
+          child: Column(
+            children: [
+              if (widget.isEmbedded) _buildEmbeddedHeader(context, provider, isDark),
+              _buildScopeSelector(context, provider, isDark),
+              Expanded(
+                child: _messages.isEmpty
+                    ? _buildEmptyState(context, provider, isDark)
+                    : _buildMessageList(context, provider, isDark),
+              ),
+              if (_isLoading) _buildLoadingIndicator(context, provider, isDark),
+              if (_messages.isNotEmpty) _buildQuickPromptChips(context, provider, isDark),
+              _buildInputArea(context, provider, isDark),
+            ],
+          ),
         ),
       ),
     );
@@ -306,6 +316,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return AppBar(
       elevation: 0,
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      iconTheme: IconThemeData(
+        color: isDark ? Colors.white : const Color(0xFF0F172A),
+      ),
       title: Row(
         children: [
           Container(
@@ -632,19 +645,26 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
+          gradient: isSelected
+              ? const LinearGradient(
+                  colors: [Color(0xFF00F0D8), Color(0xFF00BD96)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
           color: isSelected
-              ? const Color(0xFF10B981)
+              ? null
               : (isDark ? const Color(0xFF1E293B) : Colors.white),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFF10B981)
+                ? const Color(0xFF80FFF3).withValues(alpha: 0.45)
                 : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                    color: const Color(0xFF00E5CE).withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -658,7 +678,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               icon,
               size: 15,
               color: isSelected
-                  ? Colors.white
+                  ? const Color(0xFF0A2342)
                   : (isDark ? Colors.white70 : const Color(0xFF475569)),
             ),
             const SizedBox(width: 6),
@@ -668,7 +688,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected
-                    ? Colors.white
+                    ? const Color(0xFF0A2342)
                     : (isDark ? Colors.white70 : const Color(0xFF475569)),
               ),
             ),
@@ -998,11 +1018,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                             InkWell(
                               onTap: () {
                                 Clipboard.setData(ClipboardData(text: msg.text));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(provider.translate('ai_copied_to_clipboard')),
-                                    duration: const Duration(seconds: 2),
-                                  ),
+                                AppSnackBar.info(
+                                  context,
+                                  provider.translate('ai_copied_to_clipboard'),
+                                  duration: const Duration(seconds: 2),
                                 );
                               },
                               borderRadius: BorderRadius.circular(8),
