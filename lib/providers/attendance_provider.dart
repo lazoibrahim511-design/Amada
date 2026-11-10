@@ -765,8 +765,41 @@ class AttendanceProvider with ChangeNotifier {
 
   void setSelectedMonth(DateTime month) {
     _selectedMonth = month;
+    final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
+    if (month.isBefore(sixtyDaysAgo)) {
+      final startOfMonth = DateTime(month.year, month.month, 1);
+      final endOfMonth = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
+      loadHistoricalRecordsForRange(startOfMonth, endOfMonth);
+    }
     recalculateAllStats();
     notifyListeners();
+  }
+
+  void _mergeCompanyRecords(List<AttendanceRecord> newRecords) {
+    final Map<String, AttendanceRecord> existingMap = {
+      for (final r in _allCompanyRecords)
+        '${r.employeeId ?? ""}_${r.checkIn.toIso8601String()}': r
+    };
+    for (final r in newRecords) {
+      existingMap['${r.employeeId ?? ""}_${r.checkIn.toIso8601String()}'] = r;
+    }
+    _allCompanyRecords.clear();
+    _allCompanyRecords.addAll(existingMap.values);
+    _allCompanyRecords.sort((a, b) => b.checkIn.compareTo(a.checkIn));
+  }
+
+  Future<void> loadHistoricalRecordsForRange(DateTime from, DateTime to) async {
+    if (!_firebaseService.isAvailable) return;
+    try {
+      final historical = await _firebaseService.getRecordsForRange(from: from, to: to);
+      if (historical.isNotEmpty) {
+        _mergeCompanyRecords(historical);
+        recalculateAllStats();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading historical records: $e');
+    }
   }
 
   double get weeklyHours => _weeklyHours;
@@ -1461,10 +1494,11 @@ class AttendanceProvider with ChangeNotifier {
         }),
       );
 
+      // Stream active records (last 60 days) to keep Firestore reads ultra-low and startup fast
+      final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
       _subscriptions.add(
-        _firebaseService.streamAllRecords().listen((data) {
-          _allCompanyRecords.clear();
-          _allCompanyRecords.addAll(data);
+        _firebaseService.streamAllRecords(since: sixtyDaysAgo).listen((data) {
+          _mergeCompanyRecords(data);
           notifyListeners();
         }),
       );
@@ -1479,30 +1513,7 @@ class AttendanceProvider with ChangeNotifier {
         }),
       );
 
-      try {
-        final initialRequests = await _firebaseService.getAllRequests();
-        if (initialRequests.isNotEmpty) {
-          _allCompanyRequests.clear();
-          _allCompanyRequests.addAll(initialRequests);
-          for (var req in initialRequests) {
-            if (req.employeeId != null) {
-              _allRequestsMap[req.employeeId!] ??= [];
-              final existingIdx = _allRequestsMap[req.employeeId!]!.indexWhere(
-                (r) => r.id == req.id,
-              );
-              if (existingIdx != -1) {
-                _allRequestsMap[req.employeeId!]![existingIdx] = req;
-              } else {
-                _allRequestsMap[req.employeeId!]!.add(req);
-              }
-            }
-          }
-          notifyListeners();
-        }
-      } catch (e) {
-        debugPrint('Error getting initial requests: $e');
-      }
-
+      // Realtime stream receives all requests immediately on listen without redundant pre-fetch
       _subscriptions.add(
         _firebaseService.streamAllRequests().listen((data) {
           _allCompanyRequests.clear();
@@ -3477,17 +3488,6 @@ class AttendanceProvider with ChangeNotifier {
     final currentUser = currentEmployee;
     if (currentUser == null) return;
     if (_chatSubscriptionsMap.containsKey(cId)) return;
-
-    // Fast one-time async get so existing messages appear immediately
-    _firebaseService.getChatMessages(currentUser.id, cId).then((initial) {
-      if (initial.isNotEmpty) {
-        final existing = _chatMessagesMap[cId] ?? [];
-        if (existing.length < initial.length) {
-          _chatMessagesMap[cId] = initial;
-          notifyListeners();
-        }
-      }
-    }).catchError((_) {});
 
     _chatSubscriptionsMap[cId] = _firebaseService
         .streamChatMessages(currentUser.id, cId)

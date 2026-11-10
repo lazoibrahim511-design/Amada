@@ -75,6 +75,11 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
       _startDate = DateTime(newMonth.year, newMonth.month, 1);
       _endDate = DateTime(newMonth.year, newMonth.month, DateUtils.getDaysInMonth(newMonth.year, newMonth.month));
     });
+    final provider = Provider.of<AttendanceProvider>(context, listen: false);
+    final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
+    if (_startDate.isBefore(sixtyDaysAgo)) {
+      provider.loadHistoricalRecordsForRange(_startDate, _endDate);
+    }
   }
 
   bool _isCountMetric(String metric) {
@@ -154,6 +159,11 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
         _startDate = picked.start;
         _endDate = picked.end;
       });
+      final provider = Provider.of<AttendanceProvider>(context, listen: false);
+      final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
+      if (_startDate.isBefore(sixtyDaysAgo)) {
+        provider.loadHistoricalRecordsForRange(_startDate, _endDate);
+      }
     }
   }
 

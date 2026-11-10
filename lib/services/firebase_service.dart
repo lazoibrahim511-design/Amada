@@ -852,10 +852,14 @@ class FirebaseService {
     });
   }
 
-  Stream<List<AttendanceRecord>> streamAllRecords() {
+  Stream<List<AttendanceRecord>> streamAllRecords({DateTime? since}) {
     if (!isAvailable) return Stream.value([]);
     try {
-      return _firestore.collectionGroup('user_records').snapshots().map((snapshot) {
+      Query<Map<String, dynamic>> query = _firestore.collectionGroup('user_records');
+      if (since != null) {
+        query = query.where('checkIn', isGreaterThanOrEqualTo: since.toIso8601String());
+      }
+      return query.snapshots().map((snapshot) {
         final list = <AttendanceRecord>[];
         for (var doc in snapshot.docs) {
           try {
@@ -869,12 +873,40 @@ class FirebaseService {
         list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
         return list;
       }).handleError((e) {
-        debugPrint('collectionGroup user_records stream error (likely missing index): $e');
+        debugPrint('collectionGroup user_records stream error: $e');
         return <AttendanceRecord>[];
       });
     } catch (e) {
       debugPrint('Error starting streamAllRecords: $e');
       return Stream.value([]);
+    }
+  }
+
+  /// On-demand historical records fetch for custom report date ranges
+  Future<List<AttendanceRecord>> getRecordsForRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    if (!isAvailable) return [];
+    try {
+      final snapshot = await _firestore
+          .collectionGroup('user_records')
+          .where('checkIn', isGreaterThanOrEqualTo: from.toIso8601String())
+          .where('checkIn', isLessThanOrEqualTo: to.toIso8601String())
+          .get();
+      final list = <AttendanceRecord>[];
+      for (var doc in snapshot.docs) {
+        try {
+          final empId = doc.data()['employeeId']?.toString() ??
+              doc.reference.parent.parent?.id;
+          list.add(AttendanceRecord.fromMap(doc.data(), empId));
+        } catch (_) {}
+      }
+      list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
+      return list;
+    } catch (e) {
+      debugPrint('Error getting records for range: $e');
+      return [];
     }
   }
 

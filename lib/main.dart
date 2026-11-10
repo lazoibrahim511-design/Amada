@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'providers/attendance_provider.dart';
 import 'screens/main_navigation_screen.dart';
@@ -65,6 +66,17 @@ void main() async {
         debugPrint('Firebase messaging background handler setup skipped: $e');
       }
     }
+
+    // Enable Firestore offline disk persistence for instantaneous screen rendering and minimal cloud reads
+    try {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+    } catch (e) {
+      debugPrint('Firestore persistence settings: $e');
+    }
+
     debugPrint('Firebase initialized successfully.');
   } catch (e) {
     debugPrint('Firebase pre-init completed or timed out: $e. Background syncing will continue.');
