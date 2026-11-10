@@ -229,25 +229,35 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
 
 
   Widget _buildWebHeader(AttendanceProvider provider, bool isDark) {
+    final isNativeDesktop = isDesktopPlatform;
+    final borderRadiusVal = isNativeDesktop ? BorderRadius.zero : BorderRadius.circular(35);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      padding: isNativeDesktop 
+          ? EdgeInsets.zero 
+          : const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Container(
-        height: 70,
+        height: isNativeDesktop ? 64 : 70,
         padding: const EdgeInsets.symmetric(horizontal: 24),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(35),
+          color: isDark 
+              ? (isNativeDesktop ? const Color(0xFF131B2E) : const Color(0xFF1E293B).withValues(alpha: 0.8))
+              : Colors.white.withValues(alpha: isNativeDesktop ? 0.98 : 0.9),
+          borderRadius: borderRadiusVal,
+          border: isNativeDesktop
+              ? Border(bottom: BorderSide(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0), width: 1.0))
+              : null,
           boxShadow: [
             if (!isDark)
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: isNativeDesktop ? 10 : 20,
+                offset: const Offset(0, 2),
               ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(35),
+          borderRadius: borderRadiusVal,
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Row(
@@ -537,7 +547,7 @@ class MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
               const SizedBox(width: 12),
               
-              // Profile
+              // Profile (Circular Gradient Avatar)
               InkWell(
                 onTap: () {
                   Navigator.push(

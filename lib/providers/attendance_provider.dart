@@ -4458,6 +4458,41 @@ class AttendanceProvider with ChangeNotifier {
     return await WifiDetectorService.detectCurrentWifi();
   }
 
+  /// Returns remaining seconds for the 3-minute cooldown between clock-in and clock-out.
+  int get clockOutRemainingSeconds {
+    if (!_isClockedIn) return 0;
+    AttendanceRecord? rec = _activeRecord;
+    if (rec == null) {
+      final openIdx = _records.indexWhere((r) => r.checkOut == null);
+      if (openIdx != -1) {
+        rec = _records[openIdx];
+      }
+    }
+    if (rec == null) return 0;
+    final diff = DateTime.now().difference(rec.checkIn);
+    if (diff.inSeconds < 180 && diff.inHours.abs() < 24) {
+      final rem = 180 - diff.inSeconds;
+      return rem > 180 ? 180 : (rem < 0 ? 0 : rem);
+    }
+    return 0;
+  }
+
+  /// Returns translated error message if clock-out is blocked by the 3-minute cooldown.
+  String? getClockOutCooldownError() {
+    final remaining = clockOutRemainingSeconds;
+    if (remaining <= 0) return null;
+    final remMin = remaining ~/ 60;
+    final remSec = remaining % 60;
+    final timeStr = remMin > 0 ? '${remMin}m ${remSec}s' : '${remSec}s';
+    return translate('clock_out_cooldown_error').replaceAll('{time}', timeStr);
+  }
+
+  @visibleForTesting
+  void restoreActiveRecordForTesting(AttendanceRecord record) {
+    _activeRecord = record;
+    _isClockedIn = record.checkOut == null;
+  }
+
   Future<String?> clockIn([dynamic a, dynamic b]) async {
     _isClockedIn = true;
     _activeRecord = AttendanceRecord(
@@ -4488,6 +4523,11 @@ class AttendanceProvider with ChangeNotifier {
   }
 
   Future<String?> clockOut([dynamic a, dynamic b]) async {
+    final cooldownError = getClockOutCooldownError();
+    if (cooldownError != null) {
+      return cooldownError;
+    }
+
     final now = DateTime.now();
 
     // If _activeRecord is null, locate the latest open record

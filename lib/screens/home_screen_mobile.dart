@@ -548,6 +548,17 @@ class HomeScreenMobile extends StatelessWidget {
                     isActive: true, // Always active so they can clock out if they forgot check in
                     isClockIn: false,
                     onTap: () async {
+                      final cooldownError = provider.getClockOutCooldownError();
+                      if (cooldownError != null && context.mounted) {
+                        AppSnackBar.show(
+                          context,
+                          message: cooldownError,
+                          type: AppSnackBarType.error,
+                          icon: Icons.timer_outlined,
+                        );
+                        return;
+                      }
+
                       final locError = await provider.verifyLocation();
                       if (locError != null && context.mounted) {
                         AppSnackBar.show(

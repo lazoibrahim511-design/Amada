@@ -144,23 +144,30 @@ class OrderMetricCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
+  final Color? accentColor;
 
   const OrderMetricCard({
     super.key,
     required this.title,
     required this.value,
     required this.icon,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveColor = accentColor ?? (isDark ? const Color(0xFF00F0D8) : const Color(0xFF00E5CE));
 
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          width: 1.0,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
@@ -180,15 +187,16 @@ class OrderMetricCard extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
+                  color: effectiveColor.withValues(alpha: isDark ? 0.20 : 0.12),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    color: effectiveColor.withValues(alpha: isDark ? 0.40 : 0.25),
                     width: 1.5,
                   ),
                 ),
                 child: Icon(
                   icon,
                   size: 20,
-                  color: isDark ? Colors.white70 : const Color(0xFF334155),
+                  color: effectiveColor,
                 ),
               ),
               const SizedBox(width: 14),
@@ -209,7 +217,7 @@ class OrderMetricCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white60 : const Color(0xFF8E95A5),
+              color: isDark ? Colors.white60 : const Color(0xFF64748B),
             ),
           ),
         ],
@@ -239,7 +247,11 @@ class OrderCompletionCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          width: 1.0,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),

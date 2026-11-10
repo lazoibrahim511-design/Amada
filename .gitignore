@@ -41,6 +41,8 @@ app.*.symbols
 app.*.map.json
 
 # Android Studio will place build artifacts here
+.gradle/
+**/android/build/
 /android/app/debug
 /android/app/profile
 /android/app/release
@@ -62,3 +64,8 @@ firestore-debug.log*
 # Installers & packages
 Output/
 *.zip
+
+*.pem
+
+*.mp4
+ffmpeg_bin/

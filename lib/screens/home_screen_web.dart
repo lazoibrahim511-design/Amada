@@ -44,11 +44,11 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1350),
+            constraints: const BoxConstraints(maxWidth: 1550),
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(
-                horizontal: 28.0,
+                horizontal: 32.0,
                 vertical: 24.0,
               ),
               child: isHRorAdmin
@@ -1283,6 +1283,8 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
     bool isDark,
   ) {
     final userName = provider.userName.split(' ').first;
+    final now = DateTime.now();
+    final dateStr = DateFormat('EEEE, MMM d, yyyy').format(now);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1310,6 +1312,53 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
               ),
             ),
           ],
+        ),
+
+        // Desktop workspace date & tracking status badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF10B981),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.calendar_today_rounded,
+                size: 14,
+                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                dateStr,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -1358,18 +1407,21 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
       title: provider.translate('total_staff'),
       value: '$totalEmployees',
       icon: Icons.groups_outlined,
+      accentColor: const Color(0xFF2E65FF),
     );
 
     final presentCard = OrderMetricCard(
       title: '${provider.translate('present_today')} ($absent ${provider.translate('absent')})',
       value: '$presentToday',
       icon: Icons.check_circle_outline_rounded,
+      accentColor: const Color(0xFF10B981),
     );
 
     final leaveCard = OrderMetricCard(
       title: provider.translate('on_leave'),
       value: '$onLeave',
       icon: Icons.flight_takeoff_rounded,
+      accentColor: const Color(0xFFF59E0B),
     );
 
     final completionCard = OrderCompletionCard(
@@ -1430,51 +1482,52 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
     BuildContext context,
     AttendanceProvider provider,
   ) {
-    final isWide = MediaQuery.of(context).size.width > 1000;
+    final isWide = MediaQuery.of(context).size.width >= 1150;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const PendingApprovalsCard(),
-        const SizedBox(height: 24),
-
-        if (isWide)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Expanded(flex: 2, child: AttendanceOverviewChart()),
-              SizedBox(width: 24),
-              Expanded(flex: 1, child: QuickActionsList()),
-            ],
-          )
-        else
-          Column(
-            children: const [
-              AttendanceOverviewChart(),
-              SizedBox(height: 24),
-              QuickActionsList(),
-            ],
+    if (isWide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left Column (Charts & Visual Analytics, flex: 11 ~62%)
+          Expanded(
+            flex: 11,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                AttendanceOverviewChart(),
+                SizedBox(height: 24),
+                DepartmentAttendanceChart(),
+              ],
+            ),
           ),
-        const SizedBox(height: 24),
-
-        if (isWide)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Expanded(flex: 1, child: DepartmentAttendanceChart()),
-              SizedBox(width: 24),
-              Expanded(flex: 1, child: RecentActivitiesList()),
-            ],
-          )
-        else
-          Column(
-            children: const [
-              DepartmentAttendanceChart(),
-              SizedBox(height: 24),
-              RecentActivitiesList(),
-            ],
+          const SizedBox(width: 24),
+          // Right Column (Operations & Approvals, flex: 7 ~38%)
+          Expanded(
+            flex: 7,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                PendingApprovalsCard(),
+                SizedBox(height: 24),
+                QuickActionsList(),
+              ],
+            ),
           ),
-      ],
-    );
+        ],
+      );
+    } else {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          AttendanceOverviewChart(),
+          SizedBox(height: 24),
+          PendingApprovalsCard(),
+          SizedBox(height: 24),
+          QuickActionsList(),
+          SizedBox(height: 24),
+          DepartmentAttendanceChart(),
+        ],
+      );
+    }
   }
 }

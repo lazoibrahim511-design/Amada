@@ -2480,6 +2480,7 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                               controller: dobController,
                               style: TextStyle(color: textColor),
                               decoration: InputDecoration(
+                                isDense: true,
                                 labelText: provider.translate('birthday'),
                                 labelStyle: TextStyle(color: labelColor),
                                 prefixIcon: Icon(Icons.cake_outlined, size: 18, color: iconColor),
@@ -2493,18 +2494,20 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           initialValue: selectedGender,
                           dropdownColor: dropdownBg,
                           style: TextStyle(color: textColor),
                           decoration: InputDecoration(
+                            isDense: true,
                             labelText: provider.translate('gender'),
                             labelStyle: TextStyle(color: labelColor),
                             prefixIcon: Icon(Icons.wc_outlined, size: 18, color: iconColor),
                           ),
                           items: [
-                            DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Male', child: Text(provider.translate('male'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Female', child: Text(provider.translate('female'), style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: 'Male', child: Text(provider.translate('male'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: 'Female', child: Text(provider.translate('female'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
                           ],
                           onChanged: (val) => setDialogState(() => selectedGender = val),
                         ),
@@ -2518,20 +2521,22 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           initialValue: selectedMaritalStatus,
                           dropdownColor: dropdownBg,
                           style: TextStyle(color: textColor),
                           decoration: InputDecoration(
+                            isDense: true,
                             labelText: provider.translate('marital_status'),
                             labelStyle: TextStyle(color: labelColor),
                             prefixIcon: Icon(Icons.favorite_border_rounded, size: 18, color: iconColor),
                           ),
                           items: [
-                            DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Single', child: Text(provider.translate('single'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Married', child: Text(provider.translate('married'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Divorced', child: Text(provider.translate('divorced'), style: TextStyle(color: textColor))),
-                            DropdownMenuItem(value: 'Widowed', child: Text(provider.translate('widowed'), style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: 'Single', child: Text(provider.translate('single'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: 'Married', child: Text(provider.translate('married'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: 'Divorced', child: Text(provider.translate('divorced'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: 'Widowed', child: Text(provider.translate('widowed'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
                           ],
                           onChanged: (val) => setDialogState(() => selectedMaritalStatus = val),
                         ),
@@ -2539,18 +2544,20 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           initialValue: selectedBloodGroup,
                           dropdownColor: dropdownBg,
                           style: TextStyle(color: textColor),
                           decoration: InputDecoration(
+                            isDense: true,
                             labelText: provider.translate('blood_group'),
                             labelStyle: TextStyle(color: labelColor),
                             prefixIcon: Icon(Icons.bloodtype_outlined, size: 18, color: iconColor),
                           ),
                           items: [
-                            DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), style: TextStyle(color: textColor))),
+                            DropdownMenuItem(value: null, child: Text(provider.translate('not_specified'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
                             ...['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(
-                              (bg) => DropdownMenuItem(value: bg, child: Text(bg, style: TextStyle(color: textColor))),
+                              (bg) => DropdownMenuItem(value: bg, child: Text(bg, overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
                             ),
                           ],
                           onChanged: (val) => setDialogState(() => selectedBloodGroup = val),
@@ -2718,18 +2725,20 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                           ? selectedRole.toLowerCase()
                           : 'employee';
                       return DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: safeRole,
                         dropdownColor: dropdownBg,
                         style: TextStyle(color: textColor),
                         decoration: InputDecoration(
+                          isDense: true,
                           labelText: provider.translate('access_role'),
                           labelStyle: TextStyle(color: labelColor),
                           prefixIcon: Icon(Icons.security_outlined, size: 18, color: iconColor),
                         ),
                         items: [
-                          DropdownMenuItem(value: 'employee', child: Text(provider.translate('employee_role'), style: TextStyle(color: textColor))),
-                          DropdownMenuItem(value: 'supervisor', child: Text(provider.translate('supervisor_role'), style: TextStyle(color: textColor))),
-                          DropdownMenuItem(value: 'hr', child: Text(provider.translate('role_hr_admin'), style: TextStyle(color: textColor))),
+                          DropdownMenuItem(value: 'employee', child: Text(provider.translate('employee_role'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                          DropdownMenuItem(value: 'supervisor', child: Text(provider.translate('supervisor_role'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
+                          DropdownMenuItem(value: 'hr', child: Text(provider.translate('role_hr_admin'), overflow: TextOverflow.ellipsis, maxLines: 1, style: TextStyle(color: textColor))),
                         ],
                         onChanged: (val) {
                           if (val != null) {
@@ -2769,10 +2778,12 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       }
 
                       return DropdownButtonFormField<String?>(
+                        isExpanded: true,
                         initialValue: selectedStructure,
                         dropdownColor: dropdownBg,
                         style: TextStyle(color: textColor),
                         decoration: InputDecoration(
+                          isDense: true,
                           labelText: provider.translate('structure_department'),
                           labelStyle: TextStyle(color: labelColor),
                           prefixIcon: Icon(Icons.corporate_fare_outlined, size: 18, color: iconColor),
@@ -2818,10 +2829,12 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
                       }
 
                       return DropdownButtonFormField<String?>(
+                        isExpanded: true,
                         initialValue: selectedGroup,
                         dropdownColor: dropdownBg,
                         style: TextStyle(color: textColor),
                         decoration: InputDecoration(
+                          isDense: true,
                           labelText: provider.translate('employee_group_shift'),
                           labelStyle: TextStyle(color: labelColor),
                           prefixIcon: Icon(Icons.schedule_outlined, size: 18, color: iconColor),

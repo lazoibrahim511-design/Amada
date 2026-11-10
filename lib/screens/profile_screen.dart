@@ -1,4 +1,5 @@
 import '../utils/app_snackbar.dart';
+import '../utils/platform_helper.dart';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
@@ -94,6 +95,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final departmentName = _getDepartmentName(provider);
     final roleLabel = _getRoleLabel(currentEmp?.role);
+    final isDesktop = isWebOrDesktopLayout(context) && MediaQuery.of(context).size.width >= 960;
 
     return Directionality(
       textDirection: provider.currentLanguageDirection,
@@ -126,18 +128,172 @@ class _ProfileScreenState extends State<ProfileScreen> {
             SafeArea(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
+                  constraints: BoxConstraints(maxWidth: isDesktop ? 1400 : 720),
                   child: Column(
                     children: [
                       // Modern Navigation Header
-                      _buildHeader(context, provider, isDark, isRtl, primaryTextColor, secondaryTextColor),
+                      _buildHeader(context, provider, isDark, isRtl, primaryTextColor, secondaryTextColor, isDesktop),
 
                       // Scrollable content
                       Expanded(
                         child: SingleChildScrollView(
                           physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
-                          child: Column(
+                          padding: EdgeInsets.fromLTRB(
+                            isDesktop ? 32 : 20, 
+                            10, 
+                            isDesktop ? 32 : 20, 
+                            30
+                          ),
+                          child: isDesktop
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Desktop Left Sidebar (Profile Hero, Sign Out, Legal)
+                                    SizedBox(
+                                      width: 380,
+                                      child: Column(
+                                        children: [
+                                          _buildHeroProfileCard(
+                                            context,
+                                            provider,
+                                            isDark,
+                                            cardBg,
+                                            cardBorder,
+                                            primaryTextColor,
+                                            secondaryTextColor,
+                                            currentEmp,
+                                            activeShift,
+                                            departmentName,
+                                            roleLabel,
+                                          ),
+                                          const SizedBox(height: 20),
+                                          _buildSignOutCard(context, provider, isDark),
+                                          const SizedBox(height: 16),
+                                          _buildPrivacyPolicyCard(context, provider, isDark),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 28),
+                                    // Desktop Right Column (Details, Settings, Security)
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildSectionTitle(
+                                            icon: Icons.badge_outlined,
+                                            iconColor: const Color(0xFF00BD96),
+                                            title: provider.translate('personal_info'),
+                                            textColor: secondaryTextColor,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildPersonalInfoCard(
+                                            context,
+                                            provider,
+                                            isDark,
+                                            cardBg,
+                                            cardBorder,
+                                            primaryTextColor,
+                                            secondaryTextColor,
+                                            currentEmp,
+                                            activeShift,
+                                            departmentName,
+                                            roleLabel,
+                                          ),
+                                          const SizedBox(height: 24),
+
+                                          _buildSectionTitle(
+                                            icon: Icons.tune_rounded,
+                                            iconColor: const Color(0xFF00BD96),
+                                            title: provider.translate('change_language'),
+                                            textColor: secondaryTextColor,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildLanguageSelector(context, provider, isDark, cardBg, cardBorder),
+                                          const SizedBox(height: 24),
+
+                                          _buildSectionTitle(
+                                            icon: Icons.palette_outlined,
+                                            iconColor: const Color(0xFF00BD96),
+                                            title: provider.translate('theme'),
+                                            textColor: secondaryTextColor,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildThemeSelector(context, provider, isDark, cardBg, cardBorder),
+                                          const SizedBox(height: 24),
+
+                                          _buildSectionTitle(
+                                            icon: Icons.shield_outlined,
+                                            iconColor: const Color(0xFFEF4444),
+                                            title: provider.translate('security'),
+                                            textColor: secondaryTextColor,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildFaceIdCard(
+                                            context,
+                                            provider,
+                                            isDark,
+                                            cardBg,
+                                            cardBorder,
+                                            primaryTextColor,
+                                            secondaryTextColor,
+                                            isRtl,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildSecurityCard(
+                                            context,
+                                            provider,
+                                            isDark,
+                                            cardBg,
+                                            cardBorder,
+                                            primaryTextColor,
+                                            secondaryTextColor,
+                                            isRtl,
+                                          ),
+                                          if (currentEmp?.role == 'hr' || currentEmp?.role == 'admin') ...[
+                                            const SizedBox(height: 24),
+                                            _buildSectionTitle(
+                                              icon: Icons.admin_panel_settings_outlined,
+                                              iconColor: const Color(0xFF1E3DB8),
+                                              title: provider.translate('user_and_access_mgmt'),
+                                              textColor: secondaryTextColor,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            _buildUserManagementCard(
+                                              context,
+                                              isDark,
+                                              cardBg,
+                                              cardBorder,
+                                              primaryTextColor,
+                                              secondaryTextColor,
+                                              isRtl,
+                                            ),
+                                          ],
+                                          if (kDebugMode || currentEmp?.role == 'super_admin') ...[
+                                            const SizedBox(height: 24),
+                                            _buildSectionTitle(
+                                              icon: Icons.swap_horiz_rounded,
+                                              iconColor: const Color(0xFF00BD96),
+                                              title: provider.translate('switch_account'),
+                                              textColor: secondaryTextColor,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            _buildAccountSwitcherCard(
+                                              context,
+                                              provider,
+                                              isDark,
+                                              cardBg,
+                                              cardBorder,
+                                              primaryTextColor,
+                                              secondaryTextColor,
+                                            ),
+                                          ],
+                                          const SizedBox(height: 24),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // Hero Profile Card
@@ -309,14 +465,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     bool isDark,
     bool isRtl,
     Color primaryColor,
-    Color secondaryColor,
-  ) {
+    Color secondaryColor, [
+    bool isDesktop = false,
+  ]) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 32 : 20, 
+        vertical: 12,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Frosted Back Button (Stadium shape)
+          // Frosted Circular Back Button
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -366,7 +526,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
 
-          // Quick Theme Toggle Button in Header (Stadium shape)
+          // Quick Theme Toggle Button in Header (Circular Shape)
           Material(
             color: Colors.transparent,
             child: InkWell(

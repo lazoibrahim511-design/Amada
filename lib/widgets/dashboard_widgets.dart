@@ -1,6 +1,7 @@
 import 'neu_button.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
 import '../models/hr_models.dart';
@@ -40,9 +41,12 @@ class DashboardCard extends StatelessWidget {
                   offset: const Offset(0, 4),
                 )
               ],
-        border: Theme.of(context).brightness == Brightness.dark 
-            ? Border.all(color: Colors.white12)
-            : null,
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark 
+              ? Colors.white12 
+              : const Color(0xFFE2E8F0),
+          width: 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,50 +433,174 @@ class QuickActionsList extends StatelessWidget {
   }
 }
 
+class _DeptAttendanceData {
+  final String name;
+  final int presentCount;
+  final int totalCount;
+  final double percentage;
+  final Color color;
+
+  const _DeptAttendanceData({
+    required this.name,
+    required this.presentCount,
+    required this.totalCount,
+    required this.percentage,
+    required this.color,
+  });
+}
+
 class DepartmentAttendanceChart extends StatelessWidget {
   const DepartmentAttendanceChart({super.key});
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AttendanceProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final now = DateTime.now();
+
+    // 1. Identify present employees today
+    final presentIds = provider.allCompanyRecords
+        .where(
+          (r) =>
+              ((r.checkIn.year == now.year &&
+                r.checkIn.month == now.month &&
+                r.checkIn.day == now.day) ||
+               (r.checkOut == null && now.difference(r.checkIn).inHours.abs() < 24)) &&
+              r.employeeId != null,
+        )
+        .map((r) => r.employeeId!)
+        .toSet();
+
+    // 2. Map structures / departments
+    final structures = provider.structures;
+    final employees = provider.employees;
+
+    // Group employees by department/structure
+    final Map<String, List<CompanyEmployee>> deptEmployees = {};
+    for (final emp in employees) {
+      String deptName = '';
+      if (emp.structureId != null && emp.structureId!.isNotEmpty) {
+        final struct = structures.where((s) => s.id == emp.structureId).firstOrNull;
+        if (struct != null) deptName = struct.name;
+      }
+      if (deptName.isEmpty) {
+        deptName = emp.position.isNotEmpty ? emp.position : 'General';
+      }
+      deptEmployees.putIfAbsent(deptName, () => []).add(emp);
+    }
+
+    // Modern color palette for slices
+    const sliceColors = [
+      Color(0xFF2E65FF), // Royal Tech Blue
+      Color(0xFF10B981), // Emerald Green
+      Color(0xFFF59E0B), // Amber Gold
+      Color(0xFF8B5CF6), // Purple
+      Color(0xFF00E5CE), // Electric Cyan
+      Color(0xFFEC4899), // Pink
+      Color(0xFF64748B), // Slate
+    ];
+
+    final List<_DeptAttendanceData> deptDataList = [];
+    final int totalPresentToday = employees.where((e) => presentIds.contains(e.id)).length;
+
+    if (deptEmployees.isEmpty) {
+      // Empty state
+      return DashboardCard(
+        title: provider.translate('department_attendance'),
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.pie_chart_outline_rounded, size: 36, color: isDark ? Colors.white24 : Colors.black26),
+                const SizedBox(height: 10),
+                Text(
+                  'No department records found',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    int colorIndex = 0;
+    // Calculate either present proportion or employee distribution if no one is checked in yet
+    for (final entry in deptEmployees.entries) {
+      final deptName = entry.key;
+      final emps = entry.value;
+      final presentInDept = emps.where((e) => presentIds.contains(e.id)).length;
+      final totalInDept = emps.length;
+
+      double percentage = 0.0;
+      if (totalPresentToday > 0) {
+        percentage = (presentInDept / totalPresentToday) * 100.0;
+      } else if (employees.isNotEmpty) {
+        percentage = (totalInDept / employees.length) * 100.0;
+      }
+
+      deptDataList.add(
+        _DeptAttendanceData(
+          name: deptName,
+          presentCount: presentInDept,
+          totalCount: totalInDept,
+          percentage: percentage,
+          color: sliceColors[colorIndex % sliceColors.length],
+        ),
+      );
+      colorIndex++;
+    }
+
+    // Sort by percentage descending
+    deptDataList.sort((a, b) => b.percentage.compareTo(a.percentage));
+
+    // Build chart sections
+    final sections = deptDataList.map((data) {
+      final val = data.percentage > 0 ? data.percentage : 1.0;
+      return PieChartSectionData(
+        color: data.color,
+        value: val,
+        title: '',
+        radius: 20,
+      );
+    }).toList();
+
     return DashboardCard(
       title: provider.translate('department_attendance'),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF00E5CE).withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          totalPresentToday > 0 
+              ? '$totalPresentToday Present' 
+              : '${employees.length} Staff',
+          style: const TextStyle(
+            color: Color(0xFF00BD96),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Row(
         children: [
           SizedBox(
-            width: 140,
-            height: 140,
+            width: 130,
+            height: 130,
             child: PieChart(
               PieChartData(
-                sectionsSpace: 4,
-                centerSpaceRadius: 40,
-                sections: [
-                  PieChartSectionData(
-                    color: const Color(0xFF3B82F6), // Blue
-                    value: 45,
-                    title: '',
-                    radius: 20,
-                  ),
-                  PieChartSectionData(
-                    color: const Color(0xFF10B981), // Green
-                    value: 20,
-                    title: '',
-                    radius: 20,
-                  ),
-                  PieChartSectionData(
-                    color: const Color(0xFFF59E0B), // Yellow
-                    value: 25,
-                    title: '',
-                    radius: 20,
-                  ),
-                  PieChartSectionData(
-                    color: const Color(0xFF7E22CE), // Purple
-                    value: 10,
-                    title: '',
-                    radius: 20,
-                  ),
-                ],
+                sectionsSpace: 3,
+                centerSpaceRadius: 38,
+                sections: sections,
               ),
             ),
           ),
@@ -481,12 +609,14 @@ class DepartmentAttendanceChart extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildLegendItem(context, 'Engineering', 45, const Color(0xFF3B82F6)),
-                _buildLegendItem(context, 'Marketing', 25, const Color(0xFFF59E0B)),
-                _buildLegendItem(context, 'Sales', 20, const Color(0xFF10B981)),
-                _buildLegendItem(context, 'HR', 10, const Color(0xFF7E22CE)),
-              ],
+              children: deptDataList.take(4).map((data) {
+                return _buildLegendItem(
+                  context,
+                  data.name,
+                  data.percentage.round(),
+                  data.color,
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -496,7 +626,7 @@ class DepartmentAttendanceChart extends StatelessWidget {
 
   Widget _buildLegendItem(BuildContext context, String label, int percentage, Color color) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         children: [
           Container(
@@ -508,12 +638,16 @@ class DepartmentAttendanceChart extends StatelessWidget {
           Expanded(
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
-                color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.7),
+                fontWeight: FontWeight.w500,
+                color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.8),
               ),
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             '$percentage%',
             style: TextStyle(
@@ -528,40 +662,176 @@ class DepartmentAttendanceChart extends StatelessWidget {
   }
 }
 
+class _ActivityLogItem {
+  final DateTime timestamp;
+  final String employeeName;
+  final String? avatarUrl;
+  final String actionText;
+  final IconData icon;
+  final Color color;
+
+  const _ActivityLogItem({
+    required this.timestamp,
+    required this.employeeName,
+    this.avatarUrl,
+    required this.actionText,
+    required this.icon,
+    required this.color,
+  });
+}
+
 class RecentActivitiesList extends StatelessWidget {
   const RecentActivitiesList({super.key});
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AttendanceProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final List<_ActivityLogItem> activities = [];
+
+    // Helper to resolve employee by ID
+    CompanyEmployee getEmployee(String? empId) {
+      if (empId == null || empId.isEmpty) {
+        return CompanyEmployee(id: '', name: 'Staff Member', email: '', position: 'Staff', salaryCurrency: 'USD');
+      }
+      return provider.employees.firstWhere(
+        (e) => e.id == empId,
+        orElse: () => CompanyEmployee(
+          id: empId,
+          name: empId == provider.employeeId ? provider.userName : 'Employee $empId',
+          email: '',
+          position: 'Staff',
+          salaryCurrency: 'USD',
+        ),
+      );
+    }
+
+    // 1. Process Attendance Records
+    for (final record in provider.allCompanyRecords) {
+      final emp = getEmployee(record.employeeId);
+      
+      // Check In event
+      activities.add(
+        _ActivityLogItem(
+          timestamp: record.checkIn,
+          employeeName: emp.name,
+          avatarUrl: emp.avatarUrl,
+          actionText: '${emp.name} ${provider.translate('checked_in')}',
+          icon: Icons.login_rounded,
+          color: const Color(0xFF2E65FF), // Blue
+        ),
+      );
+
+      // Check Out event (if completed)
+      if (record.checkOut != null) {
+        activities.add(
+          _ActivityLogItem(
+            timestamp: record.checkOut!,
+            employeeName: emp.name,
+            avatarUrl: emp.avatarUrl,
+            actionText: '${emp.name} ${provider.translate('checked_out')}',
+            icon: Icons.logout_rounded,
+            color: const Color(0xFF10B981), // Green
+          ),
+        );
+      }
+    }
+
+    // 2. Process Requests
+    for (final req in provider.allCompanyRequests) {
+      final emp = getEmployee(req.employeeId);
+      DateTime? reqTime;
+      if (req.createdAt != null && req.createdAt!.isNotEmpty) {
+        reqTime = DateTime.tryParse(req.createdAt!);
+      }
+      reqTime ??= DateTime.now();
+
+      final typeStr = req.type.isNotEmpty ? req.type : 'leave';
+      activities.add(
+        _ActivityLogItem(
+          timestamp: reqTime,
+          employeeName: emp.name,
+          avatarUrl: emp.avatarUrl,
+          actionText: '${emp.name} requested $typeStr',
+          icon: Icons.assignment_outlined,
+          color: const Color(0xFFF59E0B), // Amber
+        ),
+      );
+    }
+
+    // Sort by timestamp descending
+    activities.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final displayItems = activities.take(5).toList();
+
     return DashboardCard(
       title: provider.translate('recent_activities'),
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-      child: Column(
-        children: [
-          _buildActivityItem(context, 'John Doe checked in', '09:15 AM', 'assets/images/user1.png', Colors.blue),
-          _buildActivityItem(context, 'Sarah Wilson requested leave', 'Yesterday', 'assets/images/user2.png', Colors.orange),
-          _buildActivityItem(context, 'Mike Johnson checked out', 'Yesterday', 'assets/images/user3.png', Colors.green),
-          _buildActivityItem(context, 'Emily Davis checked in', 'Yesterday', 'assets/images/user4.png', Colors.purple),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+      child: displayItems.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 36,
+                      color: isDark ? Colors.white24 : Colors.black26,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'No recent activities recorded',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Column(
+              children: displayItems.map((item) => _buildActivityRow(context, item, isDark)).toList(),
+            ),
     );
   }
 
-  Widget _buildActivityItem(BuildContext context, String text, String time, String avatar, Color fallbackColor) {
+  String _formatActivityTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+
+    if (difference.inMinutes < 2) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (now.year == time.year && now.month == time.month && now.day == time.day) {
+      return DateFormat('hh:mm a').format(time);
+    } else if (now.difference(DateTime(time.year, time.month, time.day)).inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return DateFormat('EEEE').format(time);
+    } else {
+      return DateFormat('MMM d').format(time);
+    }
+  }
+
+  Widget _buildActivityRow(BuildContext context, _ActivityLogItem item, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12.0),
+      padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: Row(
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: fallbackColor.withValues(alpha: 0.2),
-            child: Icon(Icons.person, size: 16, color: fallbackColor),
+            backgroundColor: item.color.withValues(alpha: isDark ? 0.20 : 0.12),
+            child: Icon(item.icon, size: 16, color: item.color),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Text(
-              text,
+              item.actionText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -569,10 +839,12 @@ class RecentActivitiesList extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(width: 12),
           Text(
-            time,
+            _formatActivityTime(item.timestamp),
             style: TextStyle(
               fontSize: 12,
+              fontWeight: FontWeight.w500,
               color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.5),
             ),
           ),
@@ -693,16 +965,17 @@ class PendingApprovalsCard extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       child: pendingItems.isEmpty
           ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24.0),
+              padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
               child: Center(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 48,
-                      height: 48,
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
                         color: const Color(0xFF10B981).withValues(alpha: 0.12),
                         shape: BoxShape.circle,
@@ -710,21 +983,22 @@ class PendingApprovalsCard extends StatelessWidget {
                       child: const Icon(
                         Icons.check_circle_outline,
                         color: Color(0xFF10B981),
-                        size: 26,
+                        size: 22,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Text(
                       provider.translate('no_requests'),
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'There are no pending subordinate requests awaiting approval.',
+                      'No pending subordinate requests awaiting approval.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
                         color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black)

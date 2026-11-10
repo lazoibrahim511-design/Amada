@@ -186,6 +186,21 @@ class _ClockScreenState extends State<ClockScreen> {
   Future<void> _handleAction(AttendanceProvider provider, bool isClockIn) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    // 0. Cooldown check for Clock Out (minimum 3 minutes)
+    if (!isClockIn) {
+      final cooldownError = provider.getClockOutCooldownError();
+      if (cooldownError != null && mounted) {
+        HapticFeedback.heavyImpact();
+        AppSnackBar.show(
+          scaffoldMessenger,
+          message: cooldownError,
+          type: AppSnackBarType.error,
+          icon: Icons.timer_outlined,
+        );
+        return;
+      }
+    }
+
     // 1. Verify location constraints
     final locError = await provider.verifyLocation();
     if (locError != null && mounted) {
@@ -1347,6 +1362,16 @@ class _ClockScreenState extends State<ClockScreen> {
     final bool isClockedIn = provider.isClockedIn;
     final canClockIn = !_isLoadingLocation && !isClockedIn;
     final canClockOut = !_isLoadingLocation && isClockedIn;
+    final int cooldownSec = isClockedIn ? provider.clockOutRemainingSeconds : 0;
+    final String clockOutSubtitle;
+    if (cooldownSec > 0) {
+      final remM = cooldownSec ~/ 60;
+      final remS = cooldownSec % 60;
+      final timeFormatted = '${remM.toString().padLeft(2, '0')}:${remS.toString().padLeft(2, '0')}';
+      clockOutSubtitle = provider.translate('wait_cooldown').replaceAll('{time}', timeFormatted);
+    } else {
+      clockOutSubtitle = provider.translate('end_shift');
+    }
 
     return Row(
       children: [
@@ -1560,7 +1585,7 @@ class _ClockScreenState extends State<ClockScreen> {
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          provider.translate('end_shift'),
+                          clockOutSubtitle,
                           maxLines: 1,
                           style: TextStyle(
                             color: canClockOut
