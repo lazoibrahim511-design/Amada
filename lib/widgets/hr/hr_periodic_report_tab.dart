@@ -159,6 +159,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
         _startDate = picked.start;
         _endDate = picked.end;
       });
+      if (!mounted) return;
       final provider = Provider.of<AttendanceProvider>(context, listen: false);
       final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
       if (_startDate.isBefore(sixtyDaysAgo)) {

@@ -28,7 +28,7 @@ void main() {
         checkOut: DateTime(2026, 10, 17, 17, 6),
         employeeId: 'lawi lazo ibrahim', // saved by name
       );
-      provider.allCompanyRecords.add(punch);
+      provider.upsertRecordLocally(punch);
 
       // Lookup by ID '1' should find the punch saved with name
       final byId = await provider.getEmployeeRecords('1');
@@ -73,7 +73,7 @@ void main() {
         checkOut: DateTime(DateTime.now().year, DateTime.now().month, 17, 17, 6),
         employeeId: '1',
       );
-      provider.allCompanyRecords.add(punch);
+      provider.upsertRecordLocally(punch);
 
       await tester.pumpWidget(
         ChangeNotifierProvider<AttendanceProvider>.value(

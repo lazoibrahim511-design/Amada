@@ -8,6 +8,7 @@ class Request {
   final String status; // 'Approved', 'Pending', 'Rejected'
   final String? targetShiftId;
   final String? employeeId;
+  final String? companyCode;
   final String? note;
   final String? createdAt;
   final String? actionBy;
@@ -28,6 +29,7 @@ class Request {
     required this.status,
     this.targetShiftId,
     this.employeeId,
+    this.companyCode,
     this.note,
     this.createdAt,
     this.actionBy,
@@ -65,6 +67,7 @@ class Request {
       'status': status,
       'targetShiftId': targetShiftId,
       'employeeId': employeeId,
+      'companyCode': companyCode,
       'note': note,
       'createdAt': createdAt,
       'actionBy': actionBy,
@@ -87,6 +90,7 @@ class Request {
       status: map['status'] ?? 'Pending',
       targetShiftId: map['targetShiftId'],
       employeeId: map['employeeId'],
+      companyCode: map['companyCode'],
       note: map['note'],
       createdAt: map['createdAt'],
       actionBy: map['actionBy'],
@@ -108,6 +112,7 @@ class Request {
     String? status,
     String? targetShiftId,
     String? employeeId,
+    String? companyCode,
     String? note,
     String? createdAt,
     String? actionBy,
@@ -130,6 +135,7 @@ class Request {
           ? targetShiftId
           : (targetShiftId ?? this.targetShiftId),
       employeeId: employeeId ?? this.employeeId,
+      companyCode: companyCode ?? this.companyCode,
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
       actionBy: actionBy ?? this.actionBy,

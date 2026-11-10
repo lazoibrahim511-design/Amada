@@ -1093,6 +1093,7 @@ class FirebaseService {
           final req = Request.fromMap(data, doc.id);
           list.add(req.copyWith(
             employeeId: empId ?? req.employeeId,
+            companyCode: data['companyCode'] ?? req.companyCode,
             overrideTargetShiftId: false,
           ));
         } catch (e) {
@@ -1122,6 +1123,7 @@ class FirebaseService {
           final req = Request.fromMap(data, doc.id);
           list.add(req.copyWith(
             employeeId: empId ?? req.employeeId,
+            companyCode: data['companyCode'] ?? req.companyCode,
             overrideTargetShiftId: false,
           ));
         } catch (e) {

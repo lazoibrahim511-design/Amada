@@ -357,7 +357,9 @@ class AttendanceProvider with ChangeNotifier {
   }
 
   Future<void> loginAsEmployee(CompanyEmployee employee) async {
-    if (employee.companyCode.isNotEmpty && employee.companyCode.toLowerCase() != 'all') {
+    if (employee.companyCode.isNotEmpty &&
+        employee.companyCode.toLowerCase() != 'all' &&
+        _currentCompanyCode != employee.companyCode.toLowerCase()) {
       await setCompanyCode(employee.companyCode.toLowerCase());
     }
     _employeeId = employee.id;
@@ -759,8 +761,52 @@ class AttendanceProvider with ChangeNotifier {
   bool get isClockedIn => _isClockedIn;
   AttendanceRecord? get activeRecord => _activeRecord;
   List<AttendanceRecord> get records => _records;
-  List<AttendanceRecord> get allCompanyRecords => _allCompanyRecords;
-  List<Request> get allCompanyRequests => _allCompanyRequests;
+  List<AttendanceRecord> get allCompanyRecords {
+    if (_currentCompanyCode == 'all') {
+      return List.unmodifiable(_allCompanyRecords);
+    }
+    final comp = _currentCompanyCode.trim().toLowerCase();
+    final companyEmpIds = employees.map((e) => e.id.trim().toLowerCase()).toSet();
+    if (_employeeId.isNotEmpty && (currentEmployee == null || currentEmployee!.companyCode.toLowerCase() == comp)) {
+      companyEmpIds.add(_employeeId.trim().toLowerCase());
+    }
+
+    return List.unmodifiable(
+      _allCompanyRecords.where((r) {
+        if (r.employeeId != null && r.employeeId!.trim().isNotEmpty) {
+          final rEmpId = r.employeeId!.trim().toLowerCase();
+          if (companyEmpIds.contains(rEmpId)) return true;
+          if (rEmpId.startsWith('${comp}_')) return true;
+        }
+        return false;
+      }),
+    );
+  }
+
+  List<Request> get allCompanyRequests {
+    if (_currentCompanyCode == 'all') {
+      return List.unmodifiable(_allCompanyRequests);
+    }
+    final comp = _currentCompanyCode.trim().toLowerCase();
+    final companyEmpIds = employees.map((e) => e.id.trim().toLowerCase()).toSet();
+    if (_employeeId.isNotEmpty && (currentEmployee == null || currentEmployee!.companyCode.toLowerCase() == comp)) {
+      companyEmpIds.add(_employeeId.trim().toLowerCase());
+    }
+
+    return List.unmodifiable(
+      _allCompanyRequests.where((r) {
+        if (r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+          return r.companyCode!.trim().toLowerCase() == comp;
+        }
+        if (r.employeeId != null && r.employeeId!.trim().isNotEmpty) {
+          final rEmpId = r.employeeId!.trim().toLowerCase();
+          if (companyEmpIds.contains(rEmpId)) return true;
+          if (rEmpId.startsWith('${comp}_')) return true;
+        }
+        return false;
+      }),
+    );
+  }
   DateTime get selectedMonth => _selectedMonth;
 
   void setSelectedMonth(DateTime month) {
@@ -879,7 +925,7 @@ class AttendanceProvider with ChangeNotifier {
             l.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
       );
   List<Request> get requests => _allRequestsMap[_employeeId] ?? [];
-  List<Request> get allRequests => List.unmodifiable(_allCompanyRequests);
+  List<Request> get allRequests => allCompanyRequests;
   String get currentLanguage => _currentLanguage;
   bool get isLoading => _isLoading;
   FirebaseService get firebaseService => _firebaseService;
@@ -1323,6 +1369,8 @@ class AttendanceProvider with ChangeNotifier {
       sub.cancel();
     }
     _subscriptions.clear();
+
+    if (!_firebaseService.isAvailable) return;
 
     try {
       final filterCode = _currentCompanyCode == 'all' ? null : _currentCompanyCode;
@@ -3599,7 +3647,7 @@ class AttendanceProvider with ChangeNotifier {
     if (currentEmployee?.role == 'hr' ||
         currentEmployee?.role == 'admin' ||
         canEditCompanyInfo) {
-      return _allCompanyRequests
+      return allCompanyRequests
           .where(
             (r) =>
                 (r.status == 'Pending' || r.status == 'Pending HR') &&
@@ -3615,7 +3663,7 @@ class AttendanceProvider with ChangeNotifier {
                 _employees.where((e) => e.structureId == s.id).map((e) => e.id),
           )
           .toSet();
-      return _allCompanyRequests
+      return allCompanyRequests
           .where(
             (r) =>
                 (r.status == 'Pending' || r.status == 'Pending Supervisor') &&
@@ -4021,6 +4069,7 @@ class AttendanceProvider with ChangeNotifier {
       status: status,
       targetShiftId: targetShiftId?.toString(),
       employeeId: empId,
+      companyCode: _currentCompanyCode == 'all' ? 'amada' : _currentCompanyCode,
       note: note,
       createdAt: DateTime.now().toIso8601String(),
       actionBy: (isTopManager || status == 'Approved') ? empId : null,
@@ -4198,6 +4247,7 @@ class AttendanceProvider with ChangeNotifier {
       updatedReq = old.copyWith(
         status: finalStatus,
         employeeId: empId,
+        companyCode: old.companyCode ?? (_currentCompanyCode == 'all' ? null : _currentCompanyCode),
         actionBy: actBy,
         actionDate: actDate,
         supervisorActionBy: supBy,

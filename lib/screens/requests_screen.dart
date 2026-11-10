@@ -402,27 +402,23 @@ DateTime? _parseRequestStartDate(String dateStr) {
   ) {
     final subordinates = _getSubordinates(provider);
     final List<Map<String, dynamic>> combined = [];
-
-    final currentUser = provider.currentEmployee;
-    final isHR =
-        currentUser?.role == 'hr' ||
-        currentUser?.role == 'admin' ||
-        provider.canEditCompanyInfo ||
-        provider.employeeId == 'emp_2';
     final subordinateIds = subordinates.map((e) => e.id).toSet();
 
     // 1. First add from provider.allCompanyRequests (live Firestore stream)
     for (var r in provider.allCompanyRequests) {
       if (r.employeeId != null && r.employeeId != provider.employeeId) {
-        if (isHR || subordinateIds.contains(r.employeeId)) {
-          final emp = provider.employees.firstWhere(
+        if (subordinateIds.contains(r.employeeId)) {
+          final emp = subordinates.firstWhere(
             (e) => e.id == r.employeeId,
-            orElse: () => CompanyEmployee(
-              id: r.employeeId!,
-              name: 'Employee (${r.employeeId})',
-              email: '',
-              position: 'Staff',
-              salaryCurrency: 'USD',
+            orElse: () => provider.employees.firstWhere(
+              (e) => e.id == r.employeeId,
+              orElse: () => CompanyEmployee(
+                id: r.employeeId!,
+                name: 'Employee (${r.employeeId})',
+                email: '',
+                position: 'Staff',
+                salaryCurrency: 'USD',
+              ),
             ),
           );
           combined.add({'employee': emp, 'request': r});
@@ -443,8 +439,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
     // 3. Merge any that were loaded asynchronously into _subordinateRequests
     for (var item in _subordinateRequests) {
       final r = item['request'] as Request;
-      if (!combined.any((it) => (it['request'] as Request).id == r.id)) {
-        combined.add(item);
+      final emp = item['employee'] as CompanyEmployee?;
+      if (emp != null && subordinateIds.contains(emp.id)) {
+        if (!combined.any((it) => (it['request'] as Request).id == r.id)) {
+          combined.add(item);
+        }
       }
     }
 
@@ -469,27 +468,22 @@ DateTime? _parseRequestStartDate(String dateStr) {
 
     final subordinates = _getSubordinates(provider);
     final List<Map<String, dynamic>> combined = [];
-
-    // 1. Gather all requests from company stream (for HR or supervisors)
-    final currentUser = provider.currentEmployee;
-    final isHR =
-        currentUser?.role == 'hr' ||
-        currentUser?.role == 'admin' ||
-        provider.canEditCompanyInfo ||
-        provider.employeeId == 'emp_2';
     final subordinateIds = subordinates.map((e) => e.id).toSet();
 
     for (var r in provider.allCompanyRequests) {
       if (r.employeeId != null && r.employeeId != provider.employeeId) {
-        if (isHR || subordinateIds.contains(r.employeeId)) {
-          final emp = provider.employees.firstWhere(
+        if (subordinateIds.contains(r.employeeId)) {
+          final emp = subordinates.firstWhere(
             (e) => e.id == r.employeeId,
-            orElse: () => CompanyEmployee(
-              id: r.employeeId!,
-              name: 'Employee (${r.employeeId})',
-              email: '',
-              position: 'Staff',
-              salaryCurrency: 'USD',
+            orElse: () => provider.employees.firstWhere(
+              (e) => e.id == r.employeeId,
+              orElse: () => CompanyEmployee(
+                id: r.employeeId!,
+                name: 'Employee (${r.employeeId})',
+                email: '',
+                position: 'Staff',
+                salaryCurrency: 'USD',
+              ),
             ),
           );
           combined.add({'employee': emp, 'request': r});

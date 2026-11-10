@@ -707,8 +707,14 @@ class RecentActivitiesList extends StatelessWidget {
       );
     }
 
+    final companyEmpIds = provider.employees.map((e) => e.id).toSet();
+    if (provider.employeeId.isNotEmpty) companyEmpIds.add(provider.employeeId);
+
     // 1. Process Attendance Records
     for (final record in provider.allCompanyRecords) {
+      if (record.employeeId != null && !companyEmpIds.contains(record.employeeId)) {
+        continue;
+      }
       final emp = getEmployee(record.employeeId);
       
       // Check In event
@@ -740,6 +746,9 @@ class RecentActivitiesList extends StatelessWidget {
 
     // 2. Process Requests
     for (final req in provider.allCompanyRequests) {
+      if (req.employeeId != null && !companyEmpIds.contains(req.employeeId)) {
+        continue;
+      }
       final emp = getEmployee(req.employeeId);
       DateTime? reqTime;
       if (req.createdAt != null && req.createdAt!.isNotEmpty) {
@@ -872,18 +881,15 @@ class PendingApprovalsCard extends StatelessWidget {
     final List<Map<String, dynamic>> pendingItems = [];
     final currentEmpId = provider.employeeId;
 
+    final validEmpIds = provider.employees.map((e) => e.id).toSet();
+
     if (isHR) {
       for (var req in provider.allCompanyRequests) {
-        if ((req.status == 'Pending' || req.status == 'Pending HR') && req.employeeId != currentEmpId) {
+        if ((req.status == 'Pending' || req.status == 'Pending HR') &&
+            req.employeeId != currentEmpId &&
+            validEmpIds.contains(req.employeeId)) {
           final emp = provider.employees.firstWhere(
             (e) => e.id == req.employeeId,
-            orElse: () => CompanyEmployee(
-              id: req.employeeId ?? '',
-              name: 'Employee (${req.employeeId ?? ""})',
-              email: '',
-              position: 'Staff',
-              salaryCurrency: 'USD',
-            ),
           );
           pendingItems.add({'employee': emp, 'request': req});
         }
@@ -894,16 +900,11 @@ class PendingApprovalsCard extends StatelessWidget {
           .expand((s) => provider.employees.where((e) => e.structureId == s.id).map((e) => e.id))
           .toSet();
       for (var req in provider.allCompanyRequests) {
-        if ((req.status == 'Pending' || req.status == 'Pending Supervisor') && subordinateIds.contains(req.employeeId)) {
+        if ((req.status == 'Pending' || req.status == 'Pending Supervisor') &&
+            subordinateIds.contains(req.employeeId) &&
+            validEmpIds.contains(req.employeeId)) {
           final emp = provider.employees.firstWhere(
             (e) => e.id == req.employeeId,
-            orElse: () => CompanyEmployee(
-              id: req.employeeId ?? '',
-              name: 'Employee (${req.employeeId ?? ""})',
-              email: '',
-              position: 'Staff',
-              salaryCurrency: 'USD',
-            ),
           );
           pendingItems.add({'employee': emp, 'request': req});
         }
