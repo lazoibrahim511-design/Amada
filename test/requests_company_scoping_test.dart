@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:attendance_app/models/hr_models.dart';
 import 'package:attendance_app/models/attendance_record.dart';
 import 'package:attendance_app/providers/attendance_provider.dart';
+import 'package:attendance_app/services/zkteco_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -137,6 +138,146 @@ void main() {
       await provider.setCompanyCode('bestenergy');
       expect(provider.allCompanyRequests.any((r) => r.employeeId == 'emp_a1'), isFalse);
       expect(provider.allCompanyRequests.any((r) => r.employeeId == 'emp_b1'), isTrue);
+    });
+
+    test('Identical employee ID "1" across lazo and bestenergy are 100% isolated', () async {
+      SharedPreferences.setMockInitialValues({});
+      final provider = AttendanceProvider(initialCompanyCode: 'lazo');
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final lazoEmp1 = CompanyEmployee(
+        id: '1',
+        name: 'Lazo Employee One',
+        email: 'emp1@lazo.com',
+        position: 'Engineer',
+        role: 'employee',
+        companyCode: 'lazo',
+      );
+
+      final bestEnergyEmp1 = CompanyEmployee(
+        id: '1',
+        name: 'Best Energy Employee One',
+        email: 'emp1@bestenergy.com',
+        position: 'Technician',
+        role: 'employee',
+        companyCode: 'bestenergy',
+      );
+
+      final bestEnergyHR = CompanyEmployee(
+        id: 'be_hr',
+        name: 'Best Energy HR',
+        email: 'hr@bestenergy.com',
+        position: 'HR Manager',
+        role: 'hr',
+        companyCode: 'bestenergy',
+      );
+
+      await provider.addEmployee(lazoEmp1);
+      await provider.addEmployee(bestEnergyEmp1);
+      await provider.addEmployee(bestEnergyHR);
+
+      // --- Test 1: Requests Isolation ---
+      // Log in as Lazo employee 1 and submit a request
+      await provider.setCompanyCode('lazo');
+      await provider.loginAsEmployee(lazoEmp1);
+      await provider.submitRequest('Sick Leave', '2026-11-25', '1 Day');
+
+      // Check Lazo employee 1 requests
+      expect(provider.requests.length, equals(1));
+      expect(provider.requests.first.companyCode, equals('lazo'));
+
+      // Switch to Best Energy view
+      await provider.setCompanyCode('bestenergy');
+      await provider.loginAsEmployee(bestEnergyEmp1);
+
+      // Best Energy employee 1's "requests" must be EMPTY (no bleed from Lazo employee 1)
+      expect(provider.requests.isEmpty, isTrue);
+
+      // Best Energy HR dashboard must NOT see Lazo employee 1's request
+      await provider.loginAsEmployee(bestEnergyHR);
+      final beRequests = provider.allCompanyRequests;
+      expect(beRequests.any((r) => r.companyCode == 'lazo'), isFalse);
+      expect(provider.getRequestsForEmployee('1', companyCode: 'bestenergy').isEmpty, isTrue);
+
+      // Switch back to Lazo: request is there
+      await provider.setCompanyCode('lazo');
+      expect(provider.allCompanyRequests.any((r) => r.companyCode == 'lazo'), isTrue);
+
+      // --- Test 2: Biometric Punch Isolation with Same ID "1" ---
+      final now = DateTime.now();
+      final lazoPunch = AttendanceRecord(
+        checkIn: DateTime(now.year, now.month, now.day, 8, 30),
+        employeeId: '1',
+        companyCode: 'lazo',
+      );
+      final bestEnergyPunch = AttendanceRecord(
+        checkIn: DateTime(now.year, now.month, now.day, 9, 0),
+        checkOut: DateTime(now.year, now.month, now.day, 9, 30),
+        employeeId: '1',
+        companyCode: 'bestenergy',
+      );
+
+      provider.upsertRecordLocally(lazoPunch);
+      provider.upsertRecordLocally(bestEnergyPunch);
+
+      // In lazo company view:
+      await provider.setCompanyCode('lazo');
+      final lazoRecords = provider.allCompanyRecords;
+      expect(lazoRecords.any((r) => r.checkIn.hour == 8 && r.checkIn.minute == 30), isTrue);
+      expect(lazoRecords.any((r) => r.checkIn.hour == 9 && r.checkIn.minute == 0), isFalse);
+
+      // In bestenergy company view:
+      await provider.setCompanyCode('bestenergy');
+      final beRecords = provider.allCompanyRecords;
+      expect(beRecords.any((r) => r.checkIn.hour == 8 && r.checkIn.minute == 30), isFalse);
+      expect(beRecords.any((r) => r.checkIn.hour == 9 && r.checkIn.minute == 0), isTrue);
+
+      // When logged in as Best Energy employee 1:
+      await provider.loginAsEmployee(bestEnergyEmp1);
+      expect(provider.records.any((r) => r.checkIn.hour == 9 && r.checkIn.minute == 0), isTrue);
+      expect(provider.records.any((r) => r.checkIn.hour == 8 && r.checkIn.minute == 30), isFalse);
+
+      // --- Test 3: ZKTeco Service Biometric Device Punch Pairing Isolation ---
+      final zkService = ZkTecoService.instance;
+      final biometricPunchTime = DateTime(now.year, now.month, now.day, 10, 15);
+
+      // Best Energy biometric device produces raw punch for userId '1'
+      final rawPunch = ZkRawPunch(
+        userId: '1',
+        timestamp: biometricPunchTime,
+        status: 0,
+        punchType: 0,
+      );
+
+      await zkService.pairAndSavePunchesForTesting(
+        punches: [rawPunch],
+        provider: provider,
+        firebase: provider.firebaseService,
+        deviceCompanyCode: 'bestenergy',
+      );
+
+      // Verify Best Energy employee 1 has the biometric record
+      await provider.setCompanyCode('bestenergy');
+      final beBiometricRecords = provider.allCompanyRecords;
+      expect(
+        beBiometricRecords.any((r) =>
+            r.employeeId == '1' &&
+            r.companyCode == 'bestenergy' &&
+            r.checkIn.hour == 10 &&
+            r.checkIn.minute == 15),
+        isTrue,
+      );
+
+      // Verify Lazo employee 1 did NOT get this biometric punch
+      await provider.setCompanyCode('lazo');
+      final lazoBiometricRecords = provider.allCompanyRecords;
+      expect(
+        lazoBiometricRecords.any((r) =>
+            r.employeeId == '1' &&
+            r.checkIn.hour == 10 &&
+            r.checkIn.minute == 15),
+        isFalse,
+      );
     });
   });
 }

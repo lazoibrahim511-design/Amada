@@ -647,6 +647,19 @@ class ZkTecoService extends ChangeNotifier {
     );
   }
 
+  @visibleForTesting
+  Future<ZkSyncSummary> pairAndSavePunchesForTesting({
+    required List<ZkRawPunch> punches,
+    required AttendanceProvider provider,
+    required FirebaseService firebase,
+    String? deviceCompanyCode,
+  }) => _pairAndSavePunches(
+    punches: punches,
+    provider: provider,
+    firebase: firebase,
+    deviceCompanyCode: deviceCompanyCode,
+  );
+
   /// Smart shift-aware punch pairing engine
   Future<ZkSyncSummary> _pairAndSavePunches({
     required List<ZkRawPunch> punches,
@@ -701,11 +714,10 @@ class ZkTecoService extends ChangeNotifier {
 
       if (cleanPunches.isEmpty) continue;
 
-      // Get existing records for this employee
+      // Get existing records for this employee strictly scoped to their company
+      final empCompany = emp.companyCode.isNotEmpty ? emp.companyCode.toLowerCase() : cleanCompany;
       final existingRecords = List<AttendanceRecord>.from(
-        provider.allCompanyRecords.where((r) =>
-            r.employeeId != null &&
-            r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase()),
+        provider.getRecordsForEmployee(employeeId: emp.id, companyCode: empCompany),
       );
 
       for (var punch in cleanPunches) {
@@ -717,7 +729,7 @@ class ZkTecoService extends ChangeNotifier {
         }
 
         // 2. Do not re-process manually deleted punches
-        if (provider.isPunchDeleted(emp.id, pTime)) {
+        if (provider.isPunchDeleted(emp.id, pTime, companyCode: empCompany)) {
           continue;
         }
 
@@ -773,6 +785,7 @@ class ZkTecoService extends ChangeNotifier {
           final completedRecord = openRecordToClose.copyWith(
             checkOut: pTime,
             employeeId: emp.id,
+            companyCode: empCompany,
           );
 
           final idx = existingRecords.indexOf(openRecordToClose);
@@ -783,7 +796,7 @@ class ZkTecoService extends ChangeNotifier {
 
           if (firebase.isAvailable) {
             try {
-              await firebase.saveRecord(emp.id, completedRecord);
+              await firebase.saveRecord(emp.id, completedRecord, companyCode: empCompany);
               recordsUpdated++;
               details.add(
                   '${emp.name}: Clock Out at ${pTime.toString().substring(0, 16)} (${completedRecord.durationString})');
@@ -797,13 +810,14 @@ class ZkTecoService extends ChangeNotifier {
             checkIn: pTime,
             checkOut: null,
             employeeId: emp.id,
+            companyCode: empCompany,
           );
           existingRecords.add(newRec);
           provider.upsertRecordLocally(newRec);
 
           if (firebase.isAvailable) {
             try {
-              await firebase.saveRecord(emp.id, newRec);
+              await firebase.saveRecord(emp.id, newRec, companyCode: empCompany);
               newRecordsCreated++;
               details.add('${emp.name}: Clock In at ${pTime.toString().substring(0, 16)}');
             } catch (e) {

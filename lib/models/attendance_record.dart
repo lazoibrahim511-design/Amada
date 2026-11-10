@@ -2,11 +2,13 @@ class AttendanceRecord {
   final DateTime checkIn;
   final DateTime? checkOut;
   final String? employeeId;
+  final String? companyCode;
 
   AttendanceRecord({
     required DateTime checkIn,
     DateTime? checkOut,
     this.employeeId,
+    this.companyCode,
   }) : checkIn = DateTime(checkIn.year, checkIn.month, checkIn.day, checkIn.hour, checkIn.minute),
        checkOut = checkOut != null ? DateTime(checkOut.year, checkOut.month, checkOut.day, checkOut.hour, checkOut.minute) : null;
 
@@ -41,11 +43,13 @@ class AttendanceRecord {
     DateTime? checkIn,
     DateTime? checkOut,
     String? employeeId,
+    String? companyCode,
   }) {
     return AttendanceRecord(
       checkIn: checkIn ?? this.checkIn,
       checkOut: checkOut ?? this.checkOut,
       employeeId: employeeId ?? this.employeeId,
+      companyCode: companyCode ?? this.companyCode,
     );
   }
 
@@ -54,10 +58,11 @@ class AttendanceRecord {
       'checkIn': checkIn.toIso8601String(),
       'checkOut': checkOut?.toIso8601String(),
       'employeeId': employeeId,
+      'companyCode': companyCode,
     };
   }
 
-  factory AttendanceRecord.fromMap(Map<String, dynamic> map, [String? employeeId]) {
+  factory AttendanceRecord.fromMap(Map<String, dynamic> map, [String? employeeId, String? companyCode]) {
     DateTime parseDate(dynamic val, DateTime fallback) {
       if (val == null) return fallback;
       if (val is DateTime) return val;
@@ -93,10 +98,27 @@ class AttendanceRecord {
     final empId = (map['employeeId'] != null && map['employeeId'].toString().isNotEmpty)
         ? map['employeeId'].toString()
         : employeeId;
+    final compCode = (map['companyCode'] != null && map['companyCode'].toString().isNotEmpty)
+        ? map['companyCode'].toString()
+        : companyCode;
     return AttendanceRecord(
       checkIn: parsedIn,
       checkOut: parsedOut,
       employeeId: empId,
+      companyCode: compCode,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is AttendanceRecord &&
+        other.checkIn == checkIn &&
+        other.checkOut == checkOut &&
+        other.employeeId == employeeId &&
+        other.companyCode == companyCode;
+  }
+
+  @override
+  int get hashCode => Object.hash(checkIn, checkOut, employeeId, companyCode);
 }

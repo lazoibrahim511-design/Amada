@@ -392,6 +392,9 @@ class AttendanceProvider with ChangeNotifier {
     );
 
     _records.clear();
+    final localRecs = getRecordsForEmployee(employeeId: _employeeId, companyCode: _currentCompanyCode);
+    _records.addAll(localRecs);
+    _restoreActiveRecordFromRecords();
     await _setupFirestoreListeners();
     recalculateAllStats();
     notifyListeners();
@@ -516,14 +519,26 @@ class AttendanceProvider with ChangeNotifier {
   final List<Request> _allCompanyRequests = [];
   final Set<String> _deletedPunchSignatures = {};
 
-  bool isPunchDeleted(String employeeId, DateTime punchTime) {
-    final key = '${employeeId.trim().toLowerCase()}_${punchTime.year}_${punchTime.month}_${punchTime.day}_${punchTime.hour}_${punchTime.minute}';
-    return _deletedPunchSignatures.contains(key);
+  bool isPunchDeleted(String employeeId, DateTime punchTime, {String? companyCode}) {
+    final cleanEmp = employeeId.trim().toLowerCase();
+    final cleanComp = (companyCode ?? '').trim().toLowerCase();
+    final timeStr = '${punchTime.year}_${punchTime.month}_${punchTime.day}_${punchTime.hour}_${punchTime.minute}';
+    if (cleanComp.isNotEmpty && cleanComp != 'all') {
+      if (_deletedPunchSignatures.contains('${cleanComp}_${cleanEmp}_$timeStr')) {
+        return true;
+      }
+    }
+    return _deletedPunchSignatures.contains('${cleanEmp}_$timeStr');
   }
 
-  void recordDeletedPunchSignature(String employeeId, DateTime punchTime) {
-    final key = '${employeeId.trim().toLowerCase()}_${punchTime.year}_${punchTime.month}_${punchTime.day}_${punchTime.hour}_${punchTime.minute}';
-    _deletedPunchSignatures.add(key);
+  void recordDeletedPunchSignature(String employeeId, DateTime punchTime, {String? companyCode}) {
+    final cleanEmp = employeeId.trim().toLowerCase();
+    final cleanComp = (companyCode ?? '').trim().toLowerCase();
+    final timeStr = '${punchTime.year}_${punchTime.month}_${punchTime.day}_${punchTime.hour}_${punchTime.minute}';
+    if (cleanComp.isNotEmpty && cleanComp != 'all') {
+      _deletedPunchSignatures.add('${cleanComp}_${cleanEmp}_$timeStr');
+    }
+    _deletedPunchSignatures.add('${cleanEmp}_$timeStr');
   }
 
   // Selected Month for Payroll/History
@@ -766,17 +781,37 @@ class AttendanceProvider with ChangeNotifier {
       return List.unmodifiable(_allCompanyRecords);
     }
     final comp = _currentCompanyCode.trim().toLowerCase();
-    final companyEmpIds = employees.map((e) => e.id.trim().toLowerCase()).toSet();
+    final companyEmpIdentifiers = employees.expand((e) => [
+      e.id.trim().toLowerCase(),
+      if (e.name.trim().isNotEmpty) e.name.trim().toLowerCase(),
+      if (e.email.trim().isNotEmpty) e.email.trim().toLowerCase(),
+    ]).toSet();
     if (_employeeId.isNotEmpty && (currentEmployee == null || currentEmployee!.companyCode.toLowerCase() == comp)) {
-      companyEmpIds.add(_employeeId.trim().toLowerCase());
+      companyEmpIdentifiers.add(_employeeId.trim().toLowerCase());
     }
 
     return List.unmodifiable(
       _allCompanyRecords.where((r) {
+        // 1. If record explicitly has companyCode, verify it matches
+        if (r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+          return r.companyCode!.trim().toLowerCase() == comp;
+        }
+        // 2. Fallback for legacy records without companyCode:
         if (r.employeeId != null && r.employeeId!.trim().isNotEmpty) {
           final rEmpId = r.employeeId!.trim().toLowerCase();
-          if (companyEmpIds.contains(rEmpId)) return true;
           if (rEmpId.startsWith('${comp}_')) return true;
+          if (companyEmpIdentifiers.contains(rEmpId)) {
+            // Disambiguate: if another company also has this employeeId, do not claim it
+            final isAmbiguous = allEmployees.any((e) =>
+                (e.id.trim().toLowerCase() == rEmpId ||
+                 (e.name.trim().isNotEmpty && e.name.trim().toLowerCase() == rEmpId) ||
+                 (e.email.trim().isNotEmpty && e.email.trim().toLowerCase() == rEmpId)) &&
+                e.companyCode.trim().toLowerCase() != comp &&
+                e.companyCode.trim().toLowerCase() != 'all' &&
+                e.companyCode.trim().isNotEmpty);
+            if (!isAmbiguous) return true;
+            return comp == 'amada';
+          }
         }
         return false;
       }),
@@ -788,9 +823,13 @@ class AttendanceProvider with ChangeNotifier {
       return List.unmodifiable(_allCompanyRequests);
     }
     final comp = _currentCompanyCode.trim().toLowerCase();
-    final companyEmpIds = employees.map((e) => e.id.trim().toLowerCase()).toSet();
+    final companyEmpIdentifiers = employees.expand((e) => [
+      e.id.trim().toLowerCase(),
+      if (e.name.trim().isNotEmpty) e.name.trim().toLowerCase(),
+      if (e.email.trim().isNotEmpty) e.email.trim().toLowerCase(),
+    ]).toSet();
     if (_employeeId.isNotEmpty && (currentEmployee == null || currentEmployee!.companyCode.toLowerCase() == comp)) {
-      companyEmpIds.add(_employeeId.trim().toLowerCase());
+      companyEmpIdentifiers.add(_employeeId.trim().toLowerCase());
     }
 
     return List.unmodifiable(
@@ -800,12 +839,51 @@ class AttendanceProvider with ChangeNotifier {
         }
         if (r.employeeId != null && r.employeeId!.trim().isNotEmpty) {
           final rEmpId = r.employeeId!.trim().toLowerCase();
-          if (companyEmpIds.contains(rEmpId)) return true;
           if (rEmpId.startsWith('${comp}_')) return true;
+          if (companyEmpIdentifiers.contains(rEmpId)) {
+            final isAmbiguous = allEmployees.any((e) =>
+                (e.id.trim().toLowerCase() == rEmpId ||
+                 (e.name.trim().isNotEmpty && e.name.trim().toLowerCase() == rEmpId) ||
+                 (e.email.trim().isNotEmpty && e.email.trim().toLowerCase() == rEmpId)) &&
+                e.companyCode.trim().toLowerCase() != comp &&
+                e.companyCode.trim().toLowerCase() != 'all' &&
+                e.companyCode.trim().isNotEmpty);
+            if (!isAmbiguous) return true;
+            return comp == 'amada';
+          }
         }
         return false;
       }),
     );
+  }
+
+  /// Get attendance records for a specific employee and optional companyCode
+  List<AttendanceRecord> getRecordsForEmployee({
+    required String employeeId,
+    String? companyCode,
+  }) {
+    final cleanId = employeeId.trim().toLowerCase();
+    final comp = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
+    return _allCompanyRecords.where((r) {
+      if (r.employeeId == null || r.employeeId!.trim().toLowerCase() != cleanId) {
+        return false;
+      }
+      if (comp.isNotEmpty && comp != 'all') {
+        if (r.companyCode != null && r.companyCode!.isNotEmpty) {
+          return r.companyCode!.trim().toLowerCase() == comp;
+        }
+        if (r.employeeId!.trim().toLowerCase().startsWith('${comp}_')) {
+          return true;
+        }
+        final isAmbiguous = allEmployees.any((e) =>
+            e.id.trim().toLowerCase() == cleanId &&
+            e.companyCode.trim().toLowerCase() != comp &&
+            e.companyCode.trim().toLowerCase() != 'all' &&
+            e.companyCode.trim().isNotEmpty);
+        if (isAmbiguous) return comp == 'amada';
+      }
+      return true;
+    }).toList();
   }
   DateTime get selectedMonth => _selectedMonth;
 
@@ -824,10 +902,10 @@ class AttendanceProvider with ChangeNotifier {
   void _mergeCompanyRecords(List<AttendanceRecord> newRecords) {
     final Map<String, AttendanceRecord> existingMap = {
       for (final r in _allCompanyRecords)
-        '${r.employeeId ?? ""}_${r.checkIn.toIso8601String()}': r
+        '${r.companyCode ?? ""}_${r.employeeId ?? ""}_${r.checkIn.toIso8601String()}': r
     };
     for (final r in newRecords) {
-      existingMap['${r.employeeId ?? ""}_${r.checkIn.toIso8601String()}'] = r;
+      existingMap['${r.companyCode ?? ""}_${r.employeeId ?? ""}_${r.checkIn.toIso8601String()}'] = r;
     }
     _allCompanyRecords.clear();
     _allCompanyRecords.addAll(existingMap.values);
@@ -924,7 +1002,12 @@ class AttendanceProvider with ChangeNotifier {
             l.companyCode.isEmpty ||
             l.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
       );
-  List<Request> get requests => _allRequestsMap[_employeeId] ?? [];
+  List<Request> get requests {
+    final currentComp = _currentCompanyCode.trim().toLowerCase();
+    final list = _allRequestsMap[_employeeId] ?? [];
+    if (currentComp.isEmpty || currentComp == 'all') return list;
+    return list.where((r) => r.companyCode == null || r.companyCode!.isEmpty || r.companyCode!.trim().toLowerCase() == currentComp).toList();
+  }
   List<Request> get allRequests => allCompanyRequests;
   String get currentLanguage => _currentLanguage;
   bool get isLoading => _isLoading;
@@ -1526,7 +1609,7 @@ class AttendanceProvider with ChangeNotifier {
       _listenToPayrollClosures();
 
       _subscriptions.add(
-        _firebaseService.streamUserRecords(_employeeId).listen((data) {
+        _firebaseService.streamUserRecords(_employeeId, companyCode: _currentCompanyCode).listen((data) {
           _records.clear();
           _records.addAll(data);
           _restoreActiveRecordFromRecords();
@@ -1536,7 +1619,7 @@ class AttendanceProvider with ChangeNotifier {
       );
 
       _subscriptions.add(
-        _firebaseService.streamUserRequests(_employeeId).listen((data) {
+        _firebaseService.streamUserRequests(_employeeId, companyCode: _currentCompanyCode).listen((data) {
           _allRequestsMap[_employeeId] = data;
           notifyListeners();
         }),
@@ -2304,12 +2387,14 @@ class AttendanceProvider with ChangeNotifier {
           checkIn: cleanPunches[0].time,
           checkOut: cleanPunches[0].time,
           employeeId: emp.id,
+          companyCode: emp.companyCode,
         ));
       } else {
         reconciled.add(AttendanceRecord(
           checkIn: cleanPunches[0].time,
           checkOut: null,
           employeeId: emp.id,
+          companyCode: emp.companyCode,
         ));
       }
       return reconciled;
@@ -2321,6 +2406,7 @@ class AttendanceProvider with ChangeNotifier {
           checkIn: cleanPunches[i].time,
           checkOut: cleanPunches[i + 1].time,
           employeeId: emp.id,
+          companyCode: emp.companyCode,
         ));
       }
       return reconciled;
@@ -2332,6 +2418,7 @@ class AttendanceProvider with ChangeNotifier {
         checkIn: cleanPunches.first.time,
         checkOut: cleanPunches.first.time,
         employeeId: emp.id,
+        companyCode: emp.companyCode,
       ));
       for (int i = 1; i < cleanPunches.length; i += 2) {
         if (i + 1 < cleanPunches.length) {
@@ -2339,12 +2426,14 @@ class AttendanceProvider with ChangeNotifier {
             checkIn: cleanPunches[i].time,
             checkOut: cleanPunches[i + 1].time,
             employeeId: emp.id,
+            companyCode: emp.companyCode,
           ));
         } else {
           reconciled.add(AttendanceRecord(
             checkIn: cleanPunches[i].time,
             checkOut: null,
             employeeId: emp.id,
+            companyCode: emp.companyCode,
           ));
         }
       }
@@ -2354,6 +2443,7 @@ class AttendanceProvider with ChangeNotifier {
           checkIn: cleanPunches[i].time,
           checkOut: cleanPunches[i + 1].time,
           employeeId: emp.id,
+          companyCode: emp.companyCode,
         ));
       }
       final last = cleanPunches.last;
@@ -2362,12 +2452,14 @@ class AttendanceProvider with ChangeNotifier {
           checkIn: last.time,
           checkOut: last.time,
           employeeId: emp.id,
+          companyCode: emp.companyCode,
         ));
       } else {
         reconciled.add(AttendanceRecord(
           checkIn: last.time,
           checkOut: null,
           employeeId: emp.id,
+          companyCode: emp.companyCode,
         ));
       }
     }
@@ -3611,6 +3703,8 @@ class AttendanceProvider with ChangeNotifier {
     if (match.name.isNotEmpty) candidateIds.add(match.name.toLowerCase());
     if (match.email.isNotEmpty) candidateIds.add(match.email.toLowerCase());
 
+    final cleanComp = (match.companyCode.isNotEmpty ? match.companyCode : _currentCompanyCode).trim().toLowerCase();
+
     // 1. If requesting current user and in-memory records are present
     if (candidateIds.contains(_employeeId.toLowerCase()) && _records.isNotEmpty) {
       return _records;
@@ -3619,15 +3713,21 @@ class AttendanceProvider with ChangeNotifier {
     // 2. Direct Firestore query across candidate identifiers
     if (_firebaseService.isAvailable) {
       for (final idToTry in candidateIds) {
-        final fetched = await _firebaseService.getUserRecords(idToTry);
+        final fetched = await _firebaseService.getUserRecords(idToTry, companyCode: cleanComp);
         if (fetched.isNotEmpty) {
-          return fetched;
+          final scoped = fetched.where((r) =>
+              cleanComp.isEmpty ||
+              cleanComp == 'all' ||
+              r.companyCode == null ||
+              r.companyCode!.isEmpty ||
+              r.companyCode!.trim().toLowerCase() == cleanComp).toList();
+          if (scoped.isNotEmpty) return scoped;
         }
       }
     }
 
     // 3. Check in-memory company records
-    final fromAll = _allCompanyRecords
+    final fromAll = allCompanyRecords
         .where((r) =>
             r.employeeId != null &&
             candidateIds.contains(r.employeeId!.trim().toLowerCase()))
@@ -3686,6 +3786,8 @@ class AttendanceProvider with ChangeNotifier {
       orElse: () => CompanyEmployee(id: '', name: '', email: '', position: ''),
     );
 
+    final cleanComp = (match.companyCode.isNotEmpty ? match.companyCode : _currentCompanyCode).trim().toLowerCase();
+
     final candidateIds = <String>{cleanId.toLowerCase()};
     if (match.id.isNotEmpty) candidateIds.add(match.id.toLowerCase());
     if (match.name.isNotEmpty) candidateIds.add(match.name.toLowerCase());
@@ -3693,15 +3795,21 @@ class AttendanceProvider with ChangeNotifier {
 
     if (_firebaseService.isAvailable) {
       for (final idToTry in candidateIds) {
-        final fetched = await _firebaseService.getUserRequests(idToTry);
+        final fetched = await _firebaseService.getUserRequests(idToTry, companyCode: cleanComp);
         if (fetched.isNotEmpty) {
-          _allRequestsMap[cleanId] = fetched;
-          return fetched;
+          final scoped = fetched.where((r) =>
+              cleanComp.isEmpty ||
+              cleanComp == 'all' ||
+              r.companyCode == null ||
+              r.companyCode!.isEmpty ||
+              r.companyCode!.trim().toLowerCase() == cleanComp).toList();
+          _allRequestsMap[cleanId] = scoped;
+          return scoped;
         }
       }
     }
 
-    final fromAll = _allCompanyRequests
+    final fromAll = allCompanyRequests
         .where((r) =>
             r.employeeId != null &&
             candidateIds.contains(r.employeeId!.trim().toLowerCase()))
@@ -3713,8 +3821,15 @@ class AttendanceProvider with ChangeNotifier {
     return _allRequestsMap[cleanId] ?? [];
   }
 
-  List<Request> getRequestsForEmployee(String empId) =>
-      _allRequestsMap[empId] ?? [];
+  List<Request> getRequestsForEmployee(String empId, {String? companyCode}) {
+    final comp = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
+    final list = _allRequestsMap[empId] ?? [];
+    if (comp.isEmpty || comp == 'all') return list;
+    return list.where((r) =>
+        r.companyCode == null ||
+        r.companyCode!.isEmpty ||
+        r.companyCode!.trim().toLowerCase() == comp).toList();
+  }
 
   // Profile image management
   Future<void> updateProfileImage(dynamic file) async {
@@ -4061,6 +4176,14 @@ class AttendanceProvider with ChangeNotifier {
       }
     }
 
+    final targetEmp = allEmployees.cast<CompanyEmployee?>().firstWhere(
+      (e) => e != null && e.id == empId,
+      orElse: () => null,
+    );
+    final reqCompany = targetEmp?.companyCode.isNotEmpty == true
+        ? targetEmp!.companyCode
+        : (_currentCompanyCode == 'all' ? 'amada' : _currentCompanyCode);
+
     final newReq = Request(
       id: 'req_${DateTime.now().millisecondsSinceEpoch}',
       type: type.toString(),
@@ -4069,7 +4192,7 @@ class AttendanceProvider with ChangeNotifier {
       status: status,
       targetShiftId: targetShiftId?.toString(),
       employeeId: empId,
-      companyCode: _currentCompanyCode == 'all' ? 'amada' : _currentCompanyCode,
+      companyCode: reqCompany,
       note: note,
       createdAt: DateTime.now().toIso8601String(),
       actionBy: (isTopManager || status == 'Approved') ? empId : null,
@@ -4084,7 +4207,7 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
 
     if (_firebaseService.isAvailable) {
-      await _firebaseService.saveRequest(empId, newReq);
+      await _firebaseService.saveRequest(empId, newReq, companyCode: reqCompany);
     }
 
     if (status == 'Approved') {
@@ -4114,7 +4237,7 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
 
     if (_firebaseService.isAvailable) {
-      await _firebaseService.deleteRequest(empId, rId);
+      await _firebaseService.deleteRequest(empId, rId, companyCode: targetReq?.companyCode);
     }
 
     if (targetReq != null && targetReq.status == 'Approved') {
@@ -4274,7 +4397,7 @@ class AttendanceProvider with ChangeNotifier {
 
     if (updatedReq != null) {
       if (_firebaseService.isAvailable) {
-        await _firebaseService.saveRequest(empId, updatedReq);
+        await _firebaseService.saveRequest(empId, updatedReq, companyCode: updatedReq.companyCode);
       }
 
       // Automated messages to the employee who registered the request (bilingual English + Kurdish):
@@ -4571,9 +4694,13 @@ class AttendanceProvider with ChangeNotifier {
 
   Future<String?> clockIn([dynamic a, dynamic b]) async {
     _isClockedIn = true;
+    final compCode = _currentCompanyCode != 'all' && _currentCompanyCode.isNotEmpty
+        ? _currentCompanyCode
+        : currentEmployee?.companyCode;
     _activeRecord = AttendanceRecord(
       checkIn: DateTime.now(),
       employeeId: _employeeId,
+      companyCode: compCode,
     );
     // Add to local records list at the beginning (sorted newest first)
     _records.removeWhere(
@@ -4588,7 +4715,7 @@ class AttendanceProvider with ChangeNotifier {
 
     if (_firebaseService.isAvailable) {
       try {
-        await _firebaseService.saveRecord(_employeeId, _activeRecord!);
+        await _firebaseService.saveRecord(_employeeId, _activeRecord!, companyCode: compCode);
       } catch (e) {
         debugPrint('Error saving clock in record to Firebase: $e');
       }
@@ -4605,6 +4732,9 @@ class AttendanceProvider with ChangeNotifier {
     }
 
     final now = DateTime.now();
+    final compCode = _currentCompanyCode != 'all' && _currentCompanyCode.isNotEmpty
+        ? _currentCompanyCode
+        : currentEmployee?.companyCode;
 
     // If _activeRecord is null, locate the latest open record
     if (_activeRecord == null) {
@@ -4618,6 +4748,7 @@ class AttendanceProvider with ChangeNotifier {
       _activeRecord = _activeRecord!.copyWith(
         checkOut: now,
         employeeId: _employeeId,
+        companyCode: _activeRecord!.companyCode ?? compCode,
       );
       // Update it in the records list
       final idx = _records.indexWhere(
@@ -4635,7 +4766,7 @@ class AttendanceProvider with ChangeNotifier {
       }
       if (_firebaseService.isAvailable) {
         try {
-          await _firebaseService.saveRecord(_employeeId, _activeRecord!);
+          await _firebaseService.saveRecord(_employeeId, _activeRecord!, companyCode: _activeRecord!.companyCode ?? compCode);
         } catch (e) {
           debugPrint('Error saving clock out record to Firebase: $e');
         }
@@ -4646,11 +4777,12 @@ class AttendanceProvider with ChangeNotifier {
         checkIn: now.subtract(const Duration(hours: 1)),
         checkOut: now,
         employeeId: _employeeId,
+        companyCode: compCode,
       );
       _records.insert(0, _activeRecord!);
       if (_firebaseService.isAvailable) {
         try {
-          await _firebaseService.saveRecord(_employeeId, _activeRecord!);
+          await _firebaseService.saveRecord(_employeeId, _activeRecord!, companyCode: compCode);
         } catch (e) {
           debugPrint('Error saving fallback clock out to Firebase: $e');
         }
@@ -4671,23 +4803,34 @@ class AttendanceProvider with ChangeNotifier {
     }
 
     final cleanEmpId = record.employeeId?.trim().toLowerCase();
+    final cleanComp = (record.companyCode ?? '').trim().toLowerCase();
 
     // 1. Update in _allCompanyRecords
-    final idxAll = _allCompanyRecords.indexWhere((r) =>
-        r.employeeId?.trim().toLowerCase() == cleanEmpId &&
-        r.checkIn.year == record.checkIn.year &&
-        r.checkIn.month == record.checkIn.month &&
-        r.checkIn.day == record.checkIn.day &&
-        r.checkIn.hour == record.checkIn.hour &&
-        r.checkIn.minute == record.checkIn.minute);
+    final idxAll = _allCompanyRecords.indexWhere((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == record.checkIn.year &&
+          r.checkIn.month == record.checkIn.month &&
+          r.checkIn.day == record.checkIn.day &&
+          r.checkIn.hour == record.checkIn.hour &&
+          r.checkIn.minute == record.checkIn.minute;
+    });
     if (idxAll != -1) {
       _allCompanyRecords[idxAll] = record;
     } else {
       _allCompanyRecords.insert(0, record);
     }
 
-    // 2. If for currently logged-in user, also update _records
-    if (cleanEmpId != null && cleanEmpId == _employeeId.trim().toLowerCase()) {
+    // 2. If for currently logged-in user and matches company, also update _records
+    final currentComp = _currentCompanyCode.trim().toLowerCase();
+    final bool matchesCurrentCompany = cleanComp.isEmpty ||
+        currentComp.isEmpty ||
+        currentComp == 'all' ||
+        cleanComp == currentComp;
+
+    if (matchesCurrentCompany && cleanEmpId != null && cleanEmpId == _employeeId.trim().toLowerCase()) {
       final idx = _records.indexWhere((r) =>
           r.checkIn.year == record.checkIn.year &&
           r.checkIn.month == record.checkIn.month &&
@@ -4717,18 +4860,29 @@ class AttendanceProvider with ChangeNotifier {
     }
 
     final cleanEmpId = employeeId.trim().toLowerCase();
+    final cleanComp = (record.companyCode ?? '').trim().toLowerCase();
 
     // 1. Remove from _allCompanyRecords
-    _allCompanyRecords.removeWhere((r) =>
-        (r.employeeId?.trim().toLowerCase() == cleanEmpId) &&
-        r.checkIn.year == record.checkIn.year &&
-        r.checkIn.month == record.checkIn.month &&
-        r.checkIn.day == record.checkIn.day &&
-        r.checkIn.hour == record.checkIn.hour &&
-        r.checkIn.minute == record.checkIn.minute);
+    _allCompanyRecords.removeWhere((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == record.checkIn.year &&
+          r.checkIn.month == record.checkIn.month &&
+          r.checkIn.day == record.checkIn.day &&
+          r.checkIn.hour == record.checkIn.hour &&
+          r.checkIn.minute == record.checkIn.minute;
+    });
 
     // 2. Remove from _records if currently logged-in user
-    if (cleanEmpId == _employeeId.trim().toLowerCase()) {
+    final currentComp = _currentCompanyCode.trim().toLowerCase();
+    final bool matchesCurrentCompany = cleanComp.isEmpty ||
+        currentComp.isEmpty ||
+        currentComp == 'all' ||
+        cleanComp == currentComp;
+
+    if (matchesCurrentCompany && cleanEmpId == _employeeId.trim().toLowerCase()) {
       _records.removeWhere((r) =>
           r.checkIn.year == record.checkIn.year &&
           r.checkIn.month == record.checkIn.month &&
@@ -4741,13 +4895,13 @@ class AttendanceProvider with ChangeNotifier {
     notifyListeners();
 
     // 3. Delete from Firebase and persist to deleted_punches
-    recordDeletedPunchSignature(cleanEmpId, record.checkIn);
+    recordDeletedPunchSignature(cleanEmpId, record.checkIn, companyCode: cleanComp);
     if (record.checkOut != null) {
-      recordDeletedPunchSignature(cleanEmpId, record.checkOut!);
+      recordDeletedPunchSignature(cleanEmpId, record.checkOut!, companyCode: cleanComp);
     }
 
     if (_firebaseService.isAvailable) {
-      await _firebaseService.deleteRecord(employeeId, record);
+      await _firebaseService.deleteRecord(employeeId, record, companyCode: record.companyCode);
       try {
         await _firebaseService.saveDeletedPunch(DeletedPunch(
           id: '${cleanEmpId}_${record.checkIn.millisecondsSinceEpoch}',

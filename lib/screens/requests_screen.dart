@@ -421,6 +421,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
               ),
             ),
           );
+          if (r.companyCode != null && r.companyCode!.isNotEmpty && emp.companyCode.isNotEmpty) {
+            if (r.companyCode!.toLowerCase() != emp.companyCode.toLowerCase()) continue;
+          }
           combined.add({'employee': emp, 'request': r});
         }
       }
@@ -428,8 +431,11 @@ DateTime? _parseRequestStartDate(String dateStr) {
 
     // 2. Also check any cached in provider's _allRequestsMap
     for (var emp in subordinates) {
-      final cachedReqs = provider.getRequestsForEmployee(emp.id);
+      final cachedReqs = provider.getRequestsForEmployee(emp.id, companyCode: emp.companyCode);
       for (var r in cachedReqs) {
+        if (r.companyCode != null && r.companyCode!.isNotEmpty && emp.companyCode.isNotEmpty) {
+          if (r.companyCode!.toLowerCase() != emp.companyCode.toLowerCase()) continue;
+        }
         if (!combined.any((item) => (item['request'] as Request).id == r.id)) {
           combined.add({'employee': emp, 'request': r});
         }
@@ -441,6 +447,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
       final r = item['request'] as Request;
       final emp = item['employee'] as CompanyEmployee?;
       if (emp != null && subordinateIds.contains(emp.id)) {
+        if (r.companyCode != null && r.companyCode!.isNotEmpty && emp.companyCode.isNotEmpty) {
+          if (r.companyCode!.toLowerCase() != emp.companyCode.toLowerCase()) continue;
+        }
         if (!combined.any((it) => (it['request'] as Request).id == r.id)) {
           combined.add(item);
         }
@@ -486,6 +495,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
               ),
             ),
           );
+          if (r.companyCode != null && r.companyCode!.isNotEmpty && emp.companyCode.isNotEmpty) {
+            if (r.companyCode!.toLowerCase() != emp.companyCode.toLowerCase()) continue;
+          }
           combined.add({'employee': emp, 'request': r});
         }
       }
@@ -495,6 +507,9 @@ DateTime? _parseRequestStartDate(String dateStr) {
     for (var emp in subordinates) {
       final reqs = await provider.getEmployeeRequests(emp.id);
       for (var r in reqs) {
+        if (r.companyCode != null && r.companyCode!.isNotEmpty && emp.companyCode.isNotEmpty) {
+          if (r.companyCode!.toLowerCase() != emp.companyCode.toLowerCase()) continue;
+        }
         if (!combined.any((item) => (item['request'] as Request).id == r.id)) {
           combined.add({'employee': emp, 'request': r});
         }

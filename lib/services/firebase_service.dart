@@ -781,29 +781,54 @@ class FirebaseService {
     }
   }
 
+  // Helper to get company-scoped employee doc ID in Firestore
+  String _getScopedEmployeeDocId(String employeeId, {String? companyCode}) {
+    final cleanId = employeeId.trim();
+    final comp = (companyCode ?? '').trim().toLowerCase();
+    if (comp.isEmpty || comp == 'amada' || comp == 'all') {
+      return cleanId;
+    }
+    if (cleanId.toLowerCase().startsWith('${comp}_')) {
+      return cleanId;
+    }
+    return '${comp}_$cleanId';
+  }
+
   // --- AttendanceRecord CRUD ---
-  Future<List<AttendanceRecord>> getUserRecords(String employeeId) async {
+  Future<List<AttendanceRecord>> getUserRecords(String employeeId, {String? companyCode}) async {
     if (!isAvailable) return [];
     try {
       final trimmedId = employeeId.trim();
-      QuerySnapshot<Map<String, dynamic>> snapshot;
-      try {
-        snapshot = await _firestore
-            .collection('attendance_records')
-            .doc(trimmedId)
-            .collection('user_records')
-            .get();
-      } catch (e) {
-        debugPrint('Error getting user_records for $trimmedId: $e');
-        return [];
+      final comp = (companyCode ?? '').trim().toLowerCase();
+      final scopedId = _getScopedEmployeeDocId(trimmedId, companyCode: comp);
+      final candidateDocIds = <String>{};
+      if (scopedId != trimmedId) candidateDocIds.add(scopedId);
+      candidateDocIds.add(trimmedId);
+
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      for (final docId in candidateDocIds) {
+        try {
+          final s = await _firestore
+              .collection('attendance_records')
+              .doc(docId)
+              .collection('user_records')
+              .get();
+          if (s.docs.isNotEmpty) {
+            snapshot = s;
+            break;
+          }
+        } catch (e) {
+          debugPrint('Error getting user_records for $docId: $e');
+        }
       }
 
       // If direct doc lookup is empty, try case-insensitive doc match in attendance_records
-      if (snapshot.docs.isEmpty) {
+      if (snapshot == null || snapshot.docs.isEmpty) {
         try {
           final parentSnap = await _firestore.collection('attendance_records').get();
           for (var pDoc in parentSnap.docs) {
-            if (pDoc.id.toLowerCase() == trimmedId.toLowerCase()) {
+            final pIdLower = pDoc.id.toLowerCase();
+            if (candidateDocIds.any((cid) => cid.toLowerCase() == pIdLower)) {
               snapshot = await pDoc.reference.collection('user_records').get();
               if (snapshot.docs.isNotEmpty) break;
             }
@@ -812,11 +837,18 @@ class FirebaseService {
       }
 
       final list = <AttendanceRecord>[];
-      for (var doc in snapshot.docs) {
-        try {
-          list.add(AttendanceRecord.fromMap(doc.data(), trimmedId));
-        } catch (e) {
-          debugPrint('Error parsing AttendanceRecord ${doc.id}: $e');
+      if (snapshot != null) {
+        for (var doc in snapshot.docs) {
+          try {
+            final data = doc.data();
+            final recComp = (data['companyCode'] ?? comp).toString().trim().toLowerCase();
+            if (comp.isNotEmpty && comp != 'all' && recComp.isNotEmpty && recComp != comp) {
+              continue;
+            }
+            list.add(AttendanceRecord.fromMap(data, trimmedId, recComp.isNotEmpty ? recComp : null));
+          } catch (e) {
+            debugPrint('Error parsing AttendanceRecord ${doc.id}: $e');
+          }
         }
       }
       list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
@@ -827,19 +859,26 @@ class FirebaseService {
     }
   }
 
-  Stream<List<AttendanceRecord>> streamUserRecords(String employeeId) {
+  Stream<List<AttendanceRecord>> streamUserRecords(String employeeId, {String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final trimmedId = employeeId.trim();
+    final comp = (companyCode ?? '').trim().toLowerCase();
+    final scopedId = _getScopedEmployeeDocId(trimmedId, companyCode: comp);
     return _firestore
         .collection('attendance_records')
-        .doc(trimmedId)
+        .doc(scopedId)
         .collection('user_records')
         .snapshots()
         .map((snapshot) {
       final list = <AttendanceRecord>[];
       for (var doc in snapshot.docs) {
         try {
-          list.add(AttendanceRecord.fromMap(doc.data(), trimmedId));
+          final data = doc.data();
+          final recComp = (data['companyCode'] ?? comp).toString().trim().toLowerCase();
+          if (comp.isNotEmpty && comp != 'all' && recComp.isNotEmpty && recComp != comp) {
+            continue;
+          }
+          list.add(AttendanceRecord.fromMap(doc.data(), trimmedId, recComp.isNotEmpty ? recComp : null));
         } catch (e) {
           debugPrint('Error parsing AttendanceRecord ${doc.id}: $e');
         }
@@ -847,7 +886,7 @@ class FirebaseService {
       list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
       return list;
     }).handleError((e) {
-      debugPrint('Error in streamUserRecords for $trimmedId: $e');
+      debugPrint('Error in streamUserRecords for $scopedId: $e');
       return <AttendanceRecord>[];
     });
   }
@@ -863,9 +902,20 @@ class FirebaseService {
         final list = <AttendanceRecord>[];
         for (var doc in snapshot.docs) {
           try {
-            final empId = doc.data()['employeeId']?.toString() ??
-                doc.reference.parent.parent?.id;
-            list.add(AttendanceRecord.fromMap(doc.data(), empId));
+            final data = doc.data();
+            final parentDocId = doc.reference.parent.parent?.id;
+            String? empId = data['employeeId']?.toString() ?? parentDocId;
+            String? comp = data['companyCode']?.toString();
+            if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+              final prefix = parentDocId.split('_').first.toLowerCase();
+              if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
+                comp = prefix;
+                if (empId == parentDocId) {
+                  empId = parentDocId.substring(prefix.length + 1);
+                }
+              }
+            }
+            list.add(AttendanceRecord.fromMap(data, empId, comp));
           } catch (e) {
             debugPrint('Error parsing collectionGroup AttendanceRecord ${doc.id}: $e');
           }
@@ -897,9 +947,20 @@ class FirebaseService {
       final list = <AttendanceRecord>[];
       for (var doc in snapshot.docs) {
         try {
-          final empId = doc.data()['employeeId']?.toString() ??
-              doc.reference.parent.parent?.id;
-          list.add(AttendanceRecord.fromMap(doc.data(), empId));
+          final data = doc.data();
+          final parentDocId = doc.reference.parent.parent?.id;
+          String? empId = data['employeeId']?.toString() ?? parentDocId;
+          String? comp = data['companyCode']?.toString();
+          if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+            final prefix = parentDocId.split('_').first.toLowerCase();
+            if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
+              comp = prefix;
+              if (empId == parentDocId) {
+                empId = parentDocId.substring(prefix.length + 1);
+              }
+            }
+          }
+          list.add(AttendanceRecord.fromMap(data, empId, comp));
         } catch (_) {}
       }
       list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
@@ -910,16 +971,21 @@ class FirebaseService {
     }
   }
 
-  Future<void> saveRecord(String employeeId, AttendanceRecord record) async {
+  Future<void> saveRecord(String employeeId, AttendanceRecord record, {String? companyCode}) async {
     if (!isAvailable) return;
     try {
       // Use CheckIn timestamp as document ID to uniquely identify day session
       final docId = record.checkIn.toIso8601String().replaceAll(':', '-');
+      final comp = (companyCode ?? record.companyCode ?? '').trim().toLowerCase();
+      final scopedDocId = _getScopedEmployeeDocId(employeeId, companyCode: comp);
       final data = record.toMap();
       data['employeeId'] = employeeId;
+      if (comp.isNotEmpty && comp != 'all') {
+        data['companyCode'] = comp;
+      }
       await _firestore
           .collection('attendance_records')
-          .doc(employeeId)
+          .doc(scopedDocId)
           .collection('user_records')
           .doc(docId)
           .set(data, SetOptions(merge: true));
@@ -929,16 +995,28 @@ class FirebaseService {
     }
   }
 
-  Future<void> deleteRecord(String employeeId, AttendanceRecord record) async {
+  Future<void> deleteRecord(String employeeId, AttendanceRecord record, {String? companyCode}) async {
     if (!isAvailable) return;
     try {
       final docId = record.checkIn.toIso8601String().replaceAll(':', '-');
+      final comp = (companyCode ?? record.companyCode ?? '').trim().toLowerCase();
+      final scopedDocId = _getScopedEmployeeDocId(employeeId, companyCode: comp);
       await _firestore
           .collection('attendance_records')
-          .doc(employeeId)
+          .doc(scopedDocId)
           .collection('user_records')
           .doc(docId)
           .delete();
+      if (scopedDocId != employeeId) {
+        try {
+          await _firestore
+              .collection('attendance_records')
+              .doc(employeeId)
+              .collection('user_records')
+              .doc(docId)
+              .delete();
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('Error deleting attendance record: $e');
     }
@@ -1015,27 +1093,39 @@ class FirebaseService {
   }
 
   // --- Request CRUD ---
-  Future<List<Request>> getUserRequests(String employeeId) async {
+  Future<List<Request>> getUserRequests(String employeeId, {String? companyCode}) async {
     if (!isAvailable) return [];
     try {
       final trimmedId = employeeId.trim();
-      QuerySnapshot<Map<String, dynamic>> snapshot;
-      try {
-        snapshot = await _firestore
-            .collection('requests')
-            .doc(trimmedId)
-            .collection('user_requests')
-            .get();
-      } catch (e) {
-        debugPrint('Error getting user_requests for $trimmedId: $e');
-        return [];
+      final comp = (companyCode ?? '').trim().toLowerCase();
+      final scopedId = _getScopedEmployeeDocId(trimmedId, companyCode: comp);
+      final candidateDocIds = <String>{};
+      if (scopedId != trimmedId) candidateDocIds.add(scopedId);
+      candidateDocIds.add(trimmedId);
+
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      for (final docId in candidateDocIds) {
+        try {
+          final s = await _firestore
+              .collection('requests')
+              .doc(docId)
+              .collection('user_requests')
+              .get();
+          if (s.docs.isNotEmpty) {
+            snapshot = s;
+            break;
+          }
+        } catch (e) {
+          debugPrint('Error getting user_requests for $docId: $e');
+        }
       }
 
-      if (snapshot.docs.isEmpty) {
+      if (snapshot == null || snapshot.docs.isEmpty) {
         try {
           final parentSnap = await _firestore.collection('requests').get();
           for (var pDoc in parentSnap.docs) {
-            if (pDoc.id.toLowerCase() == trimmedId.toLowerCase()) {
+            final pIdLower = pDoc.id.toLowerCase();
+            if (candidateDocIds.any((cid) => cid.toLowerCase() == pIdLower)) {
               snapshot = await pDoc.reference.collection('user_requests').get();
               if (snapshot.docs.isNotEmpty) break;
             }
@@ -1043,13 +1133,22 @@ class FirebaseService {
         } catch (_) {}
       }
 
+      if (snapshot == null) return [];
+
       return snapshot.docs.map((doc) {
         final data = doc.data();
+        final reqComp = (data['companyCode'] ?? comp).toString().trim().toLowerCase();
         final req = Request.fromMap(data, doc.id);
         return req.copyWith(
           employeeId: req.employeeId ?? trimmedId,
+          companyCode: reqComp.isNotEmpty ? reqComp : req.companyCode,
           overrideTargetShiftId: false,
         );
+      }).where((r) {
+        if (comp.isNotEmpty && comp != 'all' && r.companyCode != null && r.companyCode!.isNotEmpty) {
+          return r.companyCode!.toLowerCase() == comp;
+        }
+        return true;
       }).toList();
     } catch (e) {
       debugPrint('Error getting user requests: $e');
@@ -1057,21 +1156,31 @@ class FirebaseService {
     }
   }
 
-  Stream<List<Request>> streamUserRequests(String employeeId) {
+  Stream<List<Request>> streamUserRequests(String employeeId, {String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
+    final trimmedId = employeeId.trim();
+    final comp = (companyCode ?? '').trim().toLowerCase();
+    final scopedId = _getScopedEmployeeDocId(trimmedId, companyCode: comp);
     return _firestore
         .collection('requests')
-        .doc(employeeId)
+        .doc(scopedId)
         .collection('user_requests')
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
+        final reqComp = (data['companyCode'] ?? comp).toString().trim().toLowerCase();
         final req = Request.fromMap(data, doc.id);
         return req.copyWith(
-          employeeId: req.employeeId ?? employeeId,
+          employeeId: req.employeeId ?? trimmedId,
+          companyCode: reqComp.isNotEmpty ? reqComp : req.companyCode,
           overrideTargetShiftId: false,
         );
+      }).where((r) {
+        if (comp.isNotEmpty && comp != 'all' && r.companyCode != null && r.companyCode!.isNotEmpty) {
+          return r.companyCode!.toLowerCase() == comp;
+        }
+        return true;
       }).toList();
     });
   }
@@ -1084,16 +1193,25 @@ class FirebaseService {
       for (var doc in snapshot.docs) {
         try {
           final data = doc.data();
+          final parentDocId = doc.reference.parent.parent?.id;
           String? empId = data['employeeId'];
           if (empId == null || empId.isEmpty) {
-            try {
-              empId = doc.reference.parent.parent?.id;
-            } catch (_) {}
+            empId = parentDocId;
+          }
+          String? comp = data['companyCode'];
+          if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+            final prefix = parentDocId.split('_').first.toLowerCase();
+            if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
+              comp = prefix;
+              if (empId == parentDocId) {
+                empId = parentDocId.substring(prefix.length + 1);
+              }
+            }
           }
           final req = Request.fromMap(data, doc.id);
           list.add(req.copyWith(
             employeeId: empId ?? req.employeeId,
-            companyCode: data['companyCode'] ?? req.companyCode,
+            companyCode: comp ?? req.companyCode,
             overrideTargetShiftId: false,
           ));
         } catch (e) {
@@ -1114,16 +1232,25 @@ class FirebaseService {
       for (var doc in snapshot.docs) {
         try {
           final data = doc.data();
+          final parentDocId = doc.reference.parent.parent?.id;
           String? empId = data['employeeId'];
           if (empId == null || empId.isEmpty) {
-            try {
-              empId = doc.reference.parent.parent?.id;
-            } catch (_) {}
+            empId = parentDocId;
+          }
+          String? comp = data['companyCode'];
+          if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+            final prefix = parentDocId.split('_').first.toLowerCase();
+            if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
+              comp = prefix;
+              if (empId == parentDocId) {
+                empId = parentDocId.substring(prefix.length + 1);
+              }
+            }
           }
           final req = Request.fromMap(data, doc.id);
           list.add(req.copyWith(
             employeeId: empId ?? req.employeeId,
-            companyCode: data['companyCode'] ?? req.companyCode,
+            companyCode: comp ?? req.companyCode,
             overrideTargetShiftId: false,
           ));
         } catch (e) {
@@ -1134,29 +1261,48 @@ class FirebaseService {
     });
   }
 
-  Future<void> saveRequest(String employeeId, Request request) async {
+  Future<void> saveRequest(String employeeId, Request request, {String? companyCode}) async {
     if (!isAvailable) return;
     try {
+      final comp = (companyCode ?? request.companyCode ?? '').trim().toLowerCase();
+      final scopedDocId = _getScopedEmployeeDocId(employeeId, companyCode: comp);
+      final data = request.toMap();
+      data['employeeId'] = employeeId;
+      if (comp.isNotEmpty && comp != 'all') {
+        data['companyCode'] = comp;
+      }
       await _firestore
           .collection('requests')
-          .doc(employeeId)
+          .doc(scopedDocId)
           .collection('user_requests')
           .doc(request.id)
-          .set(request.toMap());
+          .set(data);
     } catch (e) {
       debugPrint('Error saving request: $e');
     }
   }
 
-  Future<void> deleteRequest(String employeeId, String requestId) async {
+  Future<void> deleteRequest(String employeeId, String requestId, {String? companyCode}) async {
     if (!isAvailable) return;
     try {
+      final comp = (companyCode ?? '').trim().toLowerCase();
+      final scopedDocId = _getScopedEmployeeDocId(employeeId, companyCode: comp);
       await _firestore
           .collection('requests')
-          .doc(employeeId)
+          .doc(scopedDocId)
           .collection('user_requests')
           .doc(requestId)
           .delete();
+      if (scopedDocId != employeeId) {
+        try {
+          await _firestore
+              .collection('requests')
+              .doc(employeeId)
+              .collection('user_requests')
+              .doc(requestId)
+              .delete();
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('Error deleting request: $e');
     }

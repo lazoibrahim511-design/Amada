@@ -709,13 +709,20 @@ class RecentActivitiesList extends StatelessWidget {
 
     final companyEmpIds = provider.employees.map((e) => e.id).toSet();
     if (provider.employeeId.isNotEmpty) companyEmpIds.add(provider.employeeId);
+    final currentComp = provider.currentCompanyCode.trim().toLowerCase();
 
     // 1. Process Attendance Records
     for (final record in provider.allCompanyRecords) {
+      if (record.companyCode != null && record.companyCode!.isNotEmpty && currentComp.isNotEmpty && currentComp != 'all') {
+        if (record.companyCode!.toLowerCase() != currentComp) continue;
+      }
       if (record.employeeId != null && !companyEmpIds.contains(record.employeeId)) {
         continue;
       }
       final emp = getEmployee(record.employeeId);
+      if (currentComp != 'all' && (emp.email == 'admin@company.com' || emp.id == 'admin_super_account')) {
+        continue;
+      }
       
       // Check In event
       activities.add(
@@ -746,10 +753,16 @@ class RecentActivitiesList extends StatelessWidget {
 
     // 2. Process Requests
     for (final req in provider.allCompanyRequests) {
+      if (req.companyCode != null && req.companyCode!.isNotEmpty && currentComp.isNotEmpty && currentComp != 'all') {
+        if (req.companyCode!.toLowerCase() != currentComp) continue;
+      }
       if (req.employeeId != null && !companyEmpIds.contains(req.employeeId)) {
         continue;
       }
       final emp = getEmployee(req.employeeId);
+      if (currentComp != 'all' && (emp.email == 'admin@company.com' || emp.id == 'admin_super_account')) {
+        continue;
+      }
       DateTime? reqTime;
       if (req.createdAt != null && req.createdAt!.isNotEmpty) {
         reqTime = DateTime.tryParse(req.createdAt!);
