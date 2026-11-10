@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/hr_models.dart';
+import '../../models/company_license.dart';
 import '../../providers/attendance_provider.dart';
 import '../../services/firebase_service.dart';
 import '../../services/windows_background_service.dart';
@@ -267,11 +268,44 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final portCtrl = TextEditingController(text: device?.port.toString() ?? '4370');
     final pwdCtrl = TextEditingController(text: device?.password.toString() ?? '0');
     bool isEnabled = device?.isEnabled ?? true;
-    String selectedCompany = (device?.companyCode.isNotEmpty == true)
-        ? device!.companyCode
-        : (provider.currentCompanyCode != 'all'
-            ? provider.currentCompanyCode
-            : (provider.allCompanies.isNotEmpty ? provider.allCompanies.first.companyCode : ''));
+    final currentCompanyCode = provider.currentCompanyCode.trim().toLowerCase();
+
+    // Deduplicate companies by lowercase companyCode
+    final Map<String, CompanyLicense> uniqueCompanies = {};
+    for (final c in provider.allCompanies) {
+      final code = c.companyCode.trim().toLowerCase();
+      if (code.isNotEmpty && !uniqueCompanies.containsKey(code)) {
+        uniqueCompanies[code] = c;
+      }
+    }
+    // Ensure current company exists in the map
+    if (currentCompanyCode.isNotEmpty && currentCompanyCode != 'all' && !uniqueCompanies.containsKey(currentCompanyCode)) {
+      uniqueCompanies[currentCompanyCode] = provider.currentLicense ??
+          CompanyLicense.defaultLicense(code: currentCompanyCode);
+    }
+
+    // Company scoping:
+    // If Super Admin, can manage across all companies.
+    // If company admin, only their own company is allowed.
+    final List<CompanyLicense> allowedCompanies = provider.isSuperAdmin
+        ? uniqueCompanies.values.toList()
+        : uniqueCompanies.values
+            .where((c) => c.companyCode.trim().toLowerCase() == currentCompanyCode)
+            .toList();
+
+    if (allowedCompanies.isEmpty) {
+      final fallbackCode = (currentCompanyCode.isNotEmpty && currentCompanyCode != 'all') ? currentCompanyCode : 'amada';
+      allowedCompanies.add(provider.currentLicense ?? CompanyLicense.defaultLicense(code: fallbackCode));
+    }
+
+    String selectedCompany;
+    if (!provider.isSuperAdmin) {
+      selectedCompany = (currentCompanyCode.isNotEmpty && currentCompanyCode != 'all') ? currentCompanyCode : 'amada';
+    } else {
+      selectedCompany = (device?.companyCode.isNotEmpty == true)
+          ? device!.companyCode.trim().toLowerCase()
+          : (currentCompanyCode != 'all' ? currentCompanyCode : allowedCompanies.first.companyCode);
+    }
 
     bool isTestingModal = false;
     ZkDeviceInfo? testResult;
@@ -339,19 +373,19 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                           isDense: true,
                         ),
                       ),
-                      if (provider.allCompanies.length > 1) ...[
+                      if (allowedCompanies.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
-                          initialValue: provider.allCompanies.any((c) => c.companyCode.toLowerCase() == selectedCompany.toLowerCase())
-                              ? provider.allCompanies.firstWhere((c) => c.companyCode.toLowerCase() == selectedCompany.toLowerCase()).companyCode
-                              : (provider.allCompanies.isNotEmpty ? provider.allCompanies.first.companyCode : null),
+                          initialValue: allowedCompanies.any((c) => c.companyCode.toLowerCase() == selectedCompany.toLowerCase())
+                              ? allowedCompanies.firstWhere((c) => c.companyCode.toLowerCase() == selectedCompany.toLowerCase()).companyCode
+                              : allowedCompanies.first.companyCode,
                           decoration: InputDecoration(
                             labelText: provider.translate('company'),
                             prefixIcon: const Icon(Icons.business_outlined, size: 20),
                             border: const OutlineInputBorder(),
                             isDense: true,
                           ),
-                          items: provider.allCompanies.map((c) {
+                          items: allowedCompanies.map((c) {
                             return DropdownMenuItem<String>(
                               value: c.companyCode,
                               child: Text(c.companyName.isNotEmpty ? c.companyName : c.companyCode),
@@ -506,6 +540,12 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                                     return;
                                   }
 
+                                  final targetComp = provider.isSuperAdmin
+                                      ? selectedCompany.trim().toLowerCase()
+                                      : (currentCompanyCode.isNotEmpty && currentCompanyCode != 'all'
+                                          ? currentCompanyCode
+                                          : selectedCompany.trim().toLowerCase());
+
                                   if (device != null) {
                                     final updated = device.copyWith(
                                       name: name,
@@ -514,7 +554,7 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                                       password: pwd,
                                       isEnabled: isEnabled,
                                       cachedInfo: testResult ?? device.cachedInfo,
-                                      companyCode: selectedCompany.trim().toLowerCase(),
+                                      companyCode: targetComp,
                                     );
                                     await _zkService.updateDevice(updated);
                                   } else {
@@ -526,7 +566,7 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                                       password: pwd,
                                       isEnabled: isEnabled,
                                       cachedInfo: testResult,
-                                      companyCode: selectedCompany.trim().toLowerCase(),
+                                      companyCode: targetComp,
                                     );
                                     await _zkService.addDevice(newDev);
                                   }
@@ -585,9 +625,11 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final subtextColor = isDark ? Colors.white60 : const Color(0xFF64748B);
 
     final currentCompany = provider.currentCompanyCode.trim().toLowerCase();
-    final devices = _zkService.devices
-        .where((d) => d.companyCode.trim().toLowerCase() == currentCompany || d.companyCode.isEmpty)
-        .toList();
+    final devices = _zkService.devices.where((d) {
+      if (provider.isSuperAdmin && currentCompany == 'all') return true;
+      final devComp = d.companyCode.trim().toLowerCase();
+      return devComp == currentCompany || devComp.isEmpty;
+    }).toList();
     final onlineCount = devices.where((d) => d.cachedInfo?.isConnected == true).length;
 
     return SingleChildScrollView(
