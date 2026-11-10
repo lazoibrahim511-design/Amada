@@ -818,9 +818,24 @@ class AttendanceProvider with ChangeNotifier {
     );
   }
 
+  static bool isMockRequestId(String id, [String? date, String? type]) {
+    final cleanId = id.trim().toLowerCase();
+    if (cleanId == 'req_1' || cleanId == 'req_2' || cleanId == 'req_3' || cleanId == 'req_4') return true;
+    if (cleanId.startsWith('req_') && cleanId.length <= 8) return true;
+    if (date != null && type != null) {
+      if ((date == 'May 14, 2026' && type == 'Sick Leave') ||
+          (date == 'June 15 - June 18, 2026' && type == 'Annual Leave') ||
+          (date == 'May 28, 2026' && type == 'Overtime Approval') ||
+          (date == 'May 08, 2026' && type == 'Forgot to Clock Out')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   List<Request> get allCompanyRequests {
     if (_currentCompanyCode == 'all') {
-      return List.unmodifiable(_allCompanyRequests);
+      return List.unmodifiable(_allCompanyRequests.where((r) => !isMockRequestId(r.id, r.date, r.type)));
     }
     final comp = _currentCompanyCode.trim().toLowerCase();
     final companyEmpIdentifiers = employees.expand((e) => [
@@ -834,6 +849,7 @@ class AttendanceProvider with ChangeNotifier {
 
     return List.unmodifiable(
       _allCompanyRequests.where((r) {
+        if (isMockRequestId(r.id, r.date, r.type)) return false;
         if (r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
           return r.companyCode!.trim().toLowerCase() == comp;
         }
@@ -1005,8 +1021,14 @@ class AttendanceProvider with ChangeNotifier {
   List<Request> get requests {
     final currentComp = _currentCompanyCode.trim().toLowerCase();
     final list = _allRequestsMap[_employeeId] ?? [];
-    if (currentComp.isEmpty || currentComp == 'all') return list;
-    return list.where((r) => r.companyCode == null || r.companyCode!.isEmpty || r.companyCode!.trim().toLowerCase() == currentComp).toList();
+    return list.where((r) {
+      if (isMockRequestId(r.id, r.date, r.type)) return false;
+      if (currentComp.isEmpty || currentComp == 'all') return true;
+      if (r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        return r.companyCode!.trim().toLowerCase() == currentComp;
+      }
+      return currentComp == 'amada';
+    }).toList();
   }
   List<Request> get allRequests => allCompanyRequests;
   String get currentLanguage => _currentLanguage;
@@ -1366,37 +1388,8 @@ class AttendanceProvider with ChangeNotifier {
     debugPrint('Firebase is available. Syncing database...');
     _isLoading = true;
 
-    // 1. Prepare default requests to seed if empty
-    final defaultRequests = [
-      Request(
-        id: 'req_1',
-        type: 'Sick Leave',
-        date: 'May 14, 2026',
-        duration: '1 Day',
-        status: 'Approved',
-      ),
-      Request(
-        id: 'req_2',
-        type: 'Annual Leave',
-        date: 'June 15 - June 18, 2026',
-        duration: '4 Days',
-        status: 'Pending',
-      ),
-      Request(
-        id: 'req_3',
-        type: 'Overtime Approval',
-        date: 'May 28, 2026',
-        duration: '2.5 Hours',
-        status: 'Approved',
-      ),
-      Request(
-        id: 'req_4',
-        type: 'Forgot to Clock Out',
-        date: 'May 08, 2026',
-        duration: 'Correction',
-        status: 'Approved',
-      ),
-    ];
+    // 1. Prepare default requests (empty - never seed dummy requests into live accounts)
+    final defaultRequests = <Request>[];
 
     // Always ensure Super Admin is available in seed list if database needs initial seeding
     final seedEmployees = List<CompanyEmployee>.from(_employees);
@@ -1428,7 +1421,21 @@ class AttendanceProvider with ChangeNotifier {
       notifyListeners();
     }
 
-    // 3. Seed empty Firestore tables asynchronously in background without blocking startup
+    // 3. Purge legacy mock requests and seed initial schema if empty
+    unawaited(
+      _firebaseService.purgeLegacyMockRequests().then((count) {
+        if (count > 0) {
+          _allCompanyRequests.removeWhere((r) => isMockRequestId(r.id, r.date, r.type));
+          for (var list in _allRequestsMap.values) {
+            list.removeWhere((r) => isMockRequestId(r.id, r.date, r.type));
+          }
+          notifyListeners();
+        }
+      }).catchError((e) {
+        debugPrint('Background purge legacy mock requests: $e');
+      }),
+    );
+
     unawaited(
       _firebaseService
           .seedDefaultMockData(
@@ -3797,12 +3804,14 @@ class AttendanceProvider with ChangeNotifier {
       for (final idToTry in candidateIds) {
         final fetched = await _firebaseService.getUserRequests(idToTry, companyCode: cleanComp);
         if (fetched.isNotEmpty) {
-          final scoped = fetched.where((r) =>
-              cleanComp.isEmpty ||
-              cleanComp == 'all' ||
-              r.companyCode == null ||
-              r.companyCode!.isEmpty ||
-              r.companyCode!.trim().toLowerCase() == cleanComp).toList();
+          final scoped = fetched.where((r) {
+            if (isMockRequestId(r.id, r.date, r.type)) return false;
+            if (cleanComp.isEmpty || cleanComp == 'all') return true;
+            if (r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+              return r.companyCode!.trim().toLowerCase() == cleanComp;
+            }
+            return cleanComp == 'amada';
+          }).toList();
           _allRequestsMap[cleanId] = scoped;
           return scoped;
         }
@@ -3824,11 +3833,14 @@ class AttendanceProvider with ChangeNotifier {
   List<Request> getRequestsForEmployee(String empId, {String? companyCode}) {
     final comp = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
     final list = _allRequestsMap[empId] ?? [];
-    if (comp.isEmpty || comp == 'all') return list;
-    return list.where((r) =>
-        r.companyCode == null ||
-        r.companyCode!.isEmpty ||
-        r.companyCode!.trim().toLowerCase() == comp).toList();
+    return list.where((r) {
+      if (isMockRequestId(r.id, r.date, r.type)) return false;
+      if (comp.isEmpty || comp == 'all') return true;
+      if (r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        return r.companyCode!.trim().toLowerCase() == comp;
+      }
+      return comp == 'amada';
+    }).toList();
   }
 
   // Profile image management
@@ -4233,11 +4245,17 @@ class AttendanceProvider with ChangeNotifier {
     }
 
     _allRequestsMap[empId]?.removeWhere((r) => r.id == rId);
+    for (var list in _allRequestsMap.values) {
+      list.removeWhere((r) => r.id == rId);
+    }
     _allCompanyRequests.removeWhere((r) => r.id == rId);
     notifyListeners();
 
     if (_firebaseService.isAvailable) {
       await _firebaseService.deleteRequest(empId, rId, companyCode: targetReq?.companyCode);
+      if (empId != _employeeId) {
+        await _firebaseService.deleteRequest(_employeeId, rId, companyCode: _currentCompanyCode);
+      }
     }
 
     if (targetReq != null && targetReq.status == 'Approved') {
@@ -4845,6 +4863,26 @@ class AttendanceProvider with ChangeNotifier {
     }
 
     recalculateAllStats();
+    notifyListeners();
+  }
+
+  /// Upsert a Request directly into local state for testing and immediate local reactivity
+  void upsertRequestLocally(Request request) {
+    final idxAll = _allCompanyRequests.indexWhere((r) => r.id == request.id);
+    if (idxAll != -1) {
+      _allCompanyRequests[idxAll] = request;
+    } else {
+      _allCompanyRequests.insert(0, request);
+    }
+    if (request.employeeId != null && request.employeeId!.isNotEmpty) {
+      _allRequestsMap[request.employeeId!] ??= [];
+      final idxMap = _allRequestsMap[request.employeeId!]!.indexWhere((r) => r.id == request.id);
+      if (idxMap != -1) {
+        _allRequestsMap[request.employeeId!]![idxMap] = request;
+      } else {
+        _allRequestsMap[request.employeeId!]!.insert(0, request);
+      }
+    }
     notifyListeners();
   }
 

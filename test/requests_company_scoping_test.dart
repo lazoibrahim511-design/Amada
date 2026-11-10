@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:attendance_app/models/hr_models.dart';
 import 'package:attendance_app/models/attendance_record.dart';
+import 'package:attendance_app/models/request_model.dart';
 import 'package:attendance_app/providers/attendance_provider.dart';
 import 'package:attendance_app/services/zkteco_service.dart';
 
@@ -278,6 +279,64 @@ void main() {
             r.checkIn.minute == 15),
         isFalse,
       );
+    });
+
+    test('Mock/dummy requests (req_1..req_4) are strictly excluded and client admin starts clean', () async {
+      SharedPreferences.setMockInitialValues({});
+      final provider = AttendanceProvider(initialCompanyCode: 'bestenergy');
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final beAdmin = CompanyEmployee(
+        id: 'bestenergy_admin',
+        name: 'Best Energy Admin',
+        email: 'admin@bestenergy.com',
+        position: 'Administrator',
+        role: 'admin',
+        companyCode: 'bestenergy',
+      );
+
+      await provider.addEmployee(beAdmin);
+      await provider.loginAsEmployee(beAdmin);
+
+      // Verify isMockRequestId identifies legacy mock requests
+      expect(AttendanceProvider.isMockRequestId('req_1'), isTrue);
+      expect(AttendanceProvider.isMockRequestId('req_2'), isTrue);
+      expect(AttendanceProvider.isMockRequestId('req_3'), isTrue);
+      expect(AttendanceProvider.isMockRequestId('req_4'), isTrue);
+      expect(
+        AttendanceProvider.isMockRequestId('custom_id', 'May 14, 2026', 'Sick Leave'),
+        isTrue,
+      );
+      expect(
+        AttendanceProvider.isMockRequestId('req_${DateTime.now().millisecondsSinceEpoch}'),
+        isFalse,
+      );
+
+      // Simulate legacy mock requests being injected in in-memory caches
+      final mock1 = Request(
+        id: 'req_1',
+        type: 'Sick Leave',
+        date: 'May 14, 2026',
+        duration: '1 Day',
+        status: 'Approved',
+        employeeId: 'bestenergy_admin',
+      );
+      final mock2 = Request(
+        id: 'req_2',
+        type: 'Annual Leave',
+        date: 'June 15 - June 18, 2026',
+        duration: '4 Days',
+        status: 'Pending',
+        employeeId: 'bestenergy_admin',
+      );
+
+      // Even if inserted into local structures, getters must filter them out
+      provider.upsertRequestLocally(mock1);
+      provider.upsertRequestLocally(mock2);
+
+      expect(provider.requests.isEmpty, isTrue);
+      expect(provider.allCompanyRequests.isEmpty, isTrue);
+      expect(provider.pendingApprovalsCount, equals(0));
     });
   });
 }

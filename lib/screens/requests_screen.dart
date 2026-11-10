@@ -1016,7 +1016,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                   children: [
                     GestureDetector(
                       onTap: () async {
-                        final empId = provider.currentEmployee?.id;
+                        final empId = request.employeeId ?? provider.currentEmployee?.id;
                         if (empId != null) {
                           await _confirmAndDeleteRequest(
                             context: context,

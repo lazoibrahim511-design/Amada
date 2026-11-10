@@ -1308,6 +1308,48 @@ class FirebaseService {
     }
   }
 
+  // --- Purge Legacy Mock/Dummy Requests ---
+  Future<int> purgeLegacyMockRequests() async {
+    if (!isAvailable) return 0;
+    try {
+      final snap = await _firestore.collectionGroup('user_requests').get();
+      final batch = _firestore.batch();
+      int deleteCount = 0;
+
+      for (var doc in snap.docs) {
+        final id = doc.id.trim().toLowerCase();
+        final data = doc.data();
+        final type = data['type']?.toString().trim() ?? '';
+        final date = data['date']?.toString().trim() ?? '';
+
+        final isMockId = id == 'req_1' ||
+            id == 'req_2' ||
+            id == 'req_3' ||
+            id == 'req_4' ||
+            (id.startsWith('req_') && id.length <= 8);
+
+        final isMockContent = (date == 'May 14, 2026' && type == 'Sick Leave') ||
+            (date == 'June 15 - June 18, 2026' && type == 'Annual Leave') ||
+            (date == 'May 28, 2026' && type == 'Overtime Approval') ||
+            (date == 'May 08, 2026' && type == 'Forgot to Clock Out');
+
+        if (isMockId || isMockContent) {
+          batch.delete(doc.reference);
+          deleteCount++;
+        }
+      }
+
+      if (deleteCount > 0) {
+        await batch.commit();
+        debugPrint('Successfully purged $deleteCount legacy mock requests from Firestore.');
+      }
+      return deleteCount;
+    } catch (e) {
+      debugPrint('Error purging legacy mock requests: $e');
+      return 0;
+    }
+  }
+
   // --- Database Initialization Seeding ---
   Future<void> seedDefaultMockData({
     required List<OrgStructure> structures,
@@ -1373,7 +1415,7 @@ class FirebaseService {
       }
 
       // 5. Seed Attendance Records for testUserId
-      if (recordSnap.docs.isEmpty) {
+      if (recordSnap.docs.isEmpty && userRecords.isNotEmpty) {
         debugPrint(
           'Seeding attendance records for $testUserId in Firestore...',
         );
@@ -1382,8 +1424,8 @@ class FirebaseService {
         }
       }
 
-      // 6. Seed Requests for testUserId
-      if (reqSnap.docs.isEmpty) {
+      // 6. Seed Requests for testUserId (only if userRequests provided and non-empty)
+      if (reqSnap.docs.isEmpty && userRequests.isNotEmpty) {
         debugPrint('Seeding requests for $testUserId in Firestore...');
         for (var req in userRequests) {
           await saveRequest(testUserId, req);
