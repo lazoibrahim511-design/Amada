@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -22,16 +23,39 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = true;
   bool _isLoggingIn = false;
   String? _errorMessage;
+  Timer? _companyDebounce;
 
   @override
   void initState() {
     super.initState();
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
-    _companyCodeController = TextEditingController(text: provider.currentCompanyCode);
+    final initialCode = provider.currentCompanyCode.trim().toLowerCase();
+    _companyCodeController = TextEditingController(
+      text: (initialCode.isNotEmpty && initialCode != 'all') ? initialCode : 'amada',
+    );
+    if (initialCode.isNotEmpty && initialCode != 'all') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          provider.loadCompanyLicense(initialCode);
+        }
+      });
+    }
+  }
+
+  void _onCompanyCodeChanged(String value) {
+    _companyDebounce?.cancel();
+    _companyDebounce = Timer(const Duration(milliseconds: 400), () {
+      final trimmed = value.trim().toLowerCase();
+      if (trimmed.isNotEmpty && trimmed != 'all') {
+        final provider = Provider.of<AttendanceProvider>(context, listen: false);
+        provider.loadCompanyLicense(trimmed);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _companyDebounce?.cancel();
     _companyCodeController.dispose();
     _identifierController.dispose();
     _passwordController.dispose();
@@ -40,6 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
+    _companyDebounce?.cancel();
 
     setState(() {
       _isLoggingIn = true;
@@ -350,6 +375,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(height: 8),
                                   TextFormField(
                                     controller: _companyCodeController,
+                                    onChanged: _onCompanyCodeChanged,
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,

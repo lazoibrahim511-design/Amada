@@ -1286,9 +1286,12 @@ class _HomeScreenWebState extends State<HomeScreenWeb> {
     final now = DateTime.now();
     final dateStr = DateFormat('EEEE, MMM d, yyyy').format(now);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      runAlignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 16,
+      runSpacing: 12,
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,

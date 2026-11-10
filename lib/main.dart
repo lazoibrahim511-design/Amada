@@ -30,6 +30,10 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final initialTheme = prefs.getString('app_theme_preference') ?? 'light';
   final initialLang = prefs.getString('app_language') ?? 'en';
+  final savedCompany = prefs.getString('app_company_code');
+  final initialCompanyCode = (savedCompany != null && savedCompany.trim().isNotEmpty && savedCompany.trim().toLowerCase() != 'all')
+      ? savedCompany.trim().toLowerCase()
+      : 'amada';
   final initialLoggedIn = prefs.getBool('isLoggedIn') ?? false;
   final initialEmployeeId = prefs.getString('loggedInEmployeeId');
   final initialUserName = prefs.getString('loggedInUserName');
@@ -69,6 +73,7 @@ void main() async {
   runApp(MyApp(
     initialThemePreference: initialTheme,
     initialLanguage: initialLang,
+    initialCompanyCode: initialCompanyCode,
     initialLoggedIn: initialLoggedIn,
     initialEmployeeId: initialEmployeeId,
     initialUserName: initialUserName,
@@ -88,6 +93,7 @@ final GlobalKey<NavigatorState> rootNavigatorKey =
 class MyApp extends StatefulWidget {
   final String initialThemePreference;
   final String initialLanguage;
+  final String initialCompanyCode;
   final bool initialLoggedIn;
   final String? initialEmployeeId;
   final String? initialUserName;
@@ -101,6 +107,7 @@ class MyApp extends StatefulWidget {
     super.key,
     this.initialThemePreference = 'light',
     this.initialLanguage = 'en',
+    this.initialCompanyCode = 'amada',
     this.initialLoggedIn = false,
     this.initialEmployeeId,
     this.initialUserName,
@@ -124,6 +131,7 @@ class _MyAppState extends State<MyApp> {
     _attendanceProvider = AttendanceProvider(
       initialThemePreference: widget.initialThemePreference,
       initialLanguage: widget.initialLanguage,
+      initialCompanyCode: widget.initialCompanyCode,
       initialLoggedIn: widget.initialLoggedIn,
       initialEmployeeId: widget.initialEmployeeId,
       initialUserName: widget.initialUserName,

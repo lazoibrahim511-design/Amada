@@ -144,7 +144,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                   ],
                                 ),
                                 padding: EdgeInsets.zero,
-                                child: ListTile(
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: ListTile(
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 8,
@@ -293,6 +295,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                     ),
                                   ),
                                 ),
+                              ),
                               ),
                             );
                           },

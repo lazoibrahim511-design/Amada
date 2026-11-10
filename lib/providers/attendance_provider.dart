@@ -116,6 +116,9 @@ class AttendanceProvider with ChangeNotifier {
       await prefs.setBool('isLoggedIn', loggedIn);
       await prefs.setString('app_language', _currentLanguage);
       await prefs.setString('app_theme_preference', _themePreference);
+      if (_currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all') {
+        await prefs.setString('app_company_code', _currentCompanyCode);
+      }
       if (loggedIn) {
         await prefs.setString('loggedInEmployeeId', empId);
         if (name != null) await prefs.setString('loggedInUserName', name);
@@ -161,8 +164,8 @@ class AttendanceProvider with ChangeNotifier {
         _themePreference = savedTheme;
       }
       final savedCompany = prefs.getString('app_company_code');
-      if (savedCompany != null && savedCompany.isNotEmpty) {
-        _currentCompanyCode = savedCompany;
+      if (savedCompany != null && savedCompany.trim().isNotEmpty && savedCompany.trim().toLowerCase() != 'all') {
+        _currentCompanyCode = savedCompany.trim().toLowerCase();
       }
       await loadCompanyLicense(_currentCompanyCode);
       final isLoggedInSaved = prefs.getBool('isLoggedIn') ?? false;
@@ -231,7 +234,7 @@ class AttendanceProvider with ChangeNotifier {
 
     try {
       final code = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
-      if (code.isNotEmpty && code != _currentCompanyCode) {
+      if (code.isNotEmpty && code != 'all') {
         await setCompanyCode(code);
       }
 
@@ -297,6 +300,13 @@ class AttendanceProvider with ChangeNotifier {
           return translate('prevent_login_clocking');
         }
 
+        if (match.companyCode.isNotEmpty && match.companyCode.toLowerCase() != 'all') {
+          final empComp = match.companyCode.trim().toLowerCase();
+          if (_currentCompanyCode != empComp) {
+            await setCompanyCode(empComp);
+          }
+        }
+
         _employeeId = match.id;
         _userName = match.name;
         _userTitle = match.position;
@@ -347,6 +357,9 @@ class AttendanceProvider with ChangeNotifier {
   }
 
   Future<void> loginAsEmployee(CompanyEmployee employee) async {
+    if (employee.companyCode.isNotEmpty && employee.companyCode.toLowerCase() != 'all') {
+      await setCompanyCode(employee.companyCode.toLowerCase());
+    }
     _employeeId = employee.id;
     _userName = employee.name;
     _userTitle = employee.position;
@@ -403,7 +416,13 @@ class AttendanceProvider with ChangeNotifier {
     _chatRoomContactIds.clear();
 
     _isLoggedIn = false;
-    _saveAuthSession(false, '');
+    await _saveAuthSession(false, '');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_currentCompanyCode.isNotEmpty && _currentCompanyCode != 'all') {
+        await prefs.setString('app_company_code', _currentCompanyCode);
+      }
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -903,7 +922,9 @@ class AttendanceProvider with ChangeNotifier {
     _currentCompanyCode = clean;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('app_company_code', clean);
+      if (clean != 'all') {
+        await prefs.setString('app_company_code', clean);
+      }
     } catch (_) {}
     await loadCompanyLicense(clean);
     if (changed) {
@@ -1105,6 +1126,7 @@ class AttendanceProvider with ChangeNotifier {
   AttendanceProvider({
     String initialThemePreference = 'light',
     String initialLanguage = 'en',
+    String initialCompanyCode = 'amada',
     bool initialLoggedIn = false,
     String? initialEmployeeId,
     String? initialUserName,
@@ -1117,6 +1139,10 @@ class AttendanceProvider with ChangeNotifier {
     _themePreference = initialThemePreference;
     if (initialLanguage.isNotEmpty) {
       _currentLanguage = initialLanguage;
+    }
+    final cleanComp = initialCompanyCode.trim().toLowerCase();
+    if (cleanComp.isNotEmpty && cleanComp != 'all') {
+      _currentCompanyCode = cleanComp;
     }
     _isLoggedIn = initialLoggedIn;
     if (initialEmployeeId != null && initialEmployeeId.isNotEmpty) {
