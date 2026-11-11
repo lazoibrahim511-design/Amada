@@ -2728,6 +2728,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   final isReqClosed = isDayMonthClosed || provider.isDateStringInClosedMonth(req.date);
                                   final canManageThis = !isReqClosed &&
                                       (provider.isHRManager ||
+                                          AttendanceProvider.isEmployeeHROrAdmin(provider.currentEmployee) ||
                                           provider.canEditCompanyInfo ||
                                           provider.isSuperAdmin ||
                                           provider.currentEmployee?.role == 'hr' ||

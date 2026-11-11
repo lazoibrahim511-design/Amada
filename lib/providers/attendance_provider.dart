@@ -715,8 +715,14 @@ class AttendanceProvider with ChangeNotifier {
       final startPart = parts.first.trim();
       final endPart = parts.last.trim();
 
-      final startDate = parseFlexibleDate(startPart);
-      final endDate = parseFlexibleDate(endPart);
+      DateTime? endDate = parseFlexibleDate(endPart);
+      DateTime? startDate = parseFlexibleDate(startPart);
+
+      // If startPart does not include a 4-digit year, inherit the year from endDate
+      if (endDate != null && !startPart.contains(RegExp(r'\d{4}'))) {
+        startDate = parseFlexibleDate('$startPart, ${endDate.year}') ??
+            (startDate != null ? DateTime(endDate.year, startDate.month, startDate.day) : null);
+      }
 
       if (startDate != null && isMonthClosed(startDate)) return true;
       if (endDate != null && isMonthClosed(endDate)) return true;
@@ -822,6 +828,7 @@ class AttendanceProvider with ChangeNotifier {
     final cleanId = id.trim().toLowerCase();
     if (cleanId == 'req_1' || cleanId == 'req_2' || cleanId == 'req_3' || cleanId == 'req_4') return true;
     if (cleanId.startsWith('req_') && cleanId.length <= 8) return true;
+    if (cleanId.isEmpty || cleanId == 'mock' || cleanId == 'test') return true;
     if (date != null && type != null) {
       if ((date == 'May 14, 2026' && type == 'Sick Leave') ||
           (date == 'June 15 - June 18, 2026' && type == 'Annual Leave') ||
@@ -1010,6 +1017,38 @@ class AttendanceProvider with ChangeNotifier {
   static bool isSystemAdminAccount(CompanyEmployee? emp) {
     if (emp == null) return false;
     return isSuperAdminUser(emp) || isDefaultCompanyAdminUser(emp);
+  }
+
+  /// Whether an employee is an HR manager, HR administrator, or has an HR/Administration title in any supported language (English, Kurdish, Arabic).
+  static bool isEmployeeHROrAdmin(CompanyEmployee? emp) {
+    if (emp == null) return false;
+    if (isSystemAdminAccount(emp)) return true;
+    final role = emp.role.toLowerCase().trim();
+    if (role == 'hr' ||
+        role == 'admin' ||
+        role == 'super_admin' ||
+        role == 'superadmin' ||
+        emp.email.toLowerCase().trim() == 'admin@company.com') {
+      return true;
+    }
+    final pos = emp.position.toLowerCase().trim();
+    if (pos.contains('hr') ||
+        pos.contains('human resource') ||
+        pos.contains('کارگێڕ') ||
+        pos.contains('سەرچاوە مرۆیی') ||
+        pos.contains('سەرچاوەی مرۆیی') ||
+        pos.contains('ئێچ ئاڕ') ||
+        pos.contains('ئێچ ئار') ||
+        pos.contains('موارد بشرية') ||
+        pos.contains('إداري') ||
+        pos.contains('اداري') ||
+        pos.contains('مدير اداري') ||
+        pos.contains('مدير إداري') ||
+        pos.contains('اداره') ||
+        pos.contains('ئیدارە')) {
+      return true;
+    }
+    return false;
   }
 
   List<OrgStructure> get structures => List.unmodifiable(
@@ -1269,11 +1308,22 @@ class AttendanceProvider with ChangeNotifier {
   /// Whether the logged-in user is an HR manager/admin who can register/delete Face ID
   bool get isHRManager {
     final emp = currentEmployee;
-    if (emp == null) return false;
-    final role = emp.role.toLowerCase().trim();
-    if (role == 'hr' || role == 'admin' || role == 'super_admin' || role == 'superadmin' || emp.email.toLowerCase() == 'admin@company.com') return true;
-    final pos = emp.position.toLowerCase();
-    if (pos.contains('hr') || pos.contains('human resource')) return true;
+    if (emp != null && isEmployeeHROrAdmin(emp)) return true;
+    final role = _role.toLowerCase().trim();
+    if (role == 'hr' || role == 'admin' || role == 'super_admin' || role == 'superadmin' || _email.toLowerCase().trim() == 'admin@company.com') return true;
+    final pos = _position.toLowerCase().trim();
+    if (pos.contains('hr') ||
+        pos.contains('human resource') ||
+        pos.contains('کارگێڕ') ||
+        pos.contains('سەرچاوە مرۆیی') ||
+        pos.contains('سەرچاوەی مرۆیی') ||
+        pos.contains('ئێچ ئاڕ') ||
+        pos.contains('ئێچ ئار') ||
+        pos.contains('موارد بشرية') ||
+        pos.contains('إداري') ||
+        pos.contains('اداري') ||
+        pos.contains('اداره') ||
+        pos.contains('ئیدارە')) return true;
     return isSuperAdmin;
   }
 
@@ -4187,6 +4237,7 @@ class AttendanceProvider with ChangeNotifier {
     final isSubmitterHR = isHRManager ||
         isSuperAdmin ||
         isSystemAdminAccount(current) ||
+        isEmployeeHROrAdmin(current) ||
         (current != null &&
             (current.role.toLowerCase() == 'hr' ||
                 current.role.toLowerCase() == 'admin' ||
@@ -4423,7 +4474,10 @@ class AttendanceProvider with ChangeNotifier {
       }
     }
 
-    final isHR = currentEmployee?.role == 'hr' ||
+    final isHR = isHRManager ||
+        isSuperAdmin ||
+        isEmployeeHROrAdmin(currentEmployee) ||
+        currentEmployee?.role == 'hr' ||
         currentEmployee?.role == 'admin' ||
         canEditCompanyInfo;
     final isSupervisor = currentEmployee?.role == 'supervisor';

@@ -224,5 +224,46 @@ void main() {
       expect(req.hrStatus, equals('Approved'));
       expect(req.supervisorStatus, equals('Approved'));
     });
+
+    test('When employee with Kurdish position "بەڕێوەبەری کارگێڕی" submits request, it is recognized as HR and auto-approved', () async {
+      final provider = AttendanceProvider(initialCompanyCode: 'bestenergy');
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final bilalKurdishHR = CompanyEmployee(
+        id: 'be_bilal_ku',
+        name: 'بیلال',
+        email: 'bilal@bestenergy.com',
+        position: 'بەڕێوەبەری کارگێڕی',
+        role: 'employee', // even if role is employee in database, position gives full HR status
+        companyCode: 'bestenergy',
+      );
+
+      await provider.addEmployee(bilalKurdishHR);
+
+      // Login as Bilal
+      await provider.loginAsEmployee(bilalKurdishHR);
+      expect(AttendanceProvider.isEmployeeHROrAdmin(bilalKurdishHR), isTrue);
+      expect(provider.isHRManager, isTrue);
+
+      // Bilal submits Annual Leave request for himself
+      await provider.submitRequest(
+        'Annual Leave',
+        'November 15 - November 18, 2026',
+        '4 Days',
+        employeeId: 'be_bilal_ku',
+        note: 'Annual leave',
+      );
+
+      final reqs = provider.allCompanyRequests
+          .where((r) => r.employeeId == 'be_bilal_ku')
+          .toList();
+      expect(reqs, isNotEmpty);
+      final req = reqs.first;
+
+      // Must be auto approved!
+      expect(req.status, equals('Approved'));
+      expect(req.hrStatus, equals('Approved'));
+      expect(req.supervisorStatus, equals('Approved'));
+    });
   });
 }

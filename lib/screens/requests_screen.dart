@@ -341,6 +341,8 @@ DateTime? _parseRequestStartDate(String dateStr) {
   List<CompanyEmployee> _getSubordinates(AttendanceProvider provider) {
     final currentUser = provider.currentEmployee;
     final isHR =
+        provider.isHRManager ||
+        AttendanceProvider.isEmployeeHROrAdmin(currentUser) ||
         currentUser?.role == 'hr' ||
         currentUser?.role == 'admin' ||
         provider.canEditCompanyInfo ||
@@ -483,7 +485,8 @@ DateTime? _parseRequestStartDate(String dateStr) {
         currentUser?.role == 'hr' ||
         currentUser?.role == 'admin' ||
         provider.canEditCompanyInfo ||
-        provider.isHRManager;
+        provider.isHRManager ||
+        AttendanceProvider.isEmployeeHROrAdmin(currentUser);
 
     for (var r in provider.allCompanyRequests) {
       if (r.employeeId != null) {
@@ -940,7 +943,8 @@ DateTime? _parseRequestStartDate(String dateStr) {
         currentUser?.role == 'hr' ||
         currentUser?.role == 'admin' ||
         provider.canEditCompanyInfo ||
-        provider.isHRManager;
+        provider.isHRManager ||
+        AttendanceProvider.isEmployeeHROrAdmin(currentUser);
 
     if (requests.isEmpty) {
       return Center(
@@ -1059,6 +1063,42 @@ DateTime? _parseRequestStartDate(String dateStr) {
                             onTap: () async {
                               final empId = request.employeeId ?? provider.currentEmployee?.id;
                               if (empId != null) {
+                                await provider.updateRequestStatus(empId, request.id, 'Rejected');
+                                setState(() {});
+                                if (context.mounted) {
+                                  AppSnackBar.error(context, provider.translate('request_rejected'));
+                                }
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              margin: const EdgeInsets.only(bottom: 8, right: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.close_rounded, size: 12, color: Colors.redAccent),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    provider.translate('reject'),
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () async {
+                              final empId = request.employeeId ?? provider.currentEmployee?.id;
+                              if (empId != null) {
                                 await provider.updateRequestStatus(empId, request.id, 'Approved');
                                 setState(() {});
                                 if (context.mounted) {
@@ -1074,13 +1114,20 @@ DateTime? _parseRequestStartDate(String dateStr) {
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: const Color(0xFF2EBD96).withValues(alpha: 0.3)),
                               ),
-                              child: Text(
-                                provider.translate('approve'),
-                                style: const TextStyle(
-                                  color: Color(0xFF2EBD96),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.check_rounded, size: 12, color: Color(0xFF2EBD96)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    provider.translate('approve'),
+                                    style: const TextStyle(
+                                      color: Color(0xFF2EBD96),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
