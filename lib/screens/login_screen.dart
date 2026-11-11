@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
 
     // 1. Check if any employee has Face ID enrolled
-    final enrolledEmployees = provider.employees
+    final enrolledEmployees = provider.companyUsers
         .where((e) => e.faceEmbedding != null && e.faceEmbedding!.isNotEmpty)
         .toList();
 
@@ -126,7 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final idText = _identifierController.text.trim();
     if (idText.isNotEmpty) {
       CompanyEmployee? matchingEmp;
-      for (final e in provider.employees) {
+      for (final e in provider.companyUsers) {
         if (e.email.trim().toLowerCase() == idText.toLowerCase() ||
             e.id.trim().toLowerCase() == idText.toLowerCase()) {
           matchingEmp = e;

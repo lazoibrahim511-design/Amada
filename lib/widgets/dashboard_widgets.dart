@@ -720,7 +720,7 @@ class RecentActivitiesList extends StatelessWidget {
         continue;
       }
       final emp = getEmployee(record.employeeId);
-      if (currentComp != 'all' && (emp.email == 'admin@company.com' || emp.id == 'admin_super_account')) {
+      if (currentComp != 'all' && (emp.email == 'admin@company.com' || emp.id == 'admin_super_account' || AttendanceProvider.isSystemAdminAccount(emp))) {
         continue;
       }
       
@@ -760,7 +760,7 @@ class RecentActivitiesList extends StatelessWidget {
         continue;
       }
       final emp = getEmployee(req.employeeId);
-      if (currentComp != 'all' && (emp.email == 'admin@company.com' || emp.id == 'admin_super_account')) {
+      if (currentComp != 'all' && (emp.email == 'admin@company.com' || emp.id == 'admin_super_account' || AttendanceProvider.isSystemAdminAccount(emp))) {
         continue;
       }
       DateTime? reqTime;

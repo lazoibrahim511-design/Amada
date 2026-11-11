@@ -31,7 +31,7 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
   Widget build(BuildContext context) {
     final provider = Provider.of<AttendanceProvider>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final allUsers = provider.employees;
+    final allUsers = provider.companyUsers;
 
     // Filter users for system accounts
     final filteredUsers = allUsers.where((user) {
@@ -1263,7 +1263,7 @@ class _SystemUsersTabState extends State<SystemUsersTab> {
       icon: Icons.face_retouching_natural,
       content: StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final currentUser = provider.employees.firstWhere(
+          final currentUser = provider.companyUsers.firstWhere(
             (e) => e.id == user.id,
             orElse: () => user,
           );

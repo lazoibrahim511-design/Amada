@@ -979,6 +979,39 @@ class AttendanceProvider with ChangeNotifier {
         pos == 'super admin';
   }
 
+  /// Whether an employee is a default company administrator created automatically on company creation.
+  static bool isDefaultCompanyAdminUser(CompanyEmployee? emp) {
+    if (emp == null) return false;
+    final id = emp.id.toLowerCase().trim();
+    final email = emp.email.toLowerCase().trim();
+    final role = emp.role.toLowerCase().trim();
+    final pos = emp.position.toLowerCase().trim();
+    final comp = emp.companyCode.toLowerCase().trim();
+
+    // 1. Explicit ID match: {companyCode}_admin, or ends with _admin with admin role, or 'admin'
+    if (comp.isNotEmpty && id == '${comp}_admin') return true;
+    if (id.endsWith('_admin') && (role == 'admin' || role == 'super_admin')) return true;
+    if (id == 'admin' && (role == 'admin' || role == 'super_admin')) return true;
+
+    // 2. Email match: admin@{companyCode}.com or starts with admin@ with admin role
+    if (comp.isNotEmpty && email == 'admin@$comp.com') return true;
+    if (email.startsWith('admin@') && (role == 'admin' || role == 'super_admin') && email != 'admin@company.com') {
+      return true;
+    }
+
+    // 3. Position title match for provisioned company administrator
+    if (pos == 'company administrator' && (role == 'admin' || role == 'super_admin')) return true;
+
+    return false;
+  }
+
+  /// Whether an employee is a system administration account (Super Admin or default Company Admin)
+  /// that manages the system/portal and should NOT be counted or shown as a regular staff employee in reports and payroll.
+  static bool isSystemAdminAccount(CompanyEmployee? emp) {
+    if (emp == null) return false;
+    return isSuperAdminUser(emp) || isDefaultCompanyAdminUser(emp);
+  }
+
   List<OrgStructure> get structures => List.unmodifiable(
         _structures.where((s) =>
             _currentCompanyCode == 'all' ||
@@ -999,6 +1032,14 @@ class AttendanceProvider with ChangeNotifier {
       );
   List<CompanyEmployee> get allEmployees => List.unmodifiable(_employees);
   List<CompanyEmployee> get employees => List.unmodifiable(
+        _employees.where((e) {
+          if (isSystemAdminAccount(e)) return false;
+          if (_currentCompanyCode == 'all') return true;
+          return e.companyCode.isEmpty ||
+              e.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase();
+        }),
+      );
+  List<CompanyEmployee> get companyUsers => List.unmodifiable(
         _employees.where((e) {
           if (isSuperAdminUser(e)) return false;
           if (_currentCompanyCode == 'all') return true;
@@ -3357,6 +3398,7 @@ class AttendanceProvider with ChangeNotifier {
     String currency = 'USD';
 
     for (var emp in employees) {
+      if (isSystemAdminAccount(emp)) continue;
       final report = generatePayrollReport(emp, month, bypassSnapshot: true);
       snapshots[emp.id] = report.toSnapshot();
       totalPayout += report.netEarnings;
@@ -5262,8 +5304,8 @@ class AttendanceProvider with ChangeNotifier {
 
     int sequence = 1;
     for (final emp in sorted) {
-      // Don't modify super admin account if present
-      if (emp.id == 'admin_super_account') continue;
+      // Don't modify super admin or system admin account if present
+      if (emp.id == 'admin_super_account' || isSystemAdminAccount(emp)) continue;
 
       final newId = sequence.toString();
       sequence++;

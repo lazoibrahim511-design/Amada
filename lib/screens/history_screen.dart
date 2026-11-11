@@ -60,7 +60,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
     final current = provider.currentEmployee;
     if (current != null &&
-        !AttendanceProvider.isSuperAdminUser(current) &&
+        !AttendanceProvider.isSystemAdminAccount(current) &&
         subordinates.any((e) => e.id == current.id)) {
       return current.id;
     }
@@ -83,7 +83,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     if (currentUser.role == 'hr' || currentUser.role == 'admin' || provider.canEditCompanyInfo) {
       final list = <CompanyEmployee>[];
-      if (!AttendanceProvider.isSuperAdminUser(currentUser)) {
+      if (!AttendanceProvider.isSystemAdminAccount(currentUser)) {
         list.add(currentUser);
       }
       for (var e in provider.employees) {
