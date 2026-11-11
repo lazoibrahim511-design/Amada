@@ -2726,11 +2726,62 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 itemBuilder: (context, index) {
                                   final req = requests[index];
                                   final isReqClosed = isDayMonthClosed || provider.isDateStringInClosedMonth(req.date);
+                                  final canManageThis = !isReqClosed &&
+                                      (provider.isHRManager ||
+                                          provider.canEditCompanyInfo ||
+                                          provider.isSuperAdmin ||
+                                          provider.currentEmployee?.role == 'hr' ||
+                                          provider.currentEmployee?.role == 'admin');
+                                  final canApprove = canManageThis && req.status != 'Approved';
+                                  final canReject = canManageThis && req.status != 'Rejected';
+
                                   return _buildRequestDetailCard(
                                     req,
                                     provider,
                                     isDark,
                                     textColor,
+                                    onApprove: canApprove
+                                        ? () async {
+                                            final activeEmpId = _resolveActiveEmployeeId(
+                                                provider, _getSubordinates(provider));
+                                            final empId = req.employeeId ?? activeEmpId;
+                                            await provider.updateRequestStatus(
+                                                empId, req.id, 'Approved');
+                                            setDialogState(() {
+                                              final idx = requests.indexWhere((r) => r.id == req.id);
+                                              if (idx != -1) {
+                                                requests[idx] = requests[idx].copyWith(status: 'Approved');
+                                                rowData['requests'] = requests;
+                                              }
+                                            });
+                                            _loadSubordinateRecords(provider, activeEmpId);
+                                            if (context.mounted) {
+                                              AppSnackBar.success(
+                                                  context, provider.translate('request_approved'));
+                                            }
+                                          }
+                                        : null,
+                                    onReject: canReject
+                                        ? () async {
+                                            final activeEmpId = _resolveActiveEmployeeId(
+                                                provider, _getSubordinates(provider));
+                                            final empId = req.employeeId ?? activeEmpId;
+                                            await provider.updateRequestStatus(
+                                                empId, req.id, 'Rejected');
+                                            setDialogState(() {
+                                              final idx = requests.indexWhere((r) => r.id == req.id);
+                                              if (idx != -1) {
+                                                requests[idx] = requests[idx].copyWith(status: 'Rejected');
+                                                rowData['requests'] = requests;
+                                              }
+                                            });
+                                            _loadSubordinateRecords(provider, activeEmpId);
+                                            if (context.mounted) {
+                                              AppSnackBar.error(
+                                                  context, provider.translate('request_rejected'));
+                                            }
+                                          }
+                                        : null,
                                     onDelete: isReqClosed ? null : () async {
                                       final confirm = await showDialog<bool>(
                                         context: dialogCtx,
@@ -2870,6 +2921,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     bool isDark,
     Color textColor, {
     VoidCallback? onDelete,
+    VoidCallback? onApprove,
+    VoidCallback? onReject,
   }) {
     final statusColor = req.statusColor;
     final statusLabel = _translateRequestStatus(req.status, provider);
@@ -3050,40 +3103,109 @@ class _HistoryScreenState extends State<HistoryScreen> {
             textColor: textColor,
           ),
 
-          // Action button: Delete Request
-          if (onDelete != null) ...[
+          // Action buttons: Delete / Reject / Approve
+          if (onDelete != null || onReject != null || onApprove != null) ...[
             const SizedBox(height: 14),
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                TextButton.icon(
-                  onPressed: onDelete,
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    size: 16,
-                    color: Colors.redAccent,
-                  ),
-                  label: Text(
-                    provider.translate('delete_request'),
-                    style: const TextStyle(
+                if (onDelete != null)
+                  TextButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
                       color: Colors.redAccent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: Colors.redAccent.withValues(alpha: 0.25),
+                    label: Text(
+                      provider.translate('delete_request'),
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: Colors.redAccent.withValues(alpha: 0.25),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onReject != null) ...[
+                      TextButton.icon(
+                        onPressed: onReject,
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          size: 16,
+                          color: Colors.redAccent,
+                        ),
+                        label: Text(
+                          provider.translate('reject'),
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.redAccent.withValues(alpha: 0.08),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: Colors.redAccent.withValues(alpha: 0.25),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (onApprove != null)
+                      ElevatedButton.icon(
+                        onPressed: onApprove,
+                        icon: const Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        label: Text(
+                          provider.translate('approve'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2EBD96),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),

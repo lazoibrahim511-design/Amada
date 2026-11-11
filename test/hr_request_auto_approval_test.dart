@@ -182,5 +182,47 @@ void main() {
       expect(req.status, equals('Pending Supervisor'));
       expect(req.actionBy, isNull);
     });
+
+    test('When HR Manager (Bilal) submits request for THEMSELVES, it is directly Approved', () async {
+      final provider = AttendanceProvider(initialCompanyCode: 'bestenergy');
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final bilalHR = CompanyEmployee(
+        id: 'be_bilal',
+        name: 'Bilal',
+        email: 'bilal@bestenergy.com',
+        position: 'System Administrator',
+        role: 'hr',
+        companyCode: 'bestenergy',
+      );
+
+      await provider.addEmployee(bilalHR);
+
+      // Login as Bilal
+      await provider.loginAsEmployee(bilalHR);
+      expect(provider.isHRManager, isTrue);
+
+      // Bilal submits Annual Leave request for himself
+      await provider.submitRequest(
+        'Annual Leave',
+        'November 7, 2026',
+        '1 Day',
+        employeeId: 'be_bilal',
+        note: 'Personal vacation',
+      );
+
+      final reqs = provider.allCompanyRequests
+          .where((r) => r.employeeId == 'be_bilal')
+          .toList();
+      expect(reqs, isNotEmpty);
+      final req = reqs.first;
+
+      // Must be directly Approved without waiting for anyone
+      expect(req.status, equals('Approved'));
+      expect(req.actionBy, equals('be_bilal'));
+      expect(req.hrActionBy, equals('be_bilal'));
+      expect(req.hrStatus, equals('Approved'));
+      expect(req.supervisorStatus, equals('Approved'));
+    });
   });
 }

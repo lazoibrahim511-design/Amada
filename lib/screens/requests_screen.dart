@@ -478,27 +478,43 @@ DateTime? _parseRequestStartDate(String dateStr) {
     final subordinates = _getSubordinates(provider);
     final List<Map<String, dynamic>> combined = [];
     final subordinateIds = subordinates.map((e) => e.id).toSet();
+    final currentUser = provider.currentEmployee;
+    final isHR =
+        currentUser?.role == 'hr' ||
+        currentUser?.role == 'admin' ||
+        provider.canEditCompanyInfo ||
+        provider.isHRManager;
 
     for (var r in provider.allCompanyRequests) {
-      if (r.employeeId != null && r.employeeId != provider.employeeId) {
-        if (subordinateIds.contains(r.employeeId)) {
-          final emp = subordinates.firstWhere(
-            (e) => e.id == r.employeeId,
-            orElse: () => provider.employees.firstWhere(
-              (e) => e.id == r.employeeId,
-              orElse: () => CompanyEmployee(
-                id: r.employeeId!,
-                name: 'Employee (${r.employeeId})',
-                email: '',
-                position: 'Staff',
-                salaryCurrency: 'USD',
-              ),
-            ),
-          );
+      if (r.employeeId != null) {
+        final isSelf = r.employeeId == provider.employeeId;
+        final isPending = r.status == 'Pending' ||
+            r.status == 'Pending HR' ||
+            r.status == 'Pending Supervisor';
+
+        // Include if for a subordinate, OR if it's the current HR/admin's own request that is pending review!
+        if (subordinateIds.contains(r.employeeId) || (isSelf && isHR && isPending)) {
+          final emp = (isSelf && currentUser != null)
+              ? currentUser
+              : subordinates.firstWhere(
+                  (e) => e.id == r.employeeId,
+                  orElse: () => provider.employees.firstWhere(
+                    (e) => e.id == r.employeeId,
+                    orElse: () => CompanyEmployee(
+                      id: r.employeeId!,
+                      name: 'Employee (${r.employeeId})',
+                      email: '',
+                      position: 'Staff',
+                      salaryCurrency: 'USD',
+                    ),
+                  ),
+                );
           if (r.companyCode != null && r.companyCode!.isNotEmpty && emp.companyCode.isNotEmpty) {
             if (r.companyCode!.toLowerCase() != emp.companyCode.toLowerCase()) continue;
           }
-          combined.add({'employee': emp, 'request': r});
+          if (!combined.any((item) => (item['request'] as Request).id == r.id)) {
+            combined.add({'employee': emp, 'request': r});
+          }
         }
       }
     }
@@ -512,6 +528,18 @@ DateTime? _parseRequestStartDate(String dateStr) {
         }
         if (!combined.any((item) => (item['request'] as Request).id == r.id)) {
           combined.add({'employee': emp, 'request': r});
+        }
+      }
+    }
+
+    // 3. Also include HR's own pending requests from provider.requests
+    if (isHR && currentUser != null) {
+      for (var r in provider.requests) {
+        final isPending = r.status == 'Pending' ||
+            r.status == 'Pending HR' ||
+            r.status == 'Pending Supervisor';
+        if (isPending && !combined.any((item) => (item['request'] as Request).id == r.id)) {
+          combined.add({'employee': currentUser, 'request': r});
         }
       }
     }
@@ -907,6 +935,12 @@ DateTime? _parseRequestStartDate(String dateStr) {
 
   Widget _buildMyRequestsList(AttendanceProvider provider) {
     final List<Request> requests = provider.requests;
+    final currentUser = provider.currentEmployee;
+    final isHR =
+        currentUser?.role == 'hr' ||
+        currentUser?.role == 'admin' ||
+        provider.canEditCompanyInfo ||
+        provider.isHRManager;
 
     if (requests.isEmpty) {
       return Center(
@@ -1014,31 +1048,70 @@ DateTime? _parseRequestStartDate(String dateStr) {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    GestureDetector(
-                      onTap: () async {
-                        final empId = request.employeeId ?? provider.currentEmployee?.id;
-                        if (empId != null) {
-                          await _confirmAndDeleteRequest(
-                            context: context,
-                            provider: provider,
-                            employeeId: empId,
-                            requestId: request.id,
-                          );
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isHR &&
+                            (request.status == 'Pending' ||
+                                request.status == 'Pending HR' ||
+                                request.status == 'Pending Supervisor')) ...[
+                          GestureDetector(
+                            onTap: () async {
+                              final empId = request.employeeId ?? provider.currentEmployee?.id;
+                              if (empId != null) {
+                                await provider.updateRequestStatus(empId, request.id, 'Approved');
+                                setState(() {});
+                                if (context.mounted) {
+                                  AppSnackBar.success(context, provider.translate('request_approved'));
+                                }
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              margin: const EdgeInsets.only(bottom: 8, right: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2EBD96).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFF2EBD96).withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                provider.translate('approve'),
+                                style: const TextStyle(
+                                  color: Color(0xFF2EBD96),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        GestureDetector(
+                          onTap: () async {
+                            final empId = request.employeeId ?? provider.currentEmployee?.id;
+                            if (empId != null) {
+                              await _confirmAndDeleteRequest(
+                                context: context,
+                                provider: provider,
+                                employeeId: empId,
+                                requestId: request.id,
+                              );
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.delete_outline,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                          ),
                         ),
-                        child: Icon(
-                          Icons.delete_outline,
-                          color: Colors.redAccent,
-                          size: 18,
-                        ),
-                      ),
+                      ],
                     ),
                     // Status Badge
                     Container(

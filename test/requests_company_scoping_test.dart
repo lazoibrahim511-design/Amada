@@ -33,7 +33,7 @@ void main() {
         id: 'be_emp_1',
         name: 'Bilal',
         email: 'bilal@bestenergy.com',
-        position: 'HR Manager',
+        position: 'Field Engineer',
         role: 'employee',
         companyCode: 'bestenergy',
       );

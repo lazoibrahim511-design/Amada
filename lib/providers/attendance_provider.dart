@@ -4211,10 +4211,8 @@ class AttendanceProvider with ChangeNotifier {
     String? hrDate;
     String? hrStatus;
 
-    final isSubmittingForOther = empId != submitterId;
-
-    if (isSubmitterHR && isSubmittingForOther) {
-      // If HR Manager / Admin fills out the request for any employee, it is directly Approved!
+    if (isSubmitterHR) {
+      // If HR Manager / Admin fills out a request (for themselves or for any employee), it is directly Approved!
       status = 'Approved';
       actBy = submitterId;
       actDate = nowIso;
