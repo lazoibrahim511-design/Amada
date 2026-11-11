@@ -4182,51 +4182,130 @@ class AttendanceProvider with ChangeNotifier {
 
     final empId = employeeId ?? _employeeId;
 
-    // Auto-approve if the employee is the top of the structure and manager of it
+    // Check if the submitter is an HR manager, Admin, or Super Admin
+    final current = currentEmployee;
+    final isSubmitterHR = isHRManager ||
+        isSuperAdmin ||
+        isSystemAdminAccount(current) ||
+        (current != null &&
+            (current.role.toLowerCase() == 'hr' ||
+                current.role.toLowerCase() == 'admin' ||
+                current.role.toLowerCase() == 'super_admin' ||
+                current.role.toLowerCase() == 'superadmin')) ||
+        _role.toLowerCase() == 'hr' ||
+        _role.toLowerCase() == 'admin' ||
+        canEditCompanyInfo;
+
+    final submitterId = _employeeId.isNotEmpty
+        ? _employeeId
+        : (current?.id ?? 'admin');
+    final nowIso = DateTime.now().toIso8601String();
+
     String status = 'Pending Supervisor';
-    bool isTopManager = false;
-    try {
-      isTopManager = _structures.any(
-        (s) =>
-            s.supervisorId == empId &&
-            (s.parentId == null || s.parentId!.isEmpty),
-      );
-      if (isTopManager) {
-        status = 'Approved';
-      }
-    } catch (_) {}
+    String? actBy;
+    String? actDate;
+    String? supBy;
+    String? supDate;
+    String? supStatus;
+    String? hrBy;
+    String? hrDate;
+    String? hrStatus;
 
-    if (!isTopManager) {
-      // Find employee to check their structure supervisor
-      final emp = _employees.where((e) => e.id == empId).firstOrNull ?? currentEmployee;
-      String? structureSupervisorId;
-      if (emp?.structureId != null && emp!.structureId!.isNotEmpty) {
-        final struct = _structures.where((s) => s.id == emp.structureId).firstOrNull;
-        structureSupervisorId = struct?.supervisorId;
-      }
+    final isSubmittingForOther = empId != submitterId;
 
-      // Check if structure has an active supervisor who is not the submitter
-      final hasSupervisor = structureSupervisorId != null &&
-          structureSupervisorId.isNotEmpty &&
-          structureSupervisorId != empId &&
-          _employees.any((e) => e.id == structureSupervisorId) &&
-          emp?.role != 'hr' &&
-          emp?.role != 'admin';
+    if (isSubmitterHR && isSubmittingForOther) {
+      // If HR Manager / Admin fills out the request for any employee, it is directly Approved!
+      status = 'Approved';
+      actBy = submitterId;
+      actDate = nowIso;
+      hrBy = submitterId;
+      hrDate = nowIso;
+      hrStatus = 'Approved';
+      supBy = submitterId;
+      supDate = nowIso;
+      supStatus = 'Approved';
+    } else {
+      // Auto-approve if the employee is the top of the structure and manager of it
+      bool isTopManager = false;
+      try {
+        isTopManager = _structures.any(
+          (s) =>
+              s.supervisorId == empId &&
+              (s.parentId == null || s.parentId!.isEmpty),
+        );
+        if (isTopManager) {
+          status = 'Approved';
+          actBy = empId;
+          actDate = nowIso;
+          supBy = empId;
+          supDate = nowIso;
+          supStatus = 'Approved';
+          hrBy = empId;
+          hrDate = nowIso;
+          hrStatus = 'Approved';
+        }
+      } catch (_) {}
 
-      // Check if company has an HR Manager
-      final hasHRManager = _employees.any(
-        (e) => (e.role == 'hr' || e.role == 'admin') && e.id != empId,
-      );
+      if (!isTopManager) {
+        // Find employee to check their structure supervisor
+        final emp = _employees.where((e) => e.id == empId).firstOrNull ?? currentEmployee;
+        String? structureSupervisorId;
+        if (emp?.structureId != null && emp!.structureId!.isNotEmpty) {
+          final struct = _structures.where((s) => s.id == emp.structureId).firstOrNull;
+          structureSupervisorId = struct?.supervisorId;
+        }
 
-      if (hasSupervisor) {
-        // Starts with Supervisor
-        status = 'Pending Supervisor';
-      } else if (hasHRManager) {
-        // Structure does not have a supervisor -> pass supervisor review, go to HR Manager
-        status = 'Pending HR';
-      } else {
-        // Neither supervisor nor HR Manager -> pass both directly to Approved!
-        status = 'Approved';
+        // Check if structure has an active supervisor who is not the submitter
+        final hasSupervisor = structureSupervisorId != null &&
+            structureSupervisorId.isNotEmpty &&
+            structureSupervisorId != empId &&
+            _employees.any((e) => e.id == structureSupervisorId) &&
+            emp?.role != 'hr' &&
+            emp?.role != 'admin';
+
+        // Check if company has an HR Manager
+        final hasHRManager = _employees.any(
+          (e) => (e.role == 'hr' || e.role == 'admin') && e.id != empId,
+        );
+
+        final isSubmitterSupervisor = (current?.role.toLowerCase() == 'supervisor' || _role.toLowerCase() == 'supervisor') && empId != submitterId;
+
+        if (isSubmitterSupervisor) {
+          // If supervisor is submitting for subordinate, supervisor already approved it
+          supBy = submitterId;
+          supDate = nowIso;
+          supStatus = 'Approved';
+          if (hasHRManager) {
+            status = 'Pending HR';
+          } else {
+            status = 'Approved';
+            actBy = submitterId;
+            actDate = nowIso;
+            hrBy = submitterId;
+            hrDate = nowIso;
+            hrStatus = 'Approved';
+          }
+        } else if (hasSupervisor) {
+          // Starts with Supervisor
+          status = 'Pending Supervisor';
+        } else if (hasHRManager) {
+          // Structure does not have a supervisor -> pass supervisor review, go to HR Manager
+          status = 'Pending HR';
+          supBy = submitterId;
+          supDate = nowIso;
+          supStatus = 'Bypassed (No Supervisor)';
+        } else {
+          // Neither supervisor nor HR Manager -> pass both directly to Approved!
+          status = 'Approved';
+          actBy = empId;
+          actDate = nowIso;
+          supBy = empId;
+          supDate = nowIso;
+          supStatus = 'Approved';
+          hrBy = empId;
+          hrDate = nowIso;
+          hrStatus = 'Approved';
+        }
       }
     }
 
@@ -4248,9 +4327,15 @@ class AttendanceProvider with ChangeNotifier {
       employeeId: empId,
       companyCode: reqCompany,
       note: note,
-      createdAt: DateTime.now().toIso8601String(),
-      actionBy: (isTopManager || status == 'Approved') ? empId : null,
-      actionDate: (isTopManager || status == 'Approved') ? DateTime.now().toIso8601String() : null,
+      createdAt: nowIso,
+      actionBy: actBy,
+      actionDate: actDate,
+      supervisorActionBy: supBy,
+      supervisorActionDate: supDate,
+      supervisorStatus: supStatus,
+      hrActionBy: hrBy,
+      hrActionDate: hrDate,
+      hrStatus: hrStatus,
     );
     if (_allRequestsMap[empId] == null) {
       _allRequestsMap[empId] = [];
@@ -4258,6 +4343,7 @@ class AttendanceProvider with ChangeNotifier {
     _allRequestsMap[empId]!.insert(0, newReq);
     _allCompanyRequests.removeWhere((r) => r.id == newReq.id);
     _allCompanyRequests.insert(0, newReq);
+    recalculateAllStats();
     notifyListeners();
 
     if (_firebaseService.isAvailable) {
@@ -4266,6 +4352,20 @@ class AttendanceProvider with ChangeNotifier {
 
     if (status == 'Approved') {
       await _adjustAnnualLeaveBalance(request: newReq, empId: empId, isApproval: true);
+      recalculateAllStats();
+    }
+
+    if (isSubmitterHR && empId != submitterId) {
+      try {
+        final kuType = _kurdishRequestType(newReq.type);
+        final enText =
+            'A request for ${newReq.type} on ${newReq.date} has been submitted and directly approved by HR Management.';
+        final kuText =
+            'داواکارییەک بۆ $kuType لە ڕێکەوتی ${newReq.date} لەلایەن بەڕێوەبەرایەتی سەرچاوە مرۆییەکان (HR) تۆمارکرا و ڕاستەوخۆ پەسەندکرا.';
+        await sendChatMessage(empId, '$enText\n\n$kuText');
+      } catch (e) {
+        debugPrint('Error sending HR direct approval message: $e');
+      }
     }
   }
 

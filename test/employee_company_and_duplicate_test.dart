@@ -143,8 +143,11 @@ void main() {
       );
       await provider.addEmployee(empHR);
 
+      // Login as worker_1 to submit request as a regular employee
+      await provider.loginAsEmployee(empWorker);
+
       // Create a request for worker_1
-      provider.submitRequest(
+      await provider.submitRequest(
         'Annual Leave',
         'October 20, 2026',
         '1 day',

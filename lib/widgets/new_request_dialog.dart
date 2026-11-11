@@ -90,7 +90,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
   }
 }
 
-void _addNewRequestHelper({
+Future<void> _addNewRequestHelper({
   required BuildContext context,
   required AttendanceProvider provider,
   required String type,
@@ -100,7 +100,7 @@ void _addNewRequestHelper({
   CompanyEmployee? targetEmployee,
   String? note,
   VoidCallback? onSubmitted,
-}) {
+}) async {
   final emp = targetEmployee ?? provider.currentEmployee;
 
   if (type == 'Missing Punch') {
@@ -305,7 +305,7 @@ void _addNewRequestHelper({
     return;
   }
 
-  provider.submitRequest(
+  await provider.submitRequest(
     type,
     date,
     duration,
@@ -1375,7 +1375,7 @@ Future<void> showNewRequestDialog({
                       final durationFormatted =
                           'From ${fromTimeController.text} to ${toTimeController.text} (${hoursVal.toStringAsFixed(1).replaceAll('.0', '')} Hours)';
 
-                      _addNewRequestHelper(
+                      await _addNewRequestHelper(
                         context: context,
                         provider: provider,
                         type: type,
@@ -1388,7 +1388,7 @@ Future<void> showNewRequestDialog({
                         onSubmitted: onSubmitted,
                       );
                     } else if (type == 'Change Shift') {
-                      _addNewRequestHelper(
+                      await _addNewRequestHelper(
                         context: context,
                         provider: provider,
                         type: type,
@@ -1402,7 +1402,7 @@ Future<void> showNewRequestDialog({
                         onSubmitted: onSubmitted,
                       );
                     } else {
-                      _addNewRequestHelper(
+                      await _addNewRequestHelper(
                         context: context,
                         provider: provider,
                         type: type,

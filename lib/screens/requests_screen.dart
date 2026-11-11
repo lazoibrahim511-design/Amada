@@ -97,14 +97,14 @@ DateTime? _parseRequestStartDate(String dateStr) {
   }
 }
 
-  void _addNewRequest(
+  Future<void> _addNewRequest(
     String type,
     String date,
     String duration, {
     String? targetShiftId,
     CompanyEmployee? targetEmployee,
     String? note,
-  }) {
+  }) async {
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
     final emp = targetEmployee ?? provider.currentEmployee;
 
@@ -319,7 +319,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
       }
     }
 
-    provider.submitRequest(
+    await provider.submitRequest(
       type,
       date,
       duration,
@@ -2632,7 +2632,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                         final durationFormatted =
                             'From ${fromTimeController.text} to ${toTimeController.text} (${hoursVal.toStringAsFixed(1).replaceAll('.0', '')} Hours)';
 
-                        _addNewRequest(
+                        await _addNewRequest(
                           type,
                           dateVal,
                           durationFormatted,
@@ -2642,7 +2642,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                               : null,
                         );
                       } else if (type == 'Change Shift') {
-                        _addNewRequest(
+                        await _addNewRequest(
                           type,
                           dateVal,
                           durVal,
@@ -2653,7 +2653,7 @@ DateTime? _parseRequestStartDate(String dateStr) {
                               : null,
                         );
                       } else {
-                        _addNewRequest(
+                        await _addNewRequest(
                           type,
                           dateVal,
                           durVal,
