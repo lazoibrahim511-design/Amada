@@ -2584,6 +2584,28 @@ class AttendanceProvider with ChangeNotifier {
     return reconciled;
   }
 
+  bool matchesEmployeeIdentifier(String? identifier, CompanyEmployee emp) {
+    if (identifier == null || identifier.trim().isEmpty) return false;
+    final cleanTarget = identifier.trim().toLowerCase();
+    final cleanId = emp.id.trim().toLowerCase();
+    final cleanName = emp.name.trim().toLowerCase();
+    final cleanEmail = emp.email.trim().toLowerCase();
+    final comp = emp.companyCode.trim().toLowerCase();
+
+    // 1. Direct match with ID, Name, or Email
+    if (cleanTarget == cleanId) return true;
+    if (cleanName.isNotEmpty && cleanTarget == cleanName) return true;
+    if (cleanEmail.isNotEmpty && cleanTarget == cleanEmail) return true;
+
+    // 2. Company scoped ID match: e.g. "bestenergy_6" vs "6"
+    if (comp.isNotEmpty && comp != 'all') {
+      if (cleanTarget == '${comp}_$cleanId') return true;
+      if (cleanId.startsWith('${comp}_') && cleanTarget == cleanId.substring(comp.length + 1)) return true;
+      if (cleanTarget.startsWith('${comp}_') && cleanTarget.substring(comp.length + 1) == cleanId) return true;
+    }
+    return false;
+  }
+
   List<AttendanceRecord> getRecordsForDate(
     DateTime date, {
     required CompanyEmployee emp,
@@ -2591,10 +2613,6 @@ class AttendanceProvider with ChangeNotifier {
     List<Request>? requestsPool,
     bool includeApprovedMissingPunches = true,
   }) {
-    final empCleanId = emp.id.trim().toLowerCase();
-    final empCleanName = emp.name.trim().toLowerCase();
-    final empCleanEmail = emp.email.trim().toLowerCase();
-
     final baseRecords = recordsPool ??
         ((emp.id == _employeeId)
             ? _records
@@ -2602,11 +2620,7 @@ class AttendanceProvider with ChangeNotifier {
 
     final rawRecords = baseRecords.where((rec) {
       if (rec.employeeId != null && rec.employeeId!.trim().isNotEmpty) {
-        final rId = rec.employeeId!.trim().toLowerCase();
-        final matches = rId == empCleanId ||
-            (empCleanName.isNotEmpty && rId == empCleanName) ||
-            (empCleanEmail.isNotEmpty && rId == empCleanEmail);
-        if (!matches) return false;
+        if (!matchesEmployeeIdentifier(rec.employeeId, emp)) return false;
       } else if (emp.id != _employeeId) {
         return false;
       }
@@ -2641,11 +2655,7 @@ class AttendanceProvider with ChangeNotifier {
 
       // CRITICAL TENANCY & EMPLOYEE ISOLATION: Request MUST belong to THIS employee!
       if (req.employeeId != null && req.employeeId!.trim().isNotEmpty) {
-        final rId = req.employeeId!.trim().toLowerCase();
-        final matches = rId == empCleanId ||
-            (empCleanName.isNotEmpty && rId == empCleanName) ||
-            (empCleanEmail.isNotEmpty && rId == empCleanEmail);
-        if (!matches) continue;
+        if (!matchesEmployeeIdentifier(req.employeeId, emp)) continue;
       } else {
         if (emp.id != _employeeId) continue;
       }
@@ -3852,7 +3862,10 @@ class AttendanceProvider with ChangeNotifier {
               r.companyCode == null ||
               r.companyCode!.isEmpty ||
               r.companyCode!.trim().toLowerCase() == cleanComp).toList();
-          if (scoped.isNotEmpty) return scoped;
+          if (scoped.isNotEmpty) {
+            _mergeCompanyRecords(scoped);
+            return scoped;
+          }
         }
       }
     }

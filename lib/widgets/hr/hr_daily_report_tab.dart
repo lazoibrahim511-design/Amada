@@ -40,6 +40,17 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.searchQuery);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadRecordsForDate(_selectedDate);
+    });
+  }
+
+  void _loadRecordsForDate(DateTime date) {
+    if (!mounted) return;
+    final provider = Provider.of<AttendanceProvider>(context, listen: false);
+    final from = DateTime(date.year, date.month, date.day).subtract(const Duration(days: 1));
+    final to = DateTime(date.year, date.month, date.day, 23, 59, 59).add(const Duration(days: 1));
+    provider.loadHistoricalRecordsForRange(from, to);
   }
 
   @override
@@ -159,18 +170,8 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
       ...provider.requests,
     ];
 
-    final empCleanId = emp.id.trim().toLowerCase();
-    final empCleanName = emp.name.trim().toLowerCase();
-    final empCleanEmail = emp.email.trim().toLowerCase();
-
     final empRequests = allRequests.where((r) {
-      if (r.employeeId != null && r.employeeId!.trim().isNotEmpty) {
-        final rId = r.employeeId!.trim().toLowerCase();
-        return rId == empCleanId ||
-            (empCleanName.isNotEmpty && rId == empCleanName) ||
-            (empCleanEmail.isNotEmpty && rId == empCleanEmail);
-      }
-      return false;
+      return provider.matchesEmployeeIdentifier(r.employeeId, emp);
     }).toList();
 
     final dateRecords = provider.getRecordsForDate(
@@ -751,10 +752,12 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
               variant: NeuButtonVariant.whitePill,
               icon: const Icon(Icons.chevron_left_rounded, size: 20),
               onPressed: () {
+                final newDate = _selectedDate.subtract(const Duration(days: 1));
                 setState(() {
-                  _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                  _selectedDate = newDate;
                   _selectedRow = null;
                 });
+                _loadRecordsForDate(newDate);
               },
             ),
             const SizedBox(width: 8),
@@ -774,6 +777,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
                     _selectedDate = picked;
                     _selectedRow = null;
                   });
+                  _loadRecordsForDate(picked);
                 }
               },
               child: Container(
@@ -840,10 +844,12 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
               variant: NeuButtonVariant.whitePill,
               icon: const Icon(Icons.chevron_right_rounded, size: 20),
               onPressed: () {
+                final newDate = _selectedDate.add(const Duration(days: 1));
                 setState(() {
-                  _selectedDate = _selectedDate.add(const Duration(days: 1));
+                  _selectedDate = newDate;
                   _selectedRow = null;
                 });
+                _loadRecordsForDate(newDate);
               },
             ),
 
@@ -856,10 +862,12 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
                 fontSize: 11,
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 onPressed: () {
+                  final now = DateTime.now();
                   setState(() {
-                    _selectedDate = DateTime.now();
+                    _selectedDate = now;
                     _selectedRow = null;
                   });
+                  _loadRecordsForDate(now);
                 },
               ),
             ],

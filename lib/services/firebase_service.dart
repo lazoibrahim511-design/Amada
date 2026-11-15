@@ -894,10 +894,8 @@ class FirebaseService {
   Stream<List<AttendanceRecord>> streamAllRecords({DateTime? since}) {
     if (!isAvailable) return Stream.value([]);
     try {
-      Query<Map<String, dynamic>> query = _firestore.collectionGroup('user_records');
-      if (since != null) {
-        query = query.where('checkIn', isGreaterThanOrEqualTo: since.toIso8601String());
-      }
+      // Query collectionGroup without server-side where filter so it NEVER fails with Firestore index rejection!
+      final query = _firestore.collectionGroup('user_records');
       return query.snapshots().map((snapshot) {
         final list = <AttendanceRecord>[];
         for (var doc in snapshot.docs) {
@@ -915,7 +913,10 @@ class FirebaseService {
                 }
               }
             }
-            list.add(AttendanceRecord.fromMap(data, empId, comp));
+            final rec = AttendanceRecord.fromMap(data, empId, comp);
+            if (since == null || !rec.checkIn.isBefore(since)) {
+              list.add(rec);
+            }
           } catch (e) {
             debugPrint('Error parsing collectionGroup AttendanceRecord ${doc.id}: $e');
           }
@@ -941,8 +942,6 @@ class FirebaseService {
     try {
       final snapshot = await _firestore
           .collectionGroup('user_records')
-          .where('checkIn', isGreaterThanOrEqualTo: from.toIso8601String())
-          .where('checkIn', isLessThanOrEqualTo: to.toIso8601String())
           .get();
       final list = <AttendanceRecord>[];
       for (var doc in snapshot.docs) {
@@ -960,7 +959,10 @@ class FirebaseService {
               }
             }
           }
-          list.add(AttendanceRecord.fromMap(data, empId, comp));
+          final rec = AttendanceRecord.fromMap(data, empId, comp);
+          if (!rec.checkIn.isBefore(from) && !rec.checkIn.isAfter(to)) {
+            list.add(rec);
+          }
         } catch (_) {}
       }
       list.sort((a, b) => b.checkIn.compareTo(a.checkIn));

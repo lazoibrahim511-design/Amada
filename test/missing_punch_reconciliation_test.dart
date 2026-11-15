@@ -362,6 +362,36 @@ void main() {
       );
       expect(afterDelete.isEmpty, isTrue);
     });
+
+    test('Company scoped ID matching: employee with id "6" matches record with employeeId "bestenergy_6" or "6"', () {
+      final targetDate = DateTime(2026, 11, 10);
+      final jalalEmp = CompanyEmployee(
+        id: '6',
+        name: 'جلال محمد رشاد',
+        email: 'jalal@gmail.com',
+        companyCode: 'bestenergy',
+        position: 'وەستا',
+      );
+
+      final records = [
+        AttendanceRecord(
+          checkIn: DateTime(2026, 11, 10, 8, 0),
+          checkOut: DateTime(2026, 11, 10, 20, 32),
+          employeeId: 'bestenergy_6',
+          companyCode: 'bestenergy',
+        ),
+      ];
+
+      final dateRecords = provider.getRecordsForDate(
+        targetDate,
+        emp: jalalEmp,
+        recordsPool: records,
+      );
+
+      expect(dateRecords.length, 1);
+      expect(dateRecords.first.checkIn, DateTime(2026, 11, 10, 8, 0));
+      expect(dateRecords.first.checkOut, DateTime(2026, 11, 10, 20, 32));
+    });
   });
 }
 
