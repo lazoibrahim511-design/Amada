@@ -319,6 +319,49 @@ void main() {
       // Must be empty! Employee B should NEVER receive Employee A's 08:45 punch!
       expect(reconciledB.isEmpty, isTrue);
     });
+
+    test('Deleted punch signature prevents deleted punch or request from re-appearing in reconciled records', () {
+      final targetDate = DateTime(2026, 11, 15);
+      final employee = CompanyEmployee(
+        id: 'emp_accidental',
+        name: 'Accidental Puncher',
+        email: 'accidental@test.com',
+        position: 'Staff',
+      );
+
+      final reqs = [
+        Request(
+          id: 'req_acc',
+          employeeId: employee.id,
+          type: 'Missing Punch',
+          date: 'November 15, 2026',
+          duration: 'Clock In: 08:45',
+          status: 'Approved',
+        ),
+      ];
+
+      // Initially reconciled
+      final beforeDelete = provider.getRecordsForDate(
+        targetDate,
+        emp: employee,
+        recordsPool: [],
+        requestsPool: reqs,
+      );
+      expect(beforeDelete.length, 1);
+      expect(beforeDelete.first.checkIn, DateTime(2026, 11, 15, 8, 45));
+
+      // Admin blacklists / deletes this accidental punch
+      provider.recordDeletedPunchSignature(employee.id, DateTime(2026, 11, 15, 8, 45));
+
+      // Now re-checking getRecordsForDate: the deleted punch MUST be excluded!
+      final afterDelete = provider.getRecordsForDate(
+        targetDate,
+        emp: employee,
+        recordsPool: [],
+        requestsPool: reqs,
+      );
+      expect(afterDelete.isEmpty, isTrue);
+    });
   });
 }
 

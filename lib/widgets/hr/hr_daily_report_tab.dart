@@ -1565,16 +1565,30 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
 
                                     // 4: Clock Time
                                     wrapCell(
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 5),
-                                        child: Text(
-                                          _localizeClockTime(row['clockTime'] as String, provider),
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF5B9BFF),
-                                            height: 1.2,
+                                      Tooltip(
+                                        message: 'Click to view or delete punch sessions',
+                                        child: InkWell(
+                                          onTap: () => _showEmployeeDayDialog(context, row),
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 5),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    _localizeClockTime(row['clockTime'] as String, provider),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Color(0xFF5B9BFF),
+                                                      height: 1.2,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -2298,6 +2312,58 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                                      tooltip: provider.translate('delete_request'),
+                                      padding: const EdgeInsets.all(4),
+                                      constraints: const BoxConstraints(),
+                                      splashRadius: 16,
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (delCtx) => AlertDialog(
+                                            title: Row(
+                                              children: [
+                                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+                                                const SizedBox(width: 8),
+                                                Text(provider.translate('delete_request')),
+                                              ],
+                                            ),
+                                            content: Text(
+                                              '${provider.translate('confirm_delete_request')}\n\n• ${req.type}\n• ${req.duration}',
+                                              style: const TextStyle(fontSize: 13, height: 1.4),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.of(delCtx).pop(),
+                                                child: Text(provider.translate('cancel')),
+                                              ),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: const Color(0xFFEF4444),
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                                onPressed: () async {
+                                                  Navigator.of(delCtx).pop();
+                                                  Navigator.of(ctx).pop();
+                                                  await provider.deleteRequest(emp.id, req.id);
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(provider.translate('delete_request')),
+                                                        backgroundColor: const Color(0xFF10B981),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                                child: Text(provider.translate('delete')),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),

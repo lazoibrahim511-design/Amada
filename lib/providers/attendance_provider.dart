@@ -2408,6 +2408,9 @@ class AttendanceProvider with ChangeNotifier {
   }) {
     final List<_PunchPoint> punches = [];
     for (var rec in rawRecords) {
+      if (isPunchDeleted(emp.id, rec.checkIn, companyCode: emp.companyCode)) {
+        continue;
+      }
       if (rec.checkIn == rec.checkOut) {
         // Missed check-in; the punch is a clock-out
         punches.add(_PunchPoint(rec.checkIn, false));
@@ -2417,7 +2420,9 @@ class AttendanceProvider with ChangeNotifier {
       } else {
         // Normal pair
         punches.add(_PunchPoint(rec.checkIn, true));
-        punches.add(_PunchPoint(rec.checkOut!, false));
+        if (!isPunchDeleted(emp.id, rec.checkOut!, companyCode: emp.companyCode)) {
+          punches.add(_PunchPoint(rec.checkOut!, false));
+        }
       }
     }
 
@@ -2429,29 +2434,43 @@ class AttendanceProvider with ChangeNotifier {
         final outPart = dur.split('Clock Out:')[1].trim();
         final inDt = _parseTimeToDateTime(date, inPart, shift);
         final outDt = _parseTimeToDateTime(date, outPart, shift);
-        if (inDt != null) punches.add(_PunchPoint(inDt, true));
-        if (outDt != null) punches.add(_PunchPoint(outDt, false));
+        if (inDt != null && !isPunchDeleted(emp.id, inDt, companyCode: emp.companyCode)) {
+          punches.add(_PunchPoint(inDt, true));
+        }
+        if (outDt != null && !isPunchDeleted(emp.id, outDt, companyCode: emp.companyCode)) {
+          punches.add(_PunchPoint(outDt, false));
+        }
       } else if (dur.contains('Clock In:')) {
         final inPart = dur.replaceAll('Clock In:', '').trim();
         final inDt = _parseTimeToDateTime(date, inPart, shift);
-        if (inDt != null) punches.add(_PunchPoint(inDt, true));
+        if (inDt != null && !isPunchDeleted(emp.id, inDt, companyCode: emp.companyCode)) {
+          punches.add(_PunchPoint(inDt, true));
+        }
       } else if (dur.contains('Clock Out:')) {
         final outPart = dur.replaceAll('Clock Out:', '').trim();
         final outDt = _parseTimeToDateTime(date, outPart, shift);
-        if (outDt != null) punches.add(_PunchPoint(outDt, false));
+        if (outDt != null && !isPunchDeleted(emp.id, outDt, companyCode: emp.companyCode)) {
+          punches.add(_PunchPoint(outDt, false));
+        }
       } else if (dur.contains('-')) {
         final parts = dur.split('-');
         if (parts.length == 2) {
           final inDt = _parseTimeToDateTime(date, parts[0].trim(), shift);
           final outDt = _parseTimeToDateTime(date, parts[1].trim(), shift);
-          if (inDt != null) punches.add(_PunchPoint(inDt, true));
-          if (outDt != null) punches.add(_PunchPoint(outDt, false));
+          if (inDt != null && !isPunchDeleted(emp.id, inDt, companyCode: emp.companyCode)) {
+            punches.add(_PunchPoint(inDt, true));
+          }
+          if (outDt != null && !isPunchDeleted(emp.id, outDt, companyCode: emp.companyCode)) {
+            punches.add(_PunchPoint(outDt, false));
+          }
         }
       } else {
         final match = timeRegex.firstMatch(dur);
         if (match != null) {
           final dt = _parseTimeToDateTime(date, match.group(1)!, shift);
-          if (dt != null) punches.add(_PunchPoint(dt, null));
+          if (dt != null && !isPunchDeleted(emp.id, dt, companyCode: emp.companyCode)) {
+            punches.add(_PunchPoint(dt, null));
+          }
         }
       }
     }
@@ -5143,6 +5162,28 @@ class AttendanceProvider with ChangeNotifier {
     recordDeletedPunchSignature(cleanEmpId, record.checkIn, companyCode: cleanComp);
     if (record.checkOut != null) {
       recordDeletedPunchSignature(cleanEmpId, record.checkOut!, companyCode: cleanComp);
+    }
+
+    // 4. Also remove/cancel any matching missing punch request that produced or matched this punch
+    final matchingRequests = _allCompanyRequests.where((req) {
+      if (req.employeeId == null || req.employeeId!.trim().toLowerCase() != cleanEmpId) return false;
+      if (req.type != 'Missing Punch' && req.type != 'Forgot to Clock In' && req.type != 'Forgot to Clock Out') return false;
+      final dur = req.duration;
+      final inH = record.checkIn.hour.toString().padLeft(2, '0');
+      final inM = record.checkIn.minute.toString().padLeft(2, '0');
+      final inStr = '$inH:$inM';
+      if (dur.contains(inStr)) return true;
+      if (record.checkOut != null) {
+        final outH = record.checkOut!.hour.toString().padLeft(2, '0');
+        final outM = record.checkOut!.minute.toString().padLeft(2, '0');
+        final outStr = '$outH:$outM';
+        if (dur.contains(outStr)) return true;
+      }
+      return false;
+    }).toList();
+
+    for (final mReq in matchingRequests) {
+      await deleteRequest(employeeId, mReq.id);
     }
 
     if (_firebaseService.isAvailable) {
