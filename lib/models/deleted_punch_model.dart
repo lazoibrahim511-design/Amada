@@ -2,6 +2,7 @@ class DeletedPunch {
   final String id;
   final String employeeId;
   final String? employeeName;
+  final String? companyCode;
   final DateTime punchTime;
   final String punchType; // 'checkIn', 'checkOut', 'raw', or 'session'
   final String? reason;
@@ -12,6 +13,7 @@ class DeletedPunch {
     required this.id,
     required this.employeeId,
     this.employeeName,
+    this.companyCode,
     required this.punchTime,
     this.punchType = 'raw',
     this.reason,
@@ -24,6 +26,7 @@ class DeletedPunch {
       'id': id,
       'employeeId': employeeId,
       'employeeName': employeeName,
+      'companyCode': companyCode,
       'punchTime': punchTime.toIso8601String(),
       'punchType': punchType,
       'reason': reason,
@@ -48,6 +51,7 @@ class DeletedPunch {
       id: docId ?? map['id']?.toString() ?? '',
       employeeId: map['employeeId']?.toString() ?? '',
       employeeName: map['employeeName']?.toString(),
+      companyCode: map['companyCode']?.toString(),
       punchTime: parseDate(map['punchTime'], DateTime.now()),
       punchType: map['punchType']?.toString() ?? 'raw',
       reason: map['reason']?.toString(),

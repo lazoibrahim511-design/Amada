@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,13 @@ import '../models/company_license.dart';
 import 'zkteco/zkteco_models.dart';
 
 class FirebaseService {
+  // --- In-Memory & Local Cache for static metadata (to minimize Firestore network reads) ---
+  final Map<String, List<OrgStructure>> _cachedStructures = {};
+  final Map<String, List<WorkShift>> _cachedShifts = {};
+  final Map<String, List<EmployeeGroup>> _cachedGroups = {};
+  final Map<String, List<WorkLocation>> _cachedLocations = {};
+  final Map<String, List<Holiday>> _cachedHolidays = {};
+
   // Check if Firebase is initialized
   bool get isAvailable {
     try {
@@ -21,13 +29,29 @@ class FirebaseService {
 
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
-  // --- OrgStructure CRUD (Tenant-isolated) ---
-  Future<List<OrgStructure>> getStructures({String? companyCode}) async {
+  // --- OrgStructure CRUD (Tenant-isolated with Cache) ---
+  Future<List<OrgStructure>> getStructures({String? companyCode, bool forceRefresh = false}) async {
     if (!isAvailable) return [];
+    final cleanFilter = companyCode?.trim().toLowerCase();
+    final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+    if (!forceRefresh && _cachedStructures.containsKey(cacheKey) && _cachedStructures[cacheKey]!.isNotEmpty) {
+      return List.unmodifiable(_cachedStructures[cacheKey]!);
+    }
     try {
-      final snapshot = await _firestore.collection('structures').get();
+      Query<Map<String, dynamic>> query = _firestore.collection('structures');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      if (!forceRefresh) {
+        try {
+          snapshot = await query.get(const GetOptions(source: Source.cache));
+        } catch (_) {}
+      }
+      if (snapshot == null || snapshot.docs.isEmpty) {
+        snapshot = await query.get();
+      }
       final list = <OrgStructure>[];
-      final cleanFilter = companyCode?.trim().toLowerCase();
       for (var doc in snapshot.docs) {
         try {
           final s = OrgStructure.fromMap(doc.data(), doc.id);
@@ -41,17 +65,22 @@ class FirebaseService {
           debugPrint('Error parsing OrgStructure ${doc.id}: $e');
         }
       }
+      _cachedStructures[cacheKey] = list;
       return list;
     } catch (e) {
       debugPrint('Error getting structures: $e');
-      return [];
+      return _cachedStructures[cacheKey] ?? [];
     }
   }
 
   Stream<List<OrgStructure>> streamStructures({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('structures').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('structures');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <OrgStructure>[];
       for (var doc in snapshot.docs) {
         try {
@@ -66,6 +95,8 @@ class FirebaseService {
           debugPrint('Error parsing OrgStructure ${doc.id}: $e');
         }
       }
+      final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+      _cachedStructures[cacheKey] = list;
       return list;
     });
   }
@@ -73,6 +104,7 @@ class FirebaseService {
   Future<void> saveStructure(OrgStructure structure) async {
     if (!isAvailable) return;
     try {
+      _cachedStructures.clear();
       final code = structure.companyCode.trim().toLowerCase();
       final docId = (code != 'amada' && !structure.id.startsWith('${code}_'))
           ? '${code}_${structure.id}'
@@ -89,19 +121,36 @@ class FirebaseService {
   Future<void> deleteStructure(String id) async {
     if (!isAvailable) return;
     try {
+      _cachedStructures.clear();
       await _firestore.collection('structures').doc(id).delete();
     } catch (e) {
       debugPrint('Error deleting structure: $e');
     }
   }
 
-  // --- WorkShift CRUD (Tenant-isolated) ---
-  Future<List<WorkShift>> getShifts({String? companyCode}) async {
+  // --- WorkShift CRUD (Tenant-isolated with Cache) ---
+  Future<List<WorkShift>> getShifts({String? companyCode, bool forceRefresh = false}) async {
     if (!isAvailable) return [];
+    final cleanFilter = companyCode?.trim().toLowerCase();
+    final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+    if (!forceRefresh && _cachedShifts.containsKey(cacheKey) && _cachedShifts[cacheKey]!.isNotEmpty) {
+      return List.unmodifiable(_cachedShifts[cacheKey]!);
+    }
     try {
-      final snapshot = await _firestore.collection('shifts').get();
+      Query<Map<String, dynamic>> query = _firestore.collection('shifts');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      if (!forceRefresh) {
+        try {
+          snapshot = await query.get(const GetOptions(source: Source.cache));
+        } catch (_) {}
+      }
+      if (snapshot == null || snapshot.docs.isEmpty) {
+        snapshot = await query.get();
+      }
       final list = <WorkShift>[];
-      final cleanFilter = companyCode?.trim().toLowerCase();
       for (var doc in snapshot.docs) {
         try {
           final s = WorkShift.fromMap(doc.data(), doc.id);
@@ -112,17 +161,22 @@ class FirebaseService {
           debugPrint('Error parsing WorkShift ${doc.id}: $e');
         }
       }
+      _cachedShifts[cacheKey] = list;
       return list;
     } catch (e) {
       debugPrint('Error getting shifts: $e');
-      return [];
+      return _cachedShifts[cacheKey] ?? [];
     }
   }
 
   Stream<List<WorkShift>> streamShifts({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('shifts').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('shifts');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <WorkShift>[];
       for (var doc in snapshot.docs) {
         try {
@@ -134,6 +188,8 @@ class FirebaseService {
           debugPrint('Error parsing WorkShift ${doc.id}: $e');
         }
       }
+      final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+      _cachedShifts[cacheKey] = list;
       return list;
     });
   }
@@ -141,6 +197,7 @@ class FirebaseService {
   Future<void> saveShift(WorkShift shift) async {
     if (!isAvailable) return;
     try {
+      _cachedShifts.clear();
       final code = shift.companyCode.trim().toLowerCase();
       final docId = (code != 'amada' && !shift.id.startsWith('${code}_'))
           ? '${code}_${shift.id}'
@@ -154,19 +211,36 @@ class FirebaseService {
   Future<void> deleteShift(String id) async {
     if (!isAvailable) return;
     try {
+      _cachedShifts.clear();
       await _firestore.collection('shifts').doc(id).delete();
     } catch (e) {
       debugPrint('Error deleting shift: $e');
     }
   }
 
-  // --- EmployeeGroup CRUD (Tenant-isolated) ---
-  Future<List<EmployeeGroup>> getGroups({String? companyCode}) async {
+  // --- EmployeeGroup CRUD (Tenant-isolated with Cache) ---
+  Future<List<EmployeeGroup>> getGroups({String? companyCode, bool forceRefresh = false}) async {
     if (!isAvailable) return [];
+    final cleanFilter = companyCode?.trim().toLowerCase();
+    final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+    if (!forceRefresh && _cachedGroups.containsKey(cacheKey) && _cachedGroups[cacheKey]!.isNotEmpty) {
+      return List.unmodifiable(_cachedGroups[cacheKey]!);
+    }
     try {
-      final snapshot = await _firestore.collection('groups').get();
+      Query<Map<String, dynamic>> query = _firestore.collection('groups');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      if (!forceRefresh) {
+        try {
+          snapshot = await query.get(const GetOptions(source: Source.cache));
+        } catch (_) {}
+      }
+      if (snapshot == null || snapshot.docs.isEmpty) {
+        snapshot = await query.get();
+      }
       final list = <EmployeeGroup>[];
-      final cleanFilter = companyCode?.trim().toLowerCase();
       for (var doc in snapshot.docs) {
         try {
           final g = EmployeeGroup.fromMap(doc.data(), doc.id);
@@ -177,17 +251,22 @@ class FirebaseService {
           debugPrint('Error parsing EmployeeGroup ${doc.id}: $e');
         }
       }
+      _cachedGroups[cacheKey] = list;
       return list;
     } catch (e) {
       debugPrint('Error getting groups: $e');
-      return [];
+      return _cachedGroups[cacheKey] ?? [];
     }
   }
 
   Stream<List<EmployeeGroup>> streamGroups({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('groups').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('groups');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <EmployeeGroup>[];
       for (var doc in snapshot.docs) {
         try {
@@ -199,6 +278,8 @@ class FirebaseService {
           debugPrint('Error parsing EmployeeGroup ${doc.id}: $e');
         }
       }
+      final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+      _cachedGroups[cacheKey] = list;
       return list;
     });
   }
@@ -206,6 +287,7 @@ class FirebaseService {
   Future<void> saveGroup(EmployeeGroup group) async {
     if (!isAvailable) return;
     try {
+      _cachedGroups.clear();
       final code = group.companyCode.trim().toLowerCase();
       final docId = (code != 'amada' && !group.id.startsWith('${code}_'))
           ? '${code}_${group.id}'
@@ -219,19 +301,36 @@ class FirebaseService {
   Future<void> deleteGroup(String id) async {
     if (!isAvailable) return;
     try {
+      _cachedGroups.clear();
       await _firestore.collection('groups').doc(id).delete();
     } catch (e) {
       debugPrint('Error deleting group: $e');
     }
   }
 
-  // --- WorkLocation CRUD (Tenant-isolated) ---
-  Future<List<WorkLocation>> getLocations({String? companyCode}) async {
+  // --- WorkLocation CRUD (Tenant-isolated with Cache) ---
+  Future<List<WorkLocation>> getLocations({String? companyCode, bool forceRefresh = false}) async {
     if (!isAvailable) return [];
+    final cleanFilter = companyCode?.trim().toLowerCase();
+    final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+    if (!forceRefresh && _cachedLocations.containsKey(cacheKey) && _cachedLocations[cacheKey]!.isNotEmpty) {
+      return List.unmodifiable(_cachedLocations[cacheKey]!);
+    }
     try {
-      final snapshot = await _firestore.collection('locations').get();
+      Query<Map<String, dynamic>> query = _firestore.collection('locations');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      if (!forceRefresh) {
+        try {
+          snapshot = await query.get(const GetOptions(source: Source.cache));
+        } catch (_) {}
+      }
+      if (snapshot == null || snapshot.docs.isEmpty) {
+        snapshot = await query.get();
+      }
       final list = <WorkLocation>[];
-      final cleanFilter = companyCode?.trim().toLowerCase();
       for (var doc in snapshot.docs) {
         try {
           final l = WorkLocation.fromMap(doc.data(), doc.id);
@@ -242,17 +341,22 @@ class FirebaseService {
           debugPrint('Error parsing WorkLocation ${doc.id}: $e');
         }
       }
+      _cachedLocations[cacheKey] = list;
       return list;
     } catch (e) {
       debugPrint('Error getting locations: $e');
-      return [];
+      return _cachedLocations[cacheKey] ?? [];
     }
   }
 
   Stream<List<WorkLocation>> streamLocations({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('locations').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('locations');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <WorkLocation>[];
       for (var doc in snapshot.docs) {
         try {
@@ -264,6 +368,8 @@ class FirebaseService {
           debugPrint('Error parsing WorkLocation ${doc.id}: $e');
         }
       }
+      final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+      _cachedLocations[cacheKey] = list;
       return list;
     });
   }
@@ -271,6 +377,7 @@ class FirebaseService {
   Future<void> saveLocation(WorkLocation location) async {
     if (!isAvailable) return;
     try {
+      _cachedLocations.clear();
       final code = location.companyCode.trim().toLowerCase();
       final docId = (code != 'amada' && !location.id.startsWith('${code}_'))
           ? '${code}_${location.id}'
@@ -284,6 +391,7 @@ class FirebaseService {
   Future<void> deleteLocation(String id) async {
     if (!isAvailable) return;
     try {
+      _cachedLocations.clear();
       await _firestore.collection('locations').doc(id).delete();
     } catch (e) {
       debugPrint('Error deleting location: $e');
@@ -294,9 +402,13 @@ class FirebaseService {
   Future<List<ZkDeviceConfig>> getDevices({String? companyCode}) async {
     if (!isAvailable) return [];
     try {
-      final snapshot = await _firestore.collection('devices').get();
-      final list = <ZkDeviceConfig>[];
       final cleanFilter = companyCode?.trim().toLowerCase();
+      Query<Map<String, dynamic>> query = _firestore.collection('devices');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      final snapshot = await query.get();
+      final list = <ZkDeviceConfig>[];
       for (var doc in snapshot.docs) {
         try {
           final d = ZkDeviceConfig.fromMap(doc.data());
@@ -317,7 +429,11 @@ class FirebaseService {
   Stream<List<ZkDeviceConfig>> streamDevices({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('devices').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('devices');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <ZkDeviceConfig>[];
       for (var doc in snapshot.docs) {
         try {
@@ -355,13 +471,29 @@ class FirebaseService {
     }
   }
 
-  // --- Holiday CRUD (Tenant-isolated) ---
-  Future<List<Holiday>> getHolidays({String? companyCode}) async {
+  // --- Holiday CRUD (Tenant-isolated with Cache) ---
+  Future<List<Holiday>> getHolidays({String? companyCode, bool forceRefresh = false}) async {
     if (!isAvailable) return [];
+    final cleanFilter = companyCode?.trim().toLowerCase();
+    final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+    if (!forceRefresh && _cachedHolidays.containsKey(cacheKey) && _cachedHolidays[cacheKey]!.isNotEmpty) {
+      return List.unmodifiable(_cachedHolidays[cacheKey]!);
+    }
     try {
-      final snapshot = await _firestore.collection('holidays').get();
+      Query<Map<String, dynamic>> query = _firestore.collection('holidays');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      QuerySnapshot<Map<String, dynamic>>? snapshot;
+      if (!forceRefresh) {
+        try {
+          snapshot = await query.get(const GetOptions(source: Source.cache));
+        } catch (_) {}
+      }
+      if (snapshot == null || snapshot.docs.isEmpty) {
+        snapshot = await query.get();
+      }
       final list = <Holiday>[];
-      final cleanFilter = companyCode?.trim().toLowerCase();
       for (var doc in snapshot.docs) {
         try {
           final h = Holiday.fromMap(doc.data(), doc.id);
@@ -372,17 +504,22 @@ class FirebaseService {
           debugPrint('Error parsing Holiday ${doc.id}: $e');
         }
       }
+      _cachedHolidays[cacheKey] = list;
       return list;
     } catch (e) {
       debugPrint('Error getting holidays: $e');
-      return [];
+      return _cachedHolidays[cacheKey] ?? [];
     }
   }
 
   Stream<List<Holiday>> streamHolidays({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('holidays').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('holidays');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <Holiday>[];
       for (var doc in snapshot.docs) {
         try {
@@ -394,6 +531,8 @@ class FirebaseService {
           debugPrint('Error parsing Holiday ${doc.id}: $e');
         }
       }
+      final cacheKey = (cleanFilter == null || cleanFilter.isEmpty) ? 'all' : cleanFilter;
+      _cachedHolidays[cacheKey] = list;
       return list;
     });
   }
@@ -401,6 +540,7 @@ class FirebaseService {
   Future<void> saveHoliday(Holiday holiday) async {
     if (!isAvailable) return;
     try {
+      _cachedHolidays.clear();
       final code = holiday.companyCode.trim().toLowerCase();
       final docId = (code != 'amada' && !holiday.id.startsWith('${code}_'))
           ? '${code}_${holiday.id}'
@@ -414,6 +554,7 @@ class FirebaseService {
   Future<void> deleteHoliday(String id) async {
     if (!isAvailable) return;
     try {
+      _cachedHolidays.clear();
       await _firestore.collection('holidays').doc(id).delete();
     } catch (e) {
       debugPrint('Error deleting holiday: $e');
@@ -424,9 +565,13 @@ class FirebaseService {
   Future<List<CompanyEmployee>> getEmployees({String? companyCode}) async {
     if (!isAvailable) return [];
     try {
-      final snapshot = await _firestore.collection('employees').get();
-      final list = <CompanyEmployee>[];
       final cleanFilter = companyCode?.trim().toLowerCase();
+      Query<Map<String, dynamic>> query = _firestore.collection('employees');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      final snapshot = await query.get();
+      final list = <CompanyEmployee>[];
       for (var doc in snapshot.docs) {
         try {
           final emp = CompanyEmployee.fromMap(doc.data(), doc.id);
@@ -477,7 +622,11 @@ class FirebaseService {
   Stream<List<CompanyEmployee>> streamEmployees({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
     final cleanFilter = companyCode?.trim().toLowerCase();
-    return _firestore.collection('employees').snapshots().map((snapshot) {
+    Query<Map<String, dynamic>> query = _firestore.collection('employees');
+    if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+      query = query.where('companyCode', isEqualTo: cleanFilter);
+    }
+    return query.snapshots().map((snapshot) {
       final list = <CompanyEmployee>[];
       for (var doc in snapshot.docs) {
         try {
@@ -891,45 +1040,98 @@ class FirebaseService {
     });
   }
 
-  Stream<List<AttendanceRecord>> streamAllRecords({DateTime? since}) {
+  Stream<List<AttendanceRecord>> streamAllRecords({DateTime? since, String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
-    try {
-      // Query collectionGroup without server-side where filter so it NEVER fails with Firestore index rejection!
-      final query = _firestore.collectionGroup('user_records');
-      return query.snapshots().map((snapshot) {
-        final list = <AttendanceRecord>[];
-        for (var doc in snapshot.docs) {
-          try {
-            final data = doc.data();
-            final parentDocId = doc.reference.parent.parent?.id;
-            String? empId = data['employeeId']?.toString() ?? parentDocId;
-            String? comp = data['companyCode']?.toString();
-            if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
-              final prefix = parentDocId.split('_').first.toLowerCase();
-              if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
-                comp = prefix;
-                if (empId == parentDocId) {
-                  empId = parentDocId.substring(prefix.length + 1);
-                }
+    final comp = (companyCode ?? '').trim().toLowerCase();
+
+    List<AttendanceRecord> parseDocs(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+      final list = <AttendanceRecord>[];
+      for (var doc in docs) {
+        try {
+          final data = doc.data();
+          final parentDocId = doc.reference.parent.parent?.id;
+          String? empId = data['employeeId']?.toString() ?? parentDocId;
+          String? c = data['companyCode']?.toString();
+          if ((c == null || c.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+            final prefix = parentDocId.split('_').first.toLowerCase();
+            if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
+              c = prefix;
+              if (empId == parentDocId) {
+                empId = parentDocId.substring(prefix.length + 1);
               }
             }
-            final rec = AttendanceRecord.fromMap(data, empId, comp);
-            if (since == null || !rec.checkIn.isBefore(since)) {
+          }
+          final rec = AttendanceRecord.fromMap(data, empId, c);
+          if (since == null || !rec.checkIn.isBefore(since)) {
+            if (comp.isEmpty || comp == 'all' || rec.companyCode == null || rec.companyCode!.trim().toLowerCase() == comp) {
               list.add(rec);
             }
-          } catch (e) {
-            debugPrint('Error parsing collectionGroup AttendanceRecord ${doc.id}: $e');
           }
+        } catch (e) {
+          debugPrint('Error parsing collectionGroup AttendanceRecord ${doc.id}: $e');
         }
-        list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
-        return list;
-      }).handleError((e) {
-        debugPrint('collectionGroup user_records stream error: $e');
-        return <AttendanceRecord>[];
-      });
+      }
+      list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
+      return list;
+    }
+
+    try {
+      Query<Map<String, dynamic>> query = _firestore.collectionGroup('user_records');
+      bool hasServerFilters = false;
+      if (comp.isNotEmpty && comp != 'all') {
+        query = query.where('companyCode', isEqualTo: comp);
+        hasServerFilters = true;
+      }
+      if (since != null) {
+        query = query.where('checkIn', isGreaterThanOrEqualTo: since.toIso8601String());
+        hasServerFilters = true;
+      }
+
+      if (!hasServerFilters) {
+        return _firestore.collectionGroup('user_records').snapshots().map((snapshot) => parseDocs(snapshot.docs));
+      }
+
+      late StreamController<List<AttendanceRecord>> controller;
+      StreamSubscription? sub;
+      bool hasFallenBack = false;
+
+      void fallbackToBroadQuery() {
+        if (hasFallenBack) return;
+        hasFallenBack = true;
+        sub?.cancel();
+        debugPrint('Falling back to broad collectionGroup query while index is building...');
+        sub = _firestore.collectionGroup('user_records').snapshots().listen(
+          (snapshot) {
+            if (!controller.isClosed) controller.add(parseDocs(snapshot.docs));
+          },
+          onError: (err) {
+            debugPrint('collectionGroup fallback stream error: $err');
+            if (!controller.isClosed) controller.add([]);
+          },
+        );
+      }
+
+      controller = StreamController<List<AttendanceRecord>>.broadcast(
+        onListen: () {
+          sub = query.snapshots().listen(
+            (snapshot) {
+              if (!controller.isClosed) controller.add(parseDocs(snapshot.docs));
+            },
+            onError: (err) {
+              debugPrint('Filtered user_records query error (index building?): $err');
+              fallbackToBroadQuery();
+            },
+          );
+        },
+        onCancel: () {
+          sub?.cancel();
+        },
+      );
+
+      return controller.stream;
     } catch (e) {
       debugPrint('Error starting streamAllRecords: $e');
-      return Stream.value([]);
+      return _firestore.collectionGroup('user_records').snapshots().map((s) => parseDocs(s.docs));
     }
   }
 
@@ -937,30 +1139,38 @@ class FirebaseService {
   Future<List<AttendanceRecord>> getRecordsForRange({
     required DateTime from,
     required DateTime to,
+    String? companyCode,
   }) async {
     if (!isAvailable) return [];
+    final comp = (companyCode ?? '').trim().toLowerCase();
     try {
-      final snapshot = await _firestore
-          .collectionGroup('user_records')
-          .get();
+      Query<Map<String, dynamic>> query = _firestore.collectionGroup('user_records');
+      if (comp.isNotEmpty && comp != 'all') {
+        query = query.where('companyCode', isEqualTo: comp);
+      }
+      query = query
+          .where('checkIn', isGreaterThanOrEqualTo: from.toIso8601String())
+          .where('checkIn', isLessThanOrEqualTo: to.toIso8601String());
+
+      final snapshot = await query.get();
       final list = <AttendanceRecord>[];
       for (var doc in snapshot.docs) {
         try {
           final data = doc.data();
           final parentDocId = doc.reference.parent.parent?.id;
           String? empId = data['employeeId']?.toString() ?? parentDocId;
-          String? comp = data['companyCode']?.toString();
-          if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+          String? c = data['companyCode']?.toString();
+          if ((c == null || c.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
             final prefix = parentDocId.split('_').first.toLowerCase();
             if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
-              comp = prefix;
+              c = prefix;
               if (empId == parentDocId) {
                 empId = parentDocId.substring(prefix.length + 1);
               }
             }
           }
-          final rec = AttendanceRecord.fromMap(data, empId, comp);
-          if (!rec.checkIn.isBefore(from) && !rec.checkIn.isAfter(to)) {
+          final rec = AttendanceRecord.fromMap(data, empId, c);
+          if (comp.isEmpty || comp == 'all' || rec.companyCode == null || rec.companyCode!.trim().toLowerCase() == comp) {
             list.add(rec);
           }
         } catch (_) {}
@@ -968,8 +1178,39 @@ class FirebaseService {
       list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
       return list;
     } catch (e) {
-      debugPrint('Error getting records for range: $e');
-      return [];
+      debugPrint('Optimized getRecordsForRange failed, trying broader fetch: $e');
+      try {
+        final snapshot = await _firestore.collectionGroup('user_records').get();
+        final list = <AttendanceRecord>[];
+        for (var doc in snapshot.docs) {
+          try {
+            final data = doc.data();
+            final parentDocId = doc.reference.parent.parent?.id;
+            String? empId = data['employeeId']?.toString() ?? parentDocId;
+            String? c = data['companyCode']?.toString();
+            if ((c == null || c.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+              final prefix = parentDocId.split('_').first.toLowerCase();
+              if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
+                c = prefix;
+                if (empId == parentDocId) {
+                  empId = parentDocId.substring(prefix.length + 1);
+                }
+              }
+            }
+            final rec = AttendanceRecord.fromMap(data, empId, c);
+            if (!rec.checkIn.isBefore(from) && !rec.checkIn.isAfter(to)) {
+              if (comp.isEmpty || comp == 'all' || rec.companyCode == null || rec.companyCode!.trim().toLowerCase() == comp) {
+                list.add(rec);
+              }
+            }
+          } catch (_) {}
+        }
+        list.sort((a, b) => b.checkIn.compareTo(a.checkIn));
+        return list;
+      } catch (err2) {
+        debugPrint('Error getting records for range: $err2');
+        return [];
+      }
     }
   }
 
@@ -1045,17 +1286,24 @@ class FirebaseService {
     }
   }
 
-  Stream<List<DeletedPunch>> streamDeletedPunches() {
+  Stream<List<DeletedPunch>> streamDeletedPunches({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
+    final cleanFilter = companyCode?.trim().toLowerCase();
     try {
-      return _firestore
-          .collection('deleted_punches')
+      Query<Map<String, dynamic>> query = _firestore.collection('deleted_punches');
+      if (cleanFilter != null && cleanFilter.isNotEmpty && cleanFilter != 'all') {
+        query = query.where('companyCode', isEqualTo: cleanFilter);
+      }
+      return query
           .snapshots()
           .map((snapshot) {
         final list = <DeletedPunch>[];
         for (var doc in snapshot.docs) {
           try {
-            list.add(DeletedPunch.fromMap(doc.data(), doc.id));
+            final p = DeletedPunch.fromMap(doc.data(), doc.id);
+            if (cleanFilter == null || cleanFilter.isEmpty || cleanFilter == 'all' || (p.companyCode != null && p.companyCode!.toLowerCase() == cleanFilter)) {
+              list.add(p);
+            }
           } catch (e) {
             debugPrint('Error parsing DeletedPunch ${doc.id}: $e');
           }
@@ -1227,8 +1475,9 @@ class FirebaseService {
     }
   }
 
-  Stream<List<Request>> streamAllRequests() {
+  Stream<List<Request>> streamAllRequests({String? companyCode}) {
     if (!isAvailable) return Stream.value([]);
+    final comp = (companyCode ?? '').trim().toLowerCase();
     return _firestore.collectionGroup('user_requests').snapshots().map((snapshot) {
       final list = <Request>[];
       for (var doc in snapshot.docs) {
@@ -1239,20 +1488,23 @@ class FirebaseService {
           if (empId == null || empId.isEmpty) {
             empId = parentDocId;
           }
-          String? comp = data['companyCode'];
-          if ((comp == null || comp.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
+          String? c = data['companyCode'];
+          if ((c == null || c.isEmpty) && parentDocId != null && parentDocId.contains('_')) {
             final prefix = parentDocId.split('_').first.toLowerCase();
             if (prefix.isNotEmpty && prefix != 'admin' && prefix != 'emp' && prefix != 'employee') {
-              comp = prefix;
+              c = prefix;
               if (empId == parentDocId) {
                 empId = parentDocId.substring(prefix.length + 1);
               }
             }
           }
+          if (comp.isNotEmpty && comp != 'all' && c != null && c.isNotEmpty && c.toLowerCase() != comp) {
+            continue;
+          }
           final req = Request.fromMap(data, doc.id);
           list.add(req.copyWith(
             employeeId: empId ?? req.employeeId,
-            companyCode: comp ?? req.companyCode,
+            companyCode: c ?? req.companyCode,
             overrideTargetShiftId: false,
           ));
         } catch (e) {

@@ -1723,17 +1723,17 @@ class AttendanceProvider with ChangeNotifier {
         }),
       );
 
-      // Stream active records (last 60 days) to keep Firestore reads ultra-low and startup fast
-      final sixtyDaysAgo = DateTime.now().subtract(const Duration(days: 60));
+      // Stream active records (last 30 days) to keep Firestore reads minimal and startup fast
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
       _subscriptions.add(
-        _firebaseService.streamAllRecords(since: sixtyDaysAgo).listen((data) {
+        _firebaseService.streamAllRecords(since: thirtyDaysAgo, companyCode: filterCode).listen((data) {
           _mergeCompanyRecords(data);
           notifyListeners();
         }),
       );
 
       _subscriptions.add(
-        _firebaseService.streamDeletedPunches().listen((punches) {
+        _firebaseService.streamDeletedPunches(companyCode: filterCode).listen((punches) {
           _deletedPunchSignatures.clear();
           for (var p in punches) {
             final key = '${p.employeeId.trim().toLowerCase()}_${p.punchTime.year}_${p.punchTime.month}_${p.punchTime.day}_${p.punchTime.hour}_${p.punchTime.minute}';
@@ -1744,7 +1744,7 @@ class AttendanceProvider with ChangeNotifier {
 
       // Realtime stream receives all requests immediately on listen without redundant pre-fetch
       _subscriptions.add(
-        _firebaseService.streamAllRequests().listen((data) {
+        _firebaseService.streamAllRequests(companyCode: filterCode).listen((data) {
           _allCompanyRequests.clear();
           _allCompanyRequests.addAll(data);
           for (var req in data) {
@@ -5205,6 +5205,7 @@ class AttendanceProvider with ChangeNotifier {
         await _firebaseService.saveDeletedPunch(DeletedPunch(
           id: '${cleanEmpId}_${record.checkIn.millisecondsSinceEpoch}',
           employeeId: cleanEmpId,
+          companyCode: record.companyCode ?? _currentCompanyCode,
           punchTime: record.checkIn,
           punchType: 'checkIn',
           reason: reason,
@@ -5213,6 +5214,7 @@ class AttendanceProvider with ChangeNotifier {
           await _firebaseService.saveDeletedPunch(DeletedPunch(
             id: '${cleanEmpId}_${record.checkOut!.millisecondsSinceEpoch}',
             employeeId: cleanEmpId,
+            companyCode: record.companyCode ?? _currentCompanyCode,
             punchTime: record.checkOut!,
             punchType: 'checkOut',
             reason: reason,
