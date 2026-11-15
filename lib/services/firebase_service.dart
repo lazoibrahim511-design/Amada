@@ -2089,5 +2089,172 @@ class FirebaseService {
       debugPrint('Error deleting company license: $e');
     }
   }
+
+  /// Completely and permanently purges a company and ALL associated data from Firestore:
+  /// - companies/{companyCode}
+  /// - employees
+  /// - shifts
+  /// - structures
+  /// - groups
+  /// - locations
+  /// - devices
+  /// - holidays
+  /// - deleted_punches
+  /// - attendance_records (including user_records subcollection)
+  /// - requests (including user_requests subcollection)
+  /// - payroll_closures
+  Future<void> purgeCompanyAndAllData(String companyCode) async {
+    if (!isAvailable) return;
+    final code = companyCode.trim().toLowerCase();
+    if (code.isEmpty || code == 'amada') {
+      debugPrint('Cannot purge root/master company "amada"');
+      return;
+    }
+
+    try {
+      // 1. Delete company document in companies collection
+      try {
+        await _firestore.collection('companies').doc(code).delete();
+      } catch (e) {
+        debugPrint('Error deleting company doc $code: $e');
+      }
+
+      // Helper function to safely delete documents matching companyCode or prefixed with code_
+      Future<void> deleteFromCollection(String colName) async {
+        try {
+          final snap1 = await _firestore.collection(colName).where('companyCode', isEqualTo: code).get();
+          for (var doc in snap1.docs) {
+            try {
+              await doc.reference.delete();
+            } catch (_) {}
+          }
+          final snapAll = await _firestore.collection(colName).get();
+          for (var doc in snapAll.docs) {
+            final idLower = doc.id.toLowerCase();
+            final docComp = (doc.data()['companyCode'] ?? '').toString().toLowerCase();
+            if (idLower.startsWith('${code}_') || docComp == code) {
+              try {
+                await doc.reference.delete();
+              } catch (_) {}
+            }
+          }
+        } catch (e) {
+          debugPrint('Error purging from collection $colName for $code: $e');
+        }
+      }
+
+      // 2. Delete static metadata collections
+      await deleteFromCollection('structures');
+      await deleteFromCollection('shifts');
+      await deleteFromCollection('groups');
+      await deleteFromCollection('locations');
+      await deleteFromCollection('devices');
+      await deleteFromCollection('holidays');
+      await deleteFromCollection('deleted_punches');
+      await deleteFromCollection('payroll_closures');
+
+      // 3. Delete attendance_records and their user_records subcollections
+      try {
+        final attSnap = await _firestore.collection('attendance_records').get();
+        for (var doc in attSnap.docs) {
+          final idLower = doc.id.toLowerCase();
+          final data = doc.data();
+          final docComp = (data['companyCode'] ?? '').toString().toLowerCase();
+          if (idLower.startsWith('${code}_') || docComp == code) {
+            try {
+              final userRecs = await doc.reference.collection('user_records').get();
+              for (var uDoc in userRecs.docs) {
+                try {
+                  await uDoc.reference.delete();
+                } catch (_) {}
+              }
+              await doc.reference.delete();
+            } catch (_) {}
+          }
+        }
+
+        // Also sweep collectionGroup user_records with companyCode == code
+        final groupRecords = await _firestore
+            .collectionGroup('user_records')
+            .where('companyCode', isEqualTo: code)
+            .get();
+        for (var doc in groupRecords.docs) {
+          try {
+            await doc.reference.delete();
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('Error purging attendance_records for $code: $e');
+      }
+
+      // 4. Delete requests and their user_requests subcollections
+      try {
+        final reqSnap = await _firestore.collection('requests').get();
+        for (var doc in reqSnap.docs) {
+          final idLower = doc.id.toLowerCase();
+          final data = doc.data();
+          final docComp = (data['companyCode'] ?? '').toString().toLowerCase();
+          if (idLower.startsWith('${code}_') || docComp == code) {
+            try {
+              final userReqs = await doc.reference.collection('user_requests').get();
+              for (var uDoc in userReqs.docs) {
+                try {
+                  await uDoc.reference.delete();
+                } catch (_) {}
+              }
+              await doc.reference.delete();
+            } catch (_) {}
+          }
+        }
+
+        // Also sweep collectionGroup user_requests with companyCode == code
+        final groupRequests = await _firestore
+            .collectionGroup('user_requests')
+            .where('companyCode', isEqualTo: code)
+            .get();
+        for (var doc in groupRequests.docs) {
+          try {
+            await doc.reference.delete();
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('Error purging requests for $code: $e');
+      }
+
+      // 5. Delete employees belonging to this company
+      try {
+        final empSnap = await _firestore.collection('employees').get();
+        for (var doc in empSnap.docs) {
+          final idLower = doc.id.toLowerCase();
+          final data = doc.data();
+          final empCode = (data['companyCode'] ?? '').toString().trim().toLowerCase();
+          final email = (data['email'] ?? '').toString().trim().toLowerCase();
+          final isTargetCompany = empCode == code ||
+              idLower.startsWith('${code}_') ||
+              (code.isNotEmpty && email.endsWith('@$code.com'));
+          // Safety: Never delete the global super admin
+          if (isTargetCompany && email != 'admin@company.com' && idLower != 'admin_super_account') {
+            try {
+              await doc.reference.delete();
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        debugPrint('Error purging employees for $code: $e');
+      }
+
+      // 6. Invalidate all local caches
+      _cachedStructures.clear();
+      _cachedShifts.clear();
+      _cachedGroups.clear();
+      _cachedLocations.clear();
+      _cachedHolidays.clear();
+
+      debugPrint('Successfully purged company and all associated data: $code');
+    } catch (e) {
+      debugPrint('Fatal error purging company $code: $e');
+      rethrow;
+    }
+  }
 }
 

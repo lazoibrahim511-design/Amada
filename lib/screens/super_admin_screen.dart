@@ -505,14 +505,32 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
           const SizedBox(height: 14),
 
           // Quota & Expiration Details
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
             children: [
               // Max Users Info
-              Expanded(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.group_outlined, size: 18, color: Color(0xFF2E65FF)),
-                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2E65FF).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.group_outlined, size: 16, color: Color(0xFF2E65FF)),
+                    ),
+                    const SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -521,7 +539,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                           style: TextStyle(color: textColor, fontSize: 13, fontWeight: FontWeight.w700),
                         ),
                         Text(
-                          'Licensed Workforce Limit',
+                          'Workforce Seat Limit',
                           style: TextStyle(color: subtextColor, fontSize: 11),
                         ),
                       ],
@@ -531,11 +549,27 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
               ),
 
               // Expiry Date Info
-              Expanded(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.calendar_month_outlined, size: 18, color: Color(0xFFF59E0B)),
-                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.calendar_month_outlined, size: 16, color: Color(0xFFF59E0B)),
+                    ),
+                    const SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -556,97 +590,281 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Actions Row
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.end,
-            children: [
-              // 1-Click Toggle Active / Suspend
-              NeuButton(
-                onPressed: () async {
-                  final updated = comp.copyWith(isActive: !comp.isActive);
-                  await provider.saveCompanyLicense(updated);
-                  _loadCompanies();
-                },
-                icon: Icon(comp.isActive ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 15),
-                label: comp.isActive ? 'Suspend' : 'Activate',
-                variant: comp.isActive ? NeuButtonVariant.warning : NeuButtonVariant.primary,
-                height: 34,
-                fontSize: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+          // Actions Toolbar
+          Container(
+            padding: const EdgeInsets.only(top: 14),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
+                  width: 1,
+                ),
               ),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Switch to this company (if not current)
+                if (!isCurrent)
+                  NeuButton(
+                    onPressed: () async {
+                      await provider.setCompanyCode(comp.companyCode);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Switched active workspace to "${comp.companyName}"'),
+                            backgroundColor: const Color(0xFF10B981),
+                          ),
+                        );
+                      }
+                      _loadCompanies();
+                    },
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 15),
+                    label: 'Switch To',
+                    variant: NeuButtonVariant.primary,
+                    height: 34,
+                    fontSize: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
 
-              // Edit Company Info & Logo
-              NeuButton(
-                onPressed: () => _showEditCompanyDialog(context, provider, comp),
-                icon: const Icon(Icons.edit_note_rounded, size: 16),
-                label: 'Edit Info & Logo',
-                variant: NeuButtonVariant.primary,
-                height: 34,
-                fontSize: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-
-              // Edit Max Users
-              NeuButton(
-                onPressed: () => _showEditUsersDialog(context, provider, comp),
-                icon: const Icon(Icons.people_alt_outlined, size: 15),
-                label: 'Set User Limit',
-                variant: NeuButtonVariant.navy,
-                height: 34,
-                fontSize: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-
-              // Extend Subscription
-              NeuButton(
-                onPressed: () => _showExtendDialog(context, provider, comp),
-                icon: const Icon(Icons.more_time_rounded, size: 15),
-                label: 'Extend Plan',
-                variant: NeuButtonVariant.primary,
-                height: 34,
-                fontSize: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-
-              // View / Copy Login Credentials
-              NeuButton(
-                onPressed: () => _showCredentialsDialog(context, comp),
-                icon: const Icon(Icons.vpn_key_rounded, size: 15),
-                label: 'Login Details',
-                variant: NeuButtonVariant.whitePill,
-                height: 34,
-                fontSize: 12,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-
-              // Switch to this company (if not current)
-              if (!isCurrent)
+                // 1-Click Toggle Active / Suspend
                 NeuButton(
                   onPressed: () async {
-                    await provider.setCompanyCode(comp.companyCode);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Switched active workspace to "${comp.companyName}"'),
-                          backgroundColor: const Color(0xFF10B981),
-                        ),
-                      );
-                    }
+                    final updated = comp.copyWith(isActive: !comp.isActive);
+                    await provider.saveCompanyLicense(updated);
                     _loadCompanies();
                   },
-                  icon: const Icon(Icons.swap_horiz_rounded, size: 15),
-                  label: 'Switch To',
+                  icon: Icon(comp.isActive ? Icons.pause_circle_outline : Icons.play_circle_outline, size: 15),
+                  label: comp.isActive ? 'Suspend' : 'Activate',
+                  variant: comp.isActive ? NeuButtonVariant.warning : NeuButtonVariant.primary,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+
+                // Edit Company Info & Logo
+                NeuButton(
+                  onPressed: () => _showEditCompanyDialog(context, provider, comp),
+                  icon: const Icon(Icons.edit_note_rounded, size: 15),
+                  label: 'Edit Info & Logo',
                   variant: NeuButtonVariant.whitePill,
                   height: 34,
                   fontSize: 12,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                 ),
-            ],
+
+                // Edit Max Users
+                NeuButton(
+                  onPressed: () => _showEditUsersDialog(context, provider, comp),
+                  icon: const Icon(Icons.people_alt_outlined, size: 15),
+                  label: 'Set User Limit',
+                  variant: NeuButtonVariant.whitePill,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+
+                // Extend Subscription
+                NeuButton(
+                  onPressed: () => _showExtendDialog(context, provider, comp),
+                  icon: const Icon(Icons.more_time_rounded, size: 15),
+                  label: 'Extend Plan',
+                  variant: NeuButtonVariant.whitePill,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+
+                // View / Copy Login Credentials
+                NeuButton(
+                  onPressed: () => _showCredentialsDialog(context, comp),
+                  icon: const Icon(Icons.vpn_key_rounded, size: 15),
+                  label: 'Login Details',
+                  variant: NeuButtonVariant.whitePill,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+
+                // Permanently Delete Company & All Data
+                if (comp.companyCode.toLowerCase() != 'amada')
+                  NeuButton(
+                    onPressed: () => _showDeleteCompanyDialog(context, provider, comp),
+                    icon: const Icon(Icons.delete_forever_rounded, size: 15),
+                    label: provider.translate('delete_company'),
+                    variant: NeuButtonVariant.danger,
+                    height: 34,
+                    fontSize: 12,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  // Dialog to permanently delete a company with all its data
+  void _showDeleteCompanyDialog(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyLicense comp,
+  ) {
+    final codeController = TextEditingController();
+    bool isDeleting = false;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final targetCode = comp.companyCode.trim().toLowerCase();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final isMatch = codeController.text.trim().toLowerCase() == targetCode;
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.delete_forever_rounded, color: Color(0xFFEF4444), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      provider.translate('delete_company_confirm_title'),
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        provider.translate('delete_company_confirm_msg'),
+                        style: const TextStyle(
+                          color: Color(0xFFEF4444),
+                          fontSize: 12.5,
+                          height: 1.45,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '${comp.companyName} (${comp.companyCode})',
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : const Color(0xFF334155),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      provider.translate('delete_company_type_code').replaceAll('{code}', comp.companyCode),
+                      style: TextStyle(
+                        color: isDark ? Colors.white70 : const Color(0xFF475569),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: codeController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: comp.companyCode,
+                        prefixIcon: const Icon(Icons.business_rounded, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+                  child: Text(provider.translate('cancel')),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade400,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: (!isMatch || isDeleting)
+                      ? null
+                      : () async {
+                          setDialogState(() => isDeleting = true);
+                          try {
+                            await provider.purgeCompany(comp.companyCode);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(provider.translate('company_deleted_success')),
+                                  backgroundColor: const Color(0xFF10B981),
+                                ),
+                              );
+                            }
+                            _loadCompanies();
+                          } catch (e) {
+                            setDialogState(() => isDeleting = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: const Color(0xFFEF4444),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: isDeleting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.delete_forever_rounded, size: 18),
+                  label: Text(
+                    isDeleting ? 'Deleting...' : provider.translate('delete_company'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

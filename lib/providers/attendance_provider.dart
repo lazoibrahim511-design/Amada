@@ -1226,6 +1226,21 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
 
+  /// Permanently purges a company and ALL associated data (employees, records, shifts, etc.)
+  Future<void> purgeCompany(String companyCode) async {
+    final cleanCode = companyCode.trim().toLowerCase();
+    if (cleanCode.isEmpty || cleanCode == 'amada') return;
+
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.purgeCompanyAndAllData(cleanCode);
+    }
+    _allCompanies.removeWhere((c) => c.companyCode.trim().toLowerCase() == cleanCode);
+    if (_currentCompanyCode.trim().toLowerCase() == cleanCode) {
+      await setCompanyCode('amada');
+    }
+    notifyListeners();
+  }
+
   CompanyEmployee? get currentEmployee {
     for (var e in _employees) {
       if (e.id == _employeeId) return e;

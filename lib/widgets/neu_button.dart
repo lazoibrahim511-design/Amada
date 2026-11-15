@@ -29,6 +29,7 @@ class NeuButton extends StatefulWidget {
   final Widget? icon;
   final String label;
   final double height;
+  final double? width;
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
   final double fontSize;
@@ -41,6 +42,7 @@ class NeuButton extends StatefulWidget {
     required this.label,
     this.icon,
     this.height = 44,
+    this.width,
     this.padding,
     this.borderRadius = 50,
     this.fontSize = 14,
@@ -183,71 +185,140 @@ class _NeuButtonState extends State<NeuButton> {
           scale: scale,
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOutCubic,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            height: widget.height,
-            padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 22),
-            decoration: BoxDecoration(
-              gradient: backgroundGradient,
-              borderRadius: BorderRadius.circular(widget.borderRadius),
-              border: Border.all(color: borderColor, width: 1.2),
-              boxShadow: isInteractive
-                  ? [
-                      BoxShadow(
-                        color: glowColor,
-                        blurRadius: blur,
-                        offset: Offset(0, offsetDy),
-                      ),
-                      BoxShadow(
-                        color: specularHighlight,
-                        blurRadius: 2,
-                        offset: const Offset(0, -1),
-                      ),
-                    ]
-                  : const [],
-            ),
-            child: Center(
-              child: widget.isLoading
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        valueColor: AlwaysStoppedAnimation<Color>(textColor),
-                      ),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.icon != null) ...[
-                          IconTheme(
-                            data: IconThemeData(
-                              color: textColor,
-                              size: widget.fontSize + 4,
+          child: widget.width != null
+              ? AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  height: widget.height,
+                  width: widget.width,
+                  padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 22),
+                  decoration: BoxDecoration(
+                    gradient: backgroundGradient,
+                    borderRadius: BorderRadius.circular(widget.borderRadius),
+                    border: Border.all(color: borderColor, width: 1.2),
+                    boxShadow: isInteractive
+                        ? [
+                            BoxShadow(
+                              color: glowColor,
+                              blurRadius: blur,
+                              offset: Offset(0, offsetDy),
                             ),
-                            child: widget.icon!,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        Flexible(
-                          child: Text(
-                            widget.label,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: widget.fontSize,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
+                            BoxShadow(
+                              color: specularHighlight,
+                              blurRadius: 2,
+                              offset: const Offset(0, -1),
                             ),
+                          ]
+                        : const [],
+                  ),
+                  child: Center(
+                    child: widget.isLoading
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              valueColor: AlwaysStoppedAnimation<Color>(textColor),
+                            ),
+                          )
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (widget.icon != null) ...[
+                                IconTheme(
+                                  data: IconThemeData(
+                                    color: textColor,
+                                    size: widget.fontSize + 4,
+                                  ),
+                                  child: widget.icon!,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  widget.label,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: widget.fontSize,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                  ),
+                )
+              : IntrinsicWidth(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    height: widget.height,
+                    padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 22),
+                    decoration: BoxDecoration(
+                      gradient: backgroundGradient,
+                      borderRadius: BorderRadius.circular(widget.borderRadius),
+                      border: Border.all(color: borderColor, width: 1.2),
+                      boxShadow: isInteractive
+                          ? [
+                              BoxShadow(
+                                color: glowColor,
+                                blurRadius: blur,
+                                offset: Offset(0, offsetDy),
+                              ),
+                              BoxShadow(
+                                color: specularHighlight,
+                                blurRadius: 2,
+                                offset: const Offset(0, -1),
+                              ),
+                            ]
+                          : const [],
                     ),
-            ),
-          ),
+                    child: Center(
+                      child: widget.isLoading
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(textColor),
+                              ),
+                            )
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (widget.icon != null) ...[
+                                  IconTheme(
+                                    data: IconThemeData(
+                                      color: textColor,
+                                      size: widget.fontSize + 4,
+                                    ),
+                                    child: widget.icon!,
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    widget.label,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontSize: widget.fontSize,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
         ),
       ),
     );
