@@ -159,10 +159,24 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
       ...provider.requests,
     ];
 
+    final empCleanId = emp.id.trim().toLowerCase();
+    final empCleanName = emp.name.trim().toLowerCase();
+    final empCleanEmail = emp.email.trim().toLowerCase();
+
+    final empRequests = allRequests.where((r) {
+      if (r.employeeId != null && r.employeeId!.trim().isNotEmpty) {
+        final rId = r.employeeId!.trim().toLowerCase();
+        return rId == empCleanId ||
+            (empCleanName.isNotEmpty && rId == empCleanName) ||
+            (empCleanEmail.isNotEmpty && rId == empCleanEmail);
+      }
+      return false;
+    }).toList();
+
     final dateRecords = provider.getRecordsForDate(
       date,
       emp: emp,
-      requestsPool: allRequests,
+      requestsPool: empRequests,
     );
     final sortedRecords = List<AttendanceRecord>.from(dateRecords)
       ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
@@ -178,11 +192,9 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     int approvedOtMinutes = 0;
     bool hasApprovedMissingPunch = false;
 
-    for (var req in allRequests) {
-      if (req.employeeId != null &&
-          req.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase()) {
-        final reqDate = req.date;
-        bool dateMatches = false;
+    for (var req in empRequests) {
+      final reqDate = req.date;
+      bool dateMatches = false;
 
         if (reqDate.contains(' - ')) {
           try {
@@ -228,7 +240,6 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
             }
           }
         }
-      }
     }
 
     final holiday = provider.getHolidayForEmployee(date, group?.id);

@@ -271,6 +271,54 @@ void main() {
       final clockTimeStr = sessionTimes.join('\n');
       expect(clockTimeStr, '09:00 - 12:30\n13:32 - 16:40');
     });
+
+    test('Cross-employee isolation: Employee A approved missing punch does NOT leak to Employee B', () {
+      final targetDate = DateTime(2026, 11, 15);
+      final empA = CompanyEmployee(
+        id: 'emp_A',
+        name: 'Bilal Admin',
+        email: 'bilal@bestenergy.com',
+        position: 'HR Admin',
+      );
+      final empB = CompanyEmployee(
+        id: 'emp_B',
+        name: 'Shaho Worker',
+        email: 'shaho@bestenergy.com',
+        position: 'Worker',
+      );
+
+      // Approved request for Employee A at 08:45
+      final sharedRequestsPool = [
+        Request(
+          id: 'req_empA',
+          employeeId: empA.id,
+          type: 'Missing Punch',
+          date: 'November 15, 2026',
+          duration: 'Clock In: 08:45',
+          status: 'Approved',
+        ),
+      ];
+
+      // Reconcile for Employee A
+      final reconciledA = provider.getRecordsForDate(
+        targetDate,
+        emp: empA,
+        recordsPool: [],
+        requestsPool: sharedRequestsPool,
+      );
+      expect(reconciledA.length, 1);
+      expect(reconciledA.first.checkIn, DateTime(2026, 11, 15, 8, 45));
+
+      // Reconcile for Employee B with the exact same shared requests pool
+      final reconciledB = provider.getRecordsForDate(
+        targetDate,
+        emp: empB,
+        recordsPool: [],
+        requestsPool: sharedRequestsPool,
+      );
+      // Must be empty! Employee B should NEVER receive Employee A's 08:45 punch!
+      expect(reconciledB.isEmpty, isTrue);
+    });
   });
 }
 

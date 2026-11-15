@@ -2572,18 +2572,26 @@ class AttendanceProvider with ChangeNotifier {
     List<Request>? requestsPool,
     bool includeApprovedMissingPunches = true,
   }) {
-    final pool = recordsPool ??
+    final empCleanId = emp.id.trim().toLowerCase();
+    final empCleanName = emp.name.trim().toLowerCase();
+    final empCleanEmail = emp.email.trim().toLowerCase();
+
+    final baseRecords = recordsPool ??
         ((emp.id == _employeeId)
             ? _records
-            : _allCompanyRecords
-                .where((r) =>
-                    r.employeeId != null &&
-                    (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
-                     r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                     r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
-                .toList());
+            : _allCompanyRecords);
 
-    final rawRecords = pool.where((rec) {
+    final rawRecords = baseRecords.where((rec) {
+      if (rec.employeeId != null && rec.employeeId!.trim().isNotEmpty) {
+        final rId = rec.employeeId!.trim().toLowerCase();
+        final matches = rId == empCleanId ||
+            (empCleanName.isNotEmpty && rId == empCleanName) ||
+            (empCleanEmail.isNotEmpty && rId == empCleanEmail);
+        if (!matches) return false;
+      } else if (emp.id != _employeeId) {
+        return false;
+      }
+
       final effDate = getEffectiveDateForRecord(rec, emp);
       return effDate.year == date.year &&
           effDate.month == date.month &&
@@ -2594,29 +2602,34 @@ class AttendanceProvider with ChangeNotifier {
       return rawRecords;
     }
 
-    final reqPool = requestsPool ??
+    final baseRequests = requestsPool ??
         _allRequestsMap[emp.id] ??
         ((emp.id == _employeeId)
             ? requests
-            : _allCompanyRequests
-                .where((r) =>
-                    r.employeeId != null &&
-                    (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
-                     r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                     r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
-                .toList());
+            : _allCompanyRequests);
 
     final shift = getShiftForDate(emp, date);
     final isOvernight = shift.isOvernightForDate(date);
 
     final missingPunchReqs = <Request>[];
-    for (final req in reqPool) {
+    for (final req in baseRequests) {
       if (req.type != 'Missing Punch' &&
           req.type != 'Forgot to Clock In' &&
           req.type != 'Forgot to Clock Out') {
         continue;
       }
       if (req.status != 'Approved') continue;
+
+      // CRITICAL TENANCY & EMPLOYEE ISOLATION: Request MUST belong to THIS employee!
+      if (req.employeeId != null && req.employeeId!.trim().isNotEmpty) {
+        final rId = req.employeeId!.trim().toLowerCase();
+        final matches = rId == empCleanId ||
+            (empCleanName.isNotEmpty && rId == empCleanName) ||
+            (empCleanEmail.isNotEmpty && rId == empCleanEmail);
+        if (!matches) continue;
+      } else {
+        if (emp.id != _employeeId) continue;
+      }
 
       DateTime? rDate;
       try {
