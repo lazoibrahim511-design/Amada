@@ -99,8 +99,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
       shiftEndMinutes % 60,
     );
     if (shiftEnd.isBefore(shiftStart) ||
-        shiftEnd.isAtSameMomentAs(shiftStart) ||
-        shift.isOvernightForDate(date)) {
+        shiftEnd.isAtSameMomentAs(shiftStart)) {
       shiftEnd = shiftEnd.add(const Duration(days: 1));
     }
 
@@ -186,7 +185,7 @@ class _CustomCalendarState extends State<CustomCalendar> {
         shiftEndMinutes ~/ 60,
         shiftEndMinutes % 60,
       );
-      if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart) || shift.isOvernightForDate(date)) {
+      if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart)) {
         shiftEnd = shiftEnd.add(const Duration(days: 1));
       }
 

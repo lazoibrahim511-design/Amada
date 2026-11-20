@@ -72,6 +72,11 @@ class ZkTecoService extends ChangeNotifier {
   List<ZkDeviceUser> get cachedUsers => _cachedUsers;
   List<String> get syncLogs => List.unmodifiable(_syncLogs);
 
+  void clearLogs() {
+    _syncLogs.clear();
+    notifyListeners();
+  }
+
   /// Initialize service and load saved devices and preferences
   Future<void> init(AttendanceProvider? provider, FirebaseService? firebase) async {
     _cachedProvider = provider;
@@ -762,17 +767,38 @@ class ZkTecoService extends ChangeNotifier {
         }
 
         // 5. Check if there is an active open session that this punch should complete (Check-Out)
-        final workDate = DateTime(pTime.year, pTime.month, pTime.day);
-        final shift = provider.getShiftForDate(emp, workDate);
-        final isOvernight = shift.isOvernightForDate(workDate);
-        final isSpecial = shift.isSpecialShiftForDate(workDate);
-        final maxAllowedHours = isSpecial ? 48 : (isOvernight ? 32 : 18);
-
         AttendanceRecord? openRecordToClose;
         for (var r in existingRecords) {
           if (r.checkOut == null && !r.checkIn.isAfter(pTime)) {
             final elapsed = pTime.difference(r.checkIn);
-            if (elapsed.inMinutes >= _cooldownMinutes && elapsed.inHours <= maxAllowedHours) {
+            if (elapsed.inMinutes < _cooldownMinutes) continue;
+
+            final checkInDate = DateTime(r.checkIn.year, r.checkIn.month, r.checkIn.day);
+            final pDate = DateTime(pTime.year, pTime.month, pTime.day);
+            final shift = provider.getShiftForDate(emp, checkInDate);
+            final isSpecial = shift.isSpecialShiftForDate(checkInDate);
+            final is24h = isSpecial || shift.getShiftDurationMinutesForDate(checkInDate) >= 20 * 60;
+            final isOvernight = shift.isOvernightForDate(checkInDate);
+
+            final maxHours = shift.getMaxContinuousHoursForDate(checkInDate);
+
+            bool canClose = false;
+            if (pDate == checkInDate) {
+              // Same calendar day
+              canClose = elapsed.inHours <= 18;
+            } else if (pDate == checkInDate.add(const Duration(days: 1)) && (is24h || isOvernight)) {
+              // Next calendar day for an overnight or 24h shift:
+              // Only eligible for checkout up until user-configured cutoff time & within max hours!
+              final cutoffStr = shift.getCrossMidnightCutoffForDate(checkInDate);
+              final cParts = cutoffStr.split(':');
+              final cH = int.tryParse(cParts[0]) ?? (is24h ? 9 : 3);
+              final cM = cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? (is24h ? 30 : 0)) : 0;
+              final cutoffMinutes = cH * 60 + cM;
+              final pMinutes = pTime.hour * 60 + pTime.minute;
+              canClose = pMinutes <= cutoffMinutes && elapsed.inMinutes <= (maxHours * 60);
+            }
+
+            if (canClose) {
               if (openRecordToClose == null || r.checkIn.isAfter(openRecordToClose.checkIn)) {
                 openRecordToClose = r;
               }

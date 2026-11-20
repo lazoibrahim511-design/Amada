@@ -2426,6 +2426,7 @@ class ExportService {
       t('early_exit_m_col', 'Early Exit (Mins)'),
       '${t('early_exit_col', 'Early Exit')} ($countStr)',
       t('penalties_col', 'Penalties'),
+      t('extra_time_hrs_col', 'Extra Time (Hrs)'),
       t('overtime_hrs_col', 'Overtime (Hrs)'),
       t('daily_leaves_col', 'Daily Leaves'),
       t('hourly_perm_col', 'Hourly Leaves (Hrs)'),
@@ -2451,6 +2452,7 @@ class ExportService {
     int totalEarM = 0;
     int totalEarC = 0;
     double totalPen = 0;
+    double totalExtra = 0;
     double totalOt = 0;
     int totalDailyL = 0;
     double totalHourL = 0;
@@ -2480,16 +2482,19 @@ class ExportService {
           .setNumber(double.parse(r.penaltyDeductions.toStringAsFixed(1)));
       sheet
           .getRangeByIndex(row, 13)
-          .setNumber(double.parse(r.totalOvertimeHours.toStringAsFixed(1)));
-      sheet.getRangeByIndex(row, 14).setNumber(r.dailyLeaveDays.toDouble());
+          .setNumber(double.parse(r.extraTimeHours.toStringAsFixed(1)));
       sheet
-          .getRangeByIndex(row, 15)
-          .setNumber(double.parse(r.hourlyLeaveHours.toStringAsFixed(1)));
+          .getRangeByIndex(row, 14)
+          .setNumber(double.parse(r.totalOvertimeHours.toStringAsFixed(1)));
+      sheet.getRangeByIndex(row, 15).setNumber(r.dailyLeaveDays.toDouble());
       sheet
           .getRangeByIndex(row, 16)
+          .setNumber(double.parse(r.hourlyLeaveHours.toStringAsFixed(1)));
+      sheet
+          .getRangeByIndex(row, 17)
           .setNumber(double.parse(r.remainingAnnualDays.toStringAsFixed(1)));
-      sheet.getRangeByIndex(row, 17).setNumber(r.absentDays.toDouble());
-      sheet.getRangeByIndex(row, 18).setNumber(r.presentDays.toDouble());
+      sheet.getRangeByIndex(row, 18).setNumber(r.absentDays.toDouble());
+      sheet.getRangeByIndex(row, 19).setNumber(r.presentDays.toDouble());
 
       totalReq += r.requiredHours;
       totalAct += r.actualWorkedHours;
@@ -2499,6 +2504,7 @@ class ExportService {
       totalEarM += r.earlyExitMinutes;
       totalEarC += r.earlyExitCount;
       totalPen += r.penaltyDeductions;
+      totalExtra += r.extraTimeHours;
       totalOt += r.totalOvertimeHours;
       totalDailyL += r.dailyLeaveDays;
       totalHourL += r.hourlyLeaveHours;
@@ -2533,16 +2539,20 @@ class ExportService {
     sheet.getRangeByIndex(row, 12).cellStyle.bold = true;
     sheet
         .getRangeByIndex(row, 13)
-        .setNumber(double.parse(totalOt.toStringAsFixed(1)));
+        .setNumber(double.parse(totalExtra.toStringAsFixed(1)));
     sheet.getRangeByIndex(row, 13).cellStyle.bold = true;
-    sheet.getRangeByIndex(row, 14).setNumber(totalDailyL.toDouble());
     sheet
-        .getRangeByIndex(row, 15)
+        .getRangeByIndex(row, 14)
+        .setNumber(double.parse(totalOt.toStringAsFixed(1)));
+    sheet.getRangeByIndex(row, 14).cellStyle.bold = true;
+    sheet.getRangeByIndex(row, 15).setNumber(totalDailyL.toDouble());
+    sheet
+        .getRangeByIndex(row, 16)
         .setNumber(double.parse(totalHourL.toStringAsFixed(1)));
-    sheet.getRangeByIndex(row, 17).setNumber(totalAbs.toDouble());
-    sheet.getRangeByIndex(row, 17).cellStyle.bold = true;
-    sheet.getRangeByIndex(row, 18).setNumber(totalPres.toDouble());
+    sheet.getRangeByIndex(row, 18).setNumber(totalAbs.toDouble());
     sheet.getRangeByIndex(row, 18).cellStyle.bold = true;
+    sheet.getRangeByIndex(row, 19).setNumber(totalPres.toDouble());
+    sheet.getRangeByIndex(row, 19).cellStyle.bold = true;
 
     for (int col = 1; col <= headers.length; col++) {
       sheet.autoFitColumn(col);
@@ -2686,24 +2696,26 @@ class ExportService {
       t('delay_m_col', 'Delay (m)'),
       t('early_exit_m_col', 'Early Exit (m)'),
       t('penalties_col', 'Penalties'),
+      t('extra_time_hrs_col', 'Extra (hrs)'),
       t('overtime_hrs_col', 'Overtime (hrs)'),
       t('leaves_filter', 'Leaves'),
       t('absences_col', 'Absences'),
     ];
 
     final columnWidths = <int, pw.TableColumnWidth>{
-      0: const pw.FlexColumnWidth(1.2), // ID
-      1: const pw.FlexColumnWidth(2.2), // Name
-      2: const pw.FlexColumnWidth(1.6), // Dept
-      3: const pw.FlexColumnWidth(1.1), // Req
-      4: const pw.FlexColumnWidth(1.1), // Act
-      5: const pw.FlexColumnWidth(1.1), // Deficit
-      6: const pw.FlexColumnWidth(1.2), // Delay
-      7: const pw.FlexColumnWidth(1.2), // Early
-      8: const pw.FlexColumnWidth(1.0), // Penalties
-      9: const pw.FlexColumnWidth(1.1), // OT
-      10: const pw.FlexColumnWidth(1.0), // Leaves
-      11: const pw.FlexColumnWidth(1.0), // Absences
+      0: const pw.FlexColumnWidth(1.1), // ID
+      1: const pw.FlexColumnWidth(2.0), // Name
+      2: const pw.FlexColumnWidth(1.5), // Dept
+      3: const pw.FlexColumnWidth(1.0), // Req
+      4: const pw.FlexColumnWidth(1.0), // Act
+      5: const pw.FlexColumnWidth(1.0), // Deficit
+      6: const pw.FlexColumnWidth(1.1), // Delay
+      7: const pw.FlexColumnWidth(1.1), // Early
+      8: const pw.FlexColumnWidth(0.9), // Penalties
+      9: const pw.FlexColumnWidth(1.0), // Extra
+      10: const pw.FlexColumnWidth(1.0), // OT
+      11: const pw.FlexColumnWidth(0.9), // Leaves
+      12: const pw.FlexColumnWidth(0.9), // Absences
     };
 
     double totalReq = 0;
@@ -2714,6 +2726,7 @@ class ExportService {
     int totalEarM = 0;
     int totalEarC = 0;
     double totalPen = 0;
+    double totalExtra = 0;
     double totalOt = 0;
     int totalDailyL = 0;
     int totalAbs = 0;
@@ -2727,6 +2740,7 @@ class ExportService {
       totalEarM += r.earlyExitMinutes;
       totalEarC += r.earlyExitCount;
       totalPen += r.penaltyDeductions;
+      totalExtra += r.extraTimeHours;
       totalOt += r.totalOvertimeHours;
       totalDailyL += r.dailyLeaveDays;
       totalAbs += r.absentDays;
@@ -2907,6 +2921,17 @@ class ExportService {
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(3),
                         child: smartText(
+                          r.extraTimeHours > 0 ? r.extraTimeHours.toStringAsFixed(1) : '0.0',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            fontWeight: r.extraTimeHours > 0 ? pw.FontWeight.bold : pw.FontWeight.normal,
+                            color: r.extraTimeHours > 0 ? PdfColors.teal800 : PdfColors.black,
+                          ),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(3),
+                        child: smartText(
                           r.totalOvertimeHours > 0 ? r.totalOvertimeHours.toStringAsFixed(1) : '0.0',
                           textAlign: pw.TextAlign.center,
                           style: pw.TextStyle(
@@ -3015,6 +3040,14 @@ class ExportService {
                         totalPen > 0 ? totalPen.toStringAsFixed(1) : '0',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3.5),
+                      child: smartText(
+                        totalExtra > 0 ? totalExtra.toStringAsFixed(1) : '0.0',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.teal800),
                       ),
                     ),
                     pw.Padding(

@@ -242,6 +242,14 @@ class OrderCompletionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final double rate = totalCount > 0 ? (completedCount / totalCount).clamp(0.0, 1.0) : 0.0;
+    final double percentage = rate * 100.0;
+
+    // Segment fill factors
+    final double f1 = (rate / 0.33).clamp(0.0, 1.0);
+    final double f2 = rate <= 0.33 ? 0.0 : ((rate - 0.33) / 0.27).clamp(0.0, 1.0);
+    final double f3 = rate <= 0.60 ? 0.0 : ((rate - 0.60) / 0.40).clamp(0.0, 1.0);
+    final trackBg = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
@@ -271,16 +279,38 @@ class OrderCompletionCard extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                    color: isDark ? Colors.white : const Color(0xFF1E293B),
-                  ),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${percentage.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -375,41 +405,78 @@ class OrderCompletionCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
 
-          // Segmented Progress Bar Track
+          // Segmented Progress Bar Track (Dynamically filled based on real percentage)
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
               height: 18,
               child: Row(
                 children: [
-                  // 33% Yellow
+                  // Segment 1 (0 - 33%)
                   Expanded(
                     flex: 33,
-                    child: Container(
-                      color: const Color(0xFFFBBF24),
+                    child: Stack(
+                      children: [
+                        Container(color: trackBg),
+                        if (f1 > 0)
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: f1,
+                            child: Container(
+                              color: const Color(0xFFFBBF24),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 2),
-                  // 27% Yellow gradient
+                  // Segment 2 (33% - 60%)
                   Expanded(
                     flex: 27,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Color(0xFFFBBF24),
-                            Color(0xFFFDE68A),
-                          ],
-                        ),
-                      ),
+                    child: Stack(
+                      children: [
+                        Container(color: trackBg),
+                        if (f2 > 0)
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: f2,
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFFFBBF24),
+                                    Color(0xFFFDE68A),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 2),
-                  // 40% Light Gray track
+                  // Segment 3 (60% - 100%)
                   Expanded(
                     flex: 40,
-                    child: Container(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    child: Stack(
+                      children: [
+                        Container(color: trackBg),
+                        if (f3 > 0)
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: f3,
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFFFDE68A),
+                                    Color(0xFF10B981),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],

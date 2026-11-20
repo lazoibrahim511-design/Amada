@@ -197,6 +197,7 @@ class DayShiftConfig {
   final bool isOvernight;
   final String crossMidnightCutoff; // "HH:mm" e.g., "03:00"
   final bool isSpecialShift;
+  final int? maxContinuousHours;
 
   DayShiftConfig({
     required this.isWorkingDay,
@@ -208,6 +209,7 @@ class DayShiftConfig {
     this.isOvernight = false,
     this.crossMidnightCutoff = '',
     this.isSpecialShift = false,
+    this.maxContinuousHours,
   });
 
   Map<String, dynamic> toMap() {
@@ -221,6 +223,7 @@ class DayShiftConfig {
       'isOvernight': isOvernight,
       'crossMidnightCutoff': crossMidnightCutoff,
       'isSpecialShift': isSpecialShift,
+      if (maxContinuousHours != null) 'maxContinuousHours': maxContinuousHours,
     };
   }
 
@@ -238,6 +241,7 @@ class DayShiftConfig {
       isOvernight: map['isOvernight'] ?? autoOvernight,
       crossMidnightCutoff: map['crossMidnightCutoff'] ?? '',
       isSpecialShift: map['isSpecialShift'] ?? (map['shiftType'] == 'special'),
+      maxContinuousHours: (map['maxContinuousHours'] as num?)?.toInt(),
     );
   }
 }
@@ -261,6 +265,7 @@ class WorkShift {
   final bool isOvernight;
   final String crossMidnightCutoff; // "HH:mm" e.g., "03:00" (Checkouts up to this cutoff calculate to previous date)
   final bool isSpecialShift; // Special shift: pairs 2nd punch (even on next day) as clock-out and credits to start day
+  final int? maxContinuousHours; // User-configured maximum continuous hours (e.g. 24, 26, 28, 30, 36, 48)
   final String companyCode;
 
   WorkShift({
@@ -282,6 +287,7 @@ class WorkShift {
     this.isOvernight = false,
     this.crossMidnightCutoff = '',
     this.isSpecialShift = false,
+    this.maxContinuousHours,
     this.companyCode = '',
   })  : rotationDays = rotationDays ?? (rotationSchedule?.length ?? (weeklySchedule?.length ?? 7)),
         rotationSchedule = rotationSchedule ?? weeklySchedule ?? const {};
@@ -388,6 +394,36 @@ class WorkShift {
     return calculateDefaultCutoff(endStr);
   }
 
+  /// Returns the user-configured max continuous hours window (e.g. 24, 26, 28, 30, 48) or calculates it from Cutoff time.
+  int getMaxContinuousHoursForDate(DateTime date) {
+    if (isRotation) {
+      final config = getConfigForDate(date);
+      if (config != null && config.maxContinuousHours != null && config.maxContinuousHours! > 0) {
+        return config.maxContinuousHours!;
+      }
+    }
+    if (maxContinuousHours != null && maxContinuousHours! > 0) {
+      return maxContinuousHours!;
+    }
+    final cutoffStr = getCrossMidnightCutoffForDate(date);
+    final cParts = cutoffStr.split(':');
+    if (cParts.length >= 2) {
+      final cH = int.tryParse(cParts[0]) ?? 9;
+      final cM = cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? 30) : 30;
+      final sStr = getStartTimeForDate(date);
+      final sParts = sStr.split(':');
+      final sH = int.tryParse(sParts[0]) ?? 8;
+      final sM = sParts.length >= 2 ? (int.tryParse(sParts[1]) ?? 0) : 0;
+      final sMins = sH * 60 + sM;
+      final cMins = (24 * 60) + cH * 60 + cM;
+      final diffMins = cMins - sMins;
+      if (diffMins > 0) {
+        return (diffMins / 60).ceil();
+      }
+    }
+    return 26;
+  }
+
   bool isWorkingDay(DateTime date) {
     if (!isRotation) {
       return workingDays.contains(date.weekday);
@@ -472,6 +508,7 @@ class WorkShift {
     bool? isOvernight,
     String? crossMidnightCutoff,
     bool? isSpecialShift,
+    int? maxContinuousHours,
     String? companyCode,
   }) {
     return WorkShift(
@@ -493,6 +530,7 @@ class WorkShift {
       isOvernight: isOvernight ?? this.isOvernight,
       crossMidnightCutoff: crossMidnightCutoff ?? this.crossMidnightCutoff,
       isSpecialShift: isSpecialShift ?? this.isSpecialShift,
+      maxContinuousHours: maxContinuousHours ?? this.maxContinuousHours,
       companyCode: companyCode ?? this.companyCode,
     );
   }
@@ -518,6 +556,7 @@ class WorkShift {
       'isOvernight': isOvernight,
       'crossMidnightCutoff': crossMidnightCutoff,
       'isSpecialShift': isSpecialShift,
+      if (maxContinuousHours != null) 'maxContinuousHours': maxContinuousHours,
       'companyCode': companyCode.trim().toLowerCase(),
     };
   }
@@ -562,6 +601,7 @@ class WorkShift {
       isOvernight: map['isOvernight'] ?? autoOvernight,
       crossMidnightCutoff: map['crossMidnightCutoff'] ?? '',
       isSpecialShift: map['isSpecialShift'] ?? (map['shiftType'] == 'special'),
+      maxContinuousHours: (map['maxContinuousHours'] as num?)?.toInt(),
       companyCode: cCode,
     );
   }
@@ -1627,6 +1667,61 @@ class CompanyEmployee {
 
   @override
   int get hashCode => id.trim().toLowerCase().hashCode;
+
+  /// Normalizes Arabic and Persian/Kurdish numerals to standard ASCII 0-9 digits.
+  static String _normalizeDigits(String input) {
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    var result = input;
+    for (int i = 0; i < 10; i++) {
+      result = result.replaceAll(arabicDigits[i], '$i');
+      result = result.replaceAll(persianDigits[i], '$i');
+    }
+    return result;
+  }
+
+  /// Natural comparator for sorting employees by numeric ID (1, 2, 3... 10, 11...).
+  static int compareById(CompanyEmployee a, CompanyEmployee b) {
+    return compareIds(a.id, b.id);
+  }
+
+  /// Natural comparator for ID strings (1, 2, 3... 10, 11...).
+  static int compareIds(String idA, String idB) {
+    final cleanA = _normalizeDigits(idA.trim());
+    final cleanB = _normalizeDigits(idB.trim());
+
+    // 1. Direct integer comparison (e.g. "1", "2", "3", "10", "11")
+    final intA = int.tryParse(cleanA);
+    final intB = int.tryParse(cleanB);
+    if (intA != null && intB != null) {
+      if (intA != intB) return intA.compareTo(intB);
+      return cleanA.compareTo(cleanB);
+    }
+    // Pure numeric IDs come before non-numeric IDs
+    if (intA != null && intB == null) return -1;
+    if (intA == null && intB != null) return 1;
+
+    // 2. Prefixed numeric comparison (e.g. "emp_1" vs "emp_2", "usr1" vs "usr10")
+    final matchA = RegExp(r'^([a-zA-Z_\-\s]*)(\d+)(.*)$').firstMatch(cleanA);
+    final matchB = RegExp(r'^([a-zA-Z_\-\s]*)(\d+)(.*)$').firstMatch(cleanB);
+    if (matchA != null && matchB != null) {
+      final prefixA = matchA.group(1)?.toLowerCase() ?? '';
+      final prefixB = matchB.group(1)?.toLowerCase() ?? '';
+      if (prefixA == prefixB) {
+        final numA = int.tryParse(matchA.group(2)!) ?? 0;
+        final numB = int.tryParse(matchB.group(2)!) ?? 0;
+        if (numA != numB) {
+          return numA.compareTo(numB);
+        }
+        final suffixA = matchA.group(3) ?? '';
+        final suffixB = matchB.group(3) ?? '';
+        return suffixA.compareTo(suffixB);
+      }
+    }
+
+    // 3. Fallback: Case-insensitive alphabetical comparison
+    return cleanA.toLowerCase().compareTo(cleanB.toLowerCase());
+  }
 }
 
 class Holiday {
@@ -2193,6 +2288,7 @@ class PeriodicDailyAudit {
   final int actualMinutes;
   final int scheduledMinutes;
   final int overtimeMinutes;
+  final int extraTimeMinutes;
   final String status;
   final List<dynamic> requests;
 
@@ -2213,6 +2309,7 @@ class PeriodicDailyAudit {
     required this.actualMinutes,
     required this.scheduledMinutes,
     this.overtimeMinutes = 0,
+    this.extraTimeMinutes = 0,
     required this.status,
     this.requests = const [],
   });
@@ -2232,6 +2329,7 @@ class PeriodicReportRow {
   final int earlyExitCount;
   final double penaltyDeductions;
   final int penaltyDays;
+  final double extraTimeHours;
   final double totalOvertimeHours;
   final double dayOvertimeHours;
   final double nightOvertimeHours;
@@ -2257,6 +2355,7 @@ class PeriodicReportRow {
     required this.earlyExitCount,
     required this.penaltyDeductions,
     required this.penaltyDays,
+    this.extraTimeHours = 0.0,
     required this.totalOvertimeHours,
     required this.dayOvertimeHours,
     required this.nightOvertimeHours,

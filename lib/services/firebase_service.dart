@@ -1063,7 +1063,12 @@ class FirebaseService {
           }
           final rec = AttendanceRecord.fromMap(data, empId, c);
           if (since == null || !rec.checkIn.isBefore(since)) {
-            if (comp.isEmpty || comp == 'all' || rec.companyCode == null || rec.companyCode!.trim().toLowerCase() == comp) {
+            if (comp.isEmpty || comp == 'all') {
+              list.add(rec);
+            } else if (rec.companyCode != null && rec.companyCode!.trim().toLowerCase() == comp) {
+              list.add(rec);
+            } else if ((rec.companyCode == null || rec.companyCode!.trim().isEmpty) && comp == 'amada') {
+              // Legacy records without companyCode strictly belong to root company amada
               list.add(rec);
             }
           }
@@ -1170,7 +1175,11 @@ class FirebaseService {
             }
           }
           final rec = AttendanceRecord.fromMap(data, empId, c);
-          if (comp.isEmpty || comp == 'all' || rec.companyCode == null || rec.companyCode!.trim().toLowerCase() == comp) {
+          if (comp.isEmpty || comp == 'all') {
+            list.add(rec);
+          } else if (rec.companyCode != null && rec.companyCode!.trim().toLowerCase() == comp) {
+            list.add(rec);
+          } else if ((rec.companyCode == null || rec.companyCode!.trim().isEmpty) && comp == 'amada') {
             list.add(rec);
           }
         } catch (_) {}
@@ -1262,6 +1271,39 @@ class FirebaseService {
       }
     } catch (e) {
       debugPrint('Error deleting attendance record: $e');
+    }
+  }
+
+  /// Clears only the checkOut timestamp from a record in Firestore, leaving checkIn intact
+  Future<void> clearRecordCheckOut(String employeeId, AttendanceRecord record, {String? companyCode}) async {
+    if (!isAvailable) return;
+    try {
+      final docId = record.checkIn.toIso8601String().replaceAll(':', '-');
+      final comp = (companyCode ?? record.companyCode ?? '').trim().toLowerCase();
+      final scopedDocId = _getScopedEmployeeDocId(employeeId, companyCode: comp);
+      await _firestore
+          .collection('attendance_records')
+          .doc(scopedDocId)
+          .collection('user_records')
+          .doc(docId)
+          .update({'checkOut': FieldValue.delete()});
+      if (scopedDocId != employeeId) {
+        try {
+          await _firestore
+              .collection('attendance_records')
+              .doc(employeeId)
+              .collection('user_records')
+              .doc(docId)
+              .update({'checkOut': FieldValue.delete()});
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Error clearing attendance record checkOut: $e');
+      // Fallback: saveRecord with cleared checkOut
+      try {
+        final cleared = record.copyWith(clearCheckOut: true);
+        await saveRecord(employeeId, cleared, companyCode: companyCode);
+      } catch (_) {}
     }
   }
 

@@ -106,6 +106,9 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
       case 'overtime':
         value = row.totalOvertimeHours;
         break;
+      case 'extra_time':
+        value = row.extraTimeHours;
+        break;
       case 'deficit':
         value = row.deficitHours;
         break;
@@ -229,19 +232,13 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
       );
 
       final empRequests = allCompanyRequests.where((r) {
-        return r.employeeId != null &&
-            (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
-             r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-             r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase());
+        return provider.matchesEmployeeRequest(r, emp);
       }).toList();
 
-      final empRecords = (emp.id == provider.currentEmployee?.id)
+      final empRecords = (emp.id == provider.currentEmployee?.id && (emp.companyCode.isEmpty || emp.companyCode.toLowerCase() == provider.currentCompanyCode.toLowerCase()))
           ? provider.records
           : provider.allCompanyRecords.where((r) {
-              return r.employeeId != null &&
-                  (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
-                   r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                   r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase());
+              return provider.matchesEmployeeRecord(r, emp);
             }).toList();
 
       int totalRequiredMinutes = 0;
@@ -252,11 +249,22 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
       int totalEarlyExitMinutes = 0;
       int earlyExitCount = 0;
       double totalPenalties = 0.0;
+      int totalExtraMinutes = 0;
       int totalOvertimeMinutes = 0;
+      int totalDayOtMinutes = 0;
+      int totalNightOtMinutes = 0;
       int dailyLeaveDays = 0;
       double hourlyLeaveMinutes = 0.0;
       int absentDays = 0;
       int presentDays = 0;
+
+      // Tier occurrence tracking for penalties matching attendance_provider.dart
+      int delayTier1Occurrences = 0;
+      int delayTier2Occurrences = 0;
+      int delayTier3Occurrences = 0;
+      int earlyExitTier1Occurrences = 0;
+      int earlyExitTier2Occurrences = 0;
+      int earlyExitTier3Occurrences = 0;
 
       final dailyAuditLogs = <PeriodicDailyAudit>[];
 
@@ -305,6 +313,8 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
         String approvedLeaveType = '';
         double dayHourlyMinutes = 0.0;
         bool hasApprovedMissingPunch = false;
+        bool hasApprovedOt = false;
+        int approvedOtMinutes = 0;
 
         for (var req in empRequests) {
           final reqDate = req.date;
@@ -340,6 +350,10 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
                   req.type == 'Forgot to Clock In' ||
                   req.type == 'Forgot to Clock Out') {
                 hasApprovedMissingPunch = true;
+              } else if (req.type == 'Overtime Approval') {
+                hasApprovedOt = true;
+                final mins = parseOvertimeApprovalDurationMinutes(req.duration);
+                approvedOtMinutes += mins > 0 ? mins : 0;
               }
             }
           }
@@ -351,12 +365,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
         final eParts = endTimeStr.split(':');
         final shiftStartMins = sParts.length >= 2 ? int.parse(sParts[0]) * 60 + int.parse(sParts[1]) : 540;
         final shiftEndMins = eParts.length >= 2 ? int.parse(eParts[0]) * 60 + int.parse(eParts[1]) : 1020;
-        int shiftDurationMins = shiftEndMins >= shiftStartMins
-            ? shiftEndMins - shiftStartMins
-            : (shiftEndMins + 1440) - shiftStartMins;
-        if (dayShift.breakDurationMinutes > 0 && shiftDurationMins > dayShift.breakDurationMinutes) {
-          shiftDurationMins -= dayShift.breakDurationMinutes;
-        }
+        int shiftDurationMins = dayShift.getShiftDurationMinutesForDate(date);
 
         final shiftStart = DateTime(
           date.year,
@@ -373,8 +382,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
           shiftEndMins % 60,
         );
         if (shiftEnd.isBefore(shiftStart) ||
-            shiftEnd.isAtSameMomentAs(shiftStart) ||
-            dayShift.isOvernightForDate(date)) {
+            shiftEnd.isAtSameMomentAs(shiftStart)) {
           shiftEnd = shiftEnd.add(const Duration(days: 1));
         }
 
@@ -393,104 +401,259 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
         int dayDelayMins = 0;
         int dayEarlyMins = 0;
         int dayActualMins = 0;
+        int dayExtraMins = 0;
+        int dayNightExtraMins = 0;
         int dayOtMins = 0;
         String dayStatus = 'Off Day';
 
-        if (isHoliday) {
-          dayStatus = 'Holiday: ${holiday.name}';
-        } else if (!isWorkingDay) {
-          dayStatus = 'Weekend / Off Day';
-        } else if (hasApprovedLeave) {
-          dayStatus = approvedLeaveType;
-          dailyLeaveDays++;
-        } else if (dayRecords.isEmpty) {
-          if (dayHourlyMinutes > 0) {
-            hourlyLeaveMinutes += dayHourlyMinutes;
+        if (dayRecords.isEmpty) {
+          if (isHoliday) {
+            dayStatus = 'Holiday: ${holiday.name}';
+          } else if (!isWorkingDay) {
+            dayStatus = 'Weekend / Off Day';
+          } else if (hasApprovedLeave) {
+            dayStatus = approvedLeaveType;
+            dailyLeaveDays++;
+          } else {
+            if (dayHourlyMinutes > 0) {
+              hourlyLeaveMinutes += dayHourlyMinutes;
+            }
+            dayStatus = dayHourlyMinutes > 0
+                ? 'Absent (${(dayHourlyMinutes / 60).toStringAsFixed(1)}h Leave)'
+                : 'Absent';
+            absentDays++;
+            totalRequiredMinutes += shiftDurationMins;
+            final deficit = (shiftDurationMins - dayHourlyMinutes).clamp(0, shiftDurationMins).toInt();
+            totalDeficitMinutes += deficit;
           }
-          dayStatus = dayHourlyMinutes > 0
-              ? 'Absent (${(dayHourlyMinutes / 60).toStringAsFixed(1)}h Leave)'
-              : 'Absent';
-          absentDays++;
-          totalRequiredMinutes += shiftDurationMins;
-          final deficit = (shiftDurationMins - dayHourlyMinutes).clamp(0, shiftDurationMins).toInt();
-          totalDeficitMinutes += deficit;
         } else if (hasUnexcusedMissedPunch) {
-          if (dayHourlyMinutes > 0) {
-            hourlyLeaveMinutes += dayHourlyMinutes;
+          if (isHoliday) {
+            dayStatus = 'Missed Punch (Holiday)';
+          } else if (!isWorkingDay) {
+            dayStatus = 'Missed Punch (Off Day)';
+          } else {
+            if (dayHourlyMinutes > 0) {
+              hourlyLeaveMinutes += dayHourlyMinutes;
+            }
+            dayStatus = 'Missed Punch';
+            totalRequiredMinutes += shiftDurationMins;
+            final deficit = (shiftDurationMins - dayHourlyMinutes).clamp(0, shiftDurationMins).toInt();
+            totalDeficitMinutes += deficit;
           }
-          dayStatus = 'Missed Punch';
-          totalRequiredMinutes += shiftDurationMins;
-          final deficit = (shiftDurationMins - dayHourlyMinutes).clamp(0, shiftDurationMins).toInt();
-          totalDeficitMinutes += deficit;
-          dayActualMins = 0;
-          dayDelayMins = 0;
-          dayEarlyMins = 0;
-          dayOtMins = 0;
         } else {
+          // Employee has valid records on this day
           presentDays++;
-          totalRequiredMinutes += shiftDurationMins;
 
           for (var r in dayRecords) {
             dayActualMins += r.duration.inMinutes;
           }
-
-          final shiftRecords = dayRecords
-              .where((r) =>
-                  (r.checkIn.hour * 60 + r.checkIn.minute) < shiftEndMins)
-              .toList();
-
-          if (shiftRecords.isNotEmpty) {
-            final firstRec = shiftRecords.first;
-            final inMins = firstRec.checkIn.hour * 60 + firstRec.checkIn.minute;
-            if (inMins > shiftStartMins) {
-              dayDelayMins = inMins - shiftStartMins;
-            }
-
-            final lastRec = shiftRecords.last;
-            if (lastRec.checkOut != null) {
-              final outMins =
-                  lastRec.checkOut!.hour * 60 + lastRec.checkOut!.minute;
-              if (outMins < shiftEndMins) {
-                dayEarlyMins = shiftEndMins - outMins;
-              }
-            }
-          }
-
-          if (dayHourlyMinutes > 0) {
-            hourlyLeaveMinutes += dayHourlyMinutes;
-            if (dayDelayMins > 0) {
-              dayDelayMins = math.max(0, dayDelayMins - dayHourlyMinutes.toInt());
-            }
-          }
-
-          if (dayDelayMins > 0) {
-            totalDelayMinutes += dayDelayMins;
-            delayCount++;
-          }
-          if (dayEarlyMins > 0) {
-            totalEarlyExitMinutes += dayEarlyMins;
-            earlyExitCount++;
-          }
-
-          final effectiveRequiredMins = (shiftDurationMins - dayHourlyMinutes).clamp(0, shiftDurationMins).toInt();
-          if (dayActualMins < effectiveRequiredMins) {
-            final deficit = effectiveRequiredMins - dayActualMins;
-            totalDeficitMinutes += deficit;
-          } else if (dayActualMins > shiftDurationMins) {
-            dayOtMins = dayActualMins - shiftDurationMins;
-            totalOvertimeMinutes += dayOtMins;
-          }
-
           totalActualMinutes += dayActualMins;
 
-          if (dayDelayMins > 0 && dayEarlyMins > 0) {
-            dayStatus = 'Late ($dayDelayMins m) & Early Exit ($dayEarlyMins m)';
-          } else if (dayDelayMins > 0) {
-            dayStatus = 'Late ($dayDelayMins m)';
-          } else if (dayEarlyMins > 0) {
-            dayStatus = 'Early Exit ($dayEarlyMins m)';
+          final isSpecial = dayShift.isSpecialShiftForDate(date);
+
+          if (!isWorkingDay || isHoliday) {
+            // Worked on Weekend or Holiday: 0 required hours, all worked time is Extra Time!
+            dayExtraMins = dayActualMins;
+            dayDelayMins = 0;
+            dayEarlyMins = 0;
+
+            if (group.nightOvertimeAllowed) {
+              for (var r in dayRecords) {
+                final cIn = r.checkIn;
+                final cOut = r.checkOut ?? cIn;
+                dayNightExtraMins += group.calculateNightMinutes(cIn, cOut);
+              }
+            }
+
+            dayStatus = isHoliday
+                ? 'Worked on Holiday (${holiday.name})'
+                : 'Worked on Off Day';
+          } else if (hasApprovedLeave) {
+            dailyLeaveDays++;
+            dayExtraMins = dayActualMins;
+            dayDelayMins = 0;
+            dayEarlyMins = 0;
+            dayStatus = '$approvedLeaveType (Worked ${(dayActualMins / 60.0).toStringAsFixed(1)}h)';
           } else {
-            dayStatus = 'Present';
+            // Normal working day attendance
+            totalRequiredMinutes += shiftDurationMins;
+
+            if (isSpecial) {
+              // Special Shift (12h/24h): continuous, no delay/early exit penalties
+              dayDelayMins = 0;
+              dayEarlyMins = 0;
+              if (dayActualMins > shiftDurationMins) {
+                dayExtraMins = dayActualMins - shiftDurationMins;
+                if (group.nightOvertimeAllowed && dayRecords.isNotEmpty) {
+                  final lastRec = dayRecords.last;
+                  final lastOut = lastRec.checkOut ?? lastRec.checkIn;
+                  final extraStart = lastOut.subtract(Duration(minutes: dayExtraMins));
+                  dayNightExtraMins = group.calculateNightMinutes(extraStart, lastOut);
+                }
+              }
+            } else {
+              // Standard shift: calculate extra time before/after shift, delay, and early exit
+              for (var r in dayRecords) {
+                final cIn = r.checkIn;
+                final cOut = r.checkOut ?? cIn;
+
+                if (cIn.isBefore(shiftStart)) {
+                  final endBefore = cOut.isBefore(shiftStart) ? cOut : shiftStart;
+                  dayExtraMins += endBefore.difference(cIn).inMinutes;
+                  if (group.nightOvertimeAllowed) {
+                    dayNightExtraMins += group.calculateNightMinutes(cIn, endBefore);
+                  }
+                }
+                if (cOut.isAfter(shiftEnd)) {
+                  final startAfter = cIn.isAfter(shiftEnd) ? cIn : shiftEnd;
+                  dayExtraMins += cOut.difference(startAfter).inMinutes;
+                  if (group.nightOvertimeAllowed) {
+                    dayNightExtraMins += group.calculateNightMinutes(startAfter, cOut);
+                  }
+                }
+              }
+
+              // Delay calculation with forgiveness
+              final shiftRecords = dayRecords.where((r) => r.checkIn.isBefore(shiftEnd)).toList();
+              if (shiftRecords.isNotEmpty) {
+                final firstRec = shiftRecords.first;
+                final diff = firstRec.checkIn.difference(shiftStart).inMinutes;
+                if (diff > dayShift.forgivenessOfDelay) {
+                  dayDelayMins = diff;
+                }
+
+                // Early exit calculation with forgiveness
+                final lastRec = shiftRecords.last;
+                if (lastRec.checkOut != null) {
+                  final diffEarly = shiftEnd.difference(lastRec.checkOut!).inMinutes;
+                  if (diffEarly > dayShift.earlyExit) {
+                    dayEarlyMins = diffEarly;
+                  }
+                }
+              }
+            }
+
+            // Excuse delay & early exit with approved hourly leave
+            if (dayHourlyMinutes > 0) {
+              hourlyLeaveMinutes += dayHourlyMinutes;
+              int remainingHourly = dayHourlyMinutes.toInt();
+              if (dayDelayMins > 0) {
+                final excused = math.min(dayDelayMins, remainingHourly);
+                dayDelayMins -= excused;
+                remainingHourly -= excused;
+              }
+              if (dayEarlyMins > 0 && remainingHourly > 0) {
+                final excused = math.min(dayEarlyMins, remainingHourly);
+                dayEarlyMins -= excused;
+                remainingHourly -= excused;
+              }
+            }
+
+            // Deficit on working day
+            final effectiveRequiredMins = (shiftDurationMins - dayHourlyMinutes).clamp(0, shiftDurationMins).toInt();
+            if (dayActualMins < effectiveRequiredMins) {
+              final deficit = effectiveRequiredMins - dayActualMins;
+              totalDeficitMinutes += deficit;
+            }
+
+            // Delay & Early Exit penalty evaluations per tier with forgiveness
+            double delayPenalty = 0.0;
+            if (dayDelayMins > 0 && group.delayPenaltiesEnabled) {
+              totalDelayMinutes += dayDelayMins;
+              delayCount++;
+              if (dayDelayMins >= group.delayTier1Min && dayDelayMins <= group.delayTier1Max) {
+                delayTier1Occurrences++;
+                if (delayTier1Occurrences > group.delayTier1Forgiveness) {
+                  delayPenalty = group.delayTier1Penalty;
+                }
+              } else if (dayDelayMins >= group.delayTier2Min && dayDelayMins <= group.delayTier2Max) {
+                delayTier2Occurrences++;
+                if (delayTier2Occurrences > group.delayTier2Forgiveness) {
+                  delayPenalty = group.delayTier2Penalty;
+                }
+              } else if (dayDelayMins >= group.delayTier3Min) {
+                delayTier3Occurrences++;
+                if (delayTier3Occurrences > group.delayTier3Forgiveness) {
+                  delayPenalty = group.delayTier3Penalty;
+                }
+              }
+            }
+
+            double earlyExitPenalty = 0.0;
+            if (dayEarlyMins > 0 && group.earlyExitPenaltiesEnabled) {
+              totalEarlyExitMinutes += dayEarlyMins;
+              earlyExitCount++;
+              if (dayEarlyMins >= group.earlyExitTier1Min && dayEarlyMins <= group.earlyExitTier1Max) {
+                earlyExitTier1Occurrences++;
+                if (earlyExitTier1Occurrences > group.earlyExitTier1Forgiveness) {
+                  earlyExitPenalty = group.earlyExitTier1Penalty;
+                }
+              } else if (dayEarlyMins >= group.earlyExitTier2Min && dayEarlyMins <= group.earlyExitTier2Max) {
+                earlyExitTier2Occurrences++;
+                if (earlyExitTier2Occurrences > group.earlyExitTier2Forgiveness) {
+                  earlyExitPenalty = group.earlyExitTier2Penalty;
+                }
+              } else if (dayEarlyMins >= group.earlyExitTier3Min) {
+                earlyExitTier3Occurrences++;
+                if (earlyExitTier3Occurrences > group.earlyExitTier3Forgiveness) {
+                  earlyExitPenalty = group.earlyExitTier3Penalty;
+                }
+              }
+            }
+
+            totalPenalties += (delayPenalty + earlyExitPenalty);
+
+            // Set day status
+            if (dayDelayMins > 0 && dayEarlyMins > 0) {
+              dayStatus = 'Late ($dayDelayMins m) & Early Exit ($dayEarlyMins m)';
+            } else if (dayDelayMins > 0) {
+              dayStatus = 'Late ($dayDelayMins m)';
+            } else if (dayEarlyMins > 0) {
+              dayStatus = 'Early Exit ($dayEarlyMins m)';
+            } else if (dayExtraMins > 0) {
+              dayStatus = 'Present (+${(dayExtraMins / 60.0).toStringAsFixed(1)}h Extra)';
+            } else {
+              dayStatus = 'Present';
+            }
+          }
+
+          // Accumulate raw Extra Time
+          totalExtraMinutes += dayExtraMins;
+
+          // Overtime calculation with group multipliers
+          if (dayExtraMins > 0) {
+            final effectiveOtExtra = hasApprovedOt && approvedOtMinutes > 0
+                ? math.min(dayExtraMins, approvedOtMinutes)
+                : dayExtraMins;
+
+            if (group.overtimeAllowed || hasApprovedOt) {
+              final effNight = dayExtraMins > 0
+                  ? (dayNightExtraMins * (effectiveOtExtra / dayExtraMins)).round()
+                  : 0;
+
+              dayOtMins = group.calculateOvertimeMinutes(
+                dayExtraMinutes: effectiveOtExtra,
+                nightExtraMinutes: effNight,
+                isWeekend: !isWorkingDay,
+                isHoliday: isHoliday,
+              );
+
+              final standardRatio = isHoliday
+                  ? group.holidayOvertimeRatio
+                  : (!isWorkingDay ? group.weekendOvertimeRatio : 1.0);
+
+              if (group.nightOvertimeAllowed && effNight > 0) {
+                final nightOtPart = (effectiveOtExtra * (effNight / dayExtraMins)).round();
+                final dayOtPart = effectiveOtExtra - nightOtPart;
+                totalDayOtMinutes += (dayOtPart * standardRatio).toInt();
+                totalNightOtMinutes += (nightOtPart * group.nightOvertimeRatio).toInt();
+              } else {
+                totalDayOtMinutes += (effectiveOtExtra * standardRatio).toInt();
+              }
+              totalOvertimeMinutes += dayOtMins;
+            } else {
+              dayOtMins = 0;
+            }
           }
         }
 
@@ -511,22 +674,12 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
           delayMinutes: dayDelayMins,
           earlyExitMinutes: dayEarlyMins,
           actualMinutes: dayActualMins,
-          scheduledMinutes: isWorkingDay ? shiftDurationMins : 0,
+          scheduledMinutes: (isWorkingDay && !isHoliday) ? shiftDurationMins : 0,
           overtimeMinutes: dayOtMins,
+          extraTimeMinutes: dayExtraMins,
           status: dayStatus,
           requests: dayRequests,
         ));
-      }
-
-      // Delay tier penalties calculation
-      if (group.delayPenaltiesEnabled) {
-        if (group.delayTier3Penalty > 0 && delayCount >= 3) {
-          totalPenalties += group.delayTier3Penalty;
-        } else if (group.delayTier2Penalty > 0 && delayCount == 2) {
-          totalPenalties += group.delayTier2Penalty;
-        } else if (group.delayTier1Penalty > 0 && delayCount == 1) {
-          totalPenalties += group.delayTier1Penalty;
-        }
       }
 
       rows.add(PeriodicReportRow(
@@ -543,9 +696,10 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
         earlyExitCount: earlyExitCount,
         penaltyDeductions: totalPenalties,
         penaltyDays: totalPenalties.round(),
+        extraTimeHours: totalExtraMinutes / 60.0,
         totalOvertimeHours: totalOvertimeMinutes / 60.0,
-        dayOvertimeHours: totalOvertimeMinutes / 60.0,
-        nightOvertimeHours: 0.0,
+        dayOvertimeHours: totalDayOtMinutes / 60.0,
+        nightOvertimeHours: totalNightOtMinutes / 60.0,
         dailyLeaveDays: dailyLeaveDays,
         hourlyLeaveHours: hourlyLeaveMinutes / 60.0,
         remainingAnnualHours: emp.annualLeaveBalance,
@@ -574,6 +728,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
 
     // Aggregate totals for KPI Cards
     double aggDeficitHours = 0;
+    double aggExtraHours = 0;
     double aggOvertimeHours = 0;
     int aggDelayCount = 0;
     int aggEarlyCount = 0;
@@ -583,6 +738,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
 
     for (var r in rows) {
       aggDeficitHours += r.deficitHours;
+      aggExtraHours += r.extraTimeHours;
       aggOvertimeHours += r.totalOvertimeHours;
       aggDelayCount += r.delayCount;
       aggEarlyCount += r.earlyExitCount;
@@ -604,6 +760,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
                 isDark: isDark,
                 provider: provider,
                 totalDeficitHours: aggDeficitHours,
+                totalExtraHours: aggExtraHours,
                 totalOvertimeHours: aggOvertimeHours,
                 totalDelays: aggDelayCount,
                 totalEarlyExits: aggEarlyCount,
@@ -956,6 +1113,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
               items: [
                 DropdownMenuItem(value: 'all', child: Text(provider.translate('all_employees'))),
                 DropdownMenuItem(value: 'overtime', child: Text(provider.translate('overtime'))),
+                DropdownMenuItem(value: 'extra_time', child: Text(provider.translate('extra_time'))),
                 DropdownMenuItem(value: 'deficit', child: Text(provider.translate('attendance_deficit'))),
                 DropdownMenuItem(value: 'delay', child: Text(provider.translate('late_arrival'))),
                 DropdownMenuItem(value: 'early_exit', child: Text(provider.translate('early_exit'))),
@@ -1103,6 +1261,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
     required bool isDark,
     required AttendanceProvider provider,
     required double totalDeficitHours,
+    required double totalExtraHours,
     required double totalOvertimeHours,
     required int totalDelays,
     required int totalEarlyExits,
@@ -1130,7 +1289,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
               child: _buildMetricTile(
                 title: provider.translate('total_overtime_card'),
                 value: '${totalOvertimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
-                subtitle: provider.translate('payable_extra_hours_sub'),
+                subtitle: '${provider.translate('extra_time')}: ${totalExtraHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
                 icon: Icons.bolt_rounded,
                 accentColor: const Color(0xFF10B981),
                 isDark: isDark,
@@ -1284,6 +1443,7 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
                       _buildHeaderCol(provider.translate('delay_m_col'), isDark: isDark, isNumeric: true),
                       _buildHeaderCol(provider.translate('early_exit_m_col'), isDark: isDark, isNumeric: true),
                       _buildHeaderCol(provider.translate('penalties_col'), isDark: isDark, isNumeric: true),
+                      _buildHeaderCol(provider.translate('extra_time_hrs_col'), isDark: isDark, isNumeric: true),
                       _buildHeaderCol(provider.translate('overtime_hrs_col'), isDark: isDark, isNumeric: true),
                       _buildHeaderCol(provider.translate('daily_leaves_col'), isDark: isDark, isNumeric: true),
                       _buildHeaderCol(provider.translate('hourly_perm_col'), isDark: isDark, isNumeric: true),
@@ -1404,6 +1564,25 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
                                 fontWeight: r.penaltyDeductions > 0 ? FontWeight.bold : FontWeight.normal,
                                 color: r.penaltyDeductions > 0 ? const Color(0xFF8B5CF6) : Colors.grey,
                                 fontSize: 12,
+                              ),
+                            ),
+                          ),
+
+                          // Extra Time
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: r.extraTimeHours > 0 ? const Color(0xFF0284C7).withValues(alpha: 0.12) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                r.extraTimeHours > 0 ? '+${r.extraTimeHours.toStringAsFixed(1)}${provider.translate('unit_hrs_short')}' : '-',
+                                style: TextStyle(
+                                  fontWeight: r.extraTimeHours > 0 ? FontWeight.bold : FontWeight.normal,
+                                  color: r.extraTimeHours > 0 ? const Color(0xFF0284C7) : Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ),
@@ -1704,6 +1883,20 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
                                       ),
                                     ),
                                   ),
+                                  if (day.extraTimeMinutes > 0) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '+${(day.extraTimeMinutes / 60.0).toStringAsFixed(1)}${provider.translate('unit_hrs_short')} ${provider.translate('extra_time')}',
+                                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
+                                      ),
+                                    ),
+                                  ],
                                   if (day.overtimeMinutes > 0) ...[
                                     const SizedBox(width: 6),
                                     Container(

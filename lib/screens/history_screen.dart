@@ -246,21 +246,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           recordsToCompile = _subordinateRecords;
         } else {
           recordsToCompile = provider.allCompanyRecords
-              .where((r) =>
-                  r.employeeId != null &&
-                  (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
-                   r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                   r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+              .where((r) => provider.matchesEmployeeRecord(r, emp))
               .toList();
         }
       } else {
         // Subordinate employee: merge live company stream with direct-fetched subordinate records
         final companyRecordsForEmp = provider.allCompanyRecords
-            .where((r) =>
-                r.employeeId != null &&
-                (r.employeeId!.trim().toLowerCase() == activeEmpId.trim().toLowerCase() ||
-                 r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                 r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+            .where((r) => provider.matchesEmployeeRecord(r, emp))
             .toList();
 
         if (companyRecordsForEmp.isNotEmpty && _subordinateRecords.isNotEmpty) {
@@ -368,8 +360,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           shiftEndMinutes % 60,
         );
         if (shiftEnd.isBefore(shiftStart) ||
-            shiftEnd.isAtSameMomentAs(shiftStart) ||
-            shift.isOvernightForDate(date)) {
+            shiftEnd.isAtSameMomentAs(shiftStart)) {
           shiftEnd = shiftEnd.add(const Duration(days: 1));
         }
 
@@ -500,7 +491,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ? DateFormat('hh:mm a').parse(timeStr)
                   : DateFormat('HH:mm').parse(timeStr);
               final punchMins = parsedTime.hour * 60 + parsedTime.minute;
-              return punchMins < cutoffMinsForMissing;
+              return punchMins <= cutoffMinsForMissing;
             } catch (_) {}
           }
           return false;

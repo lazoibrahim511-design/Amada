@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
+import '../models/attendance_record.dart';
 import '../models/hr_models.dart';
 import '../models/request_model.dart';
 import '../screens/requests_screen.dart';
@@ -151,20 +152,235 @@ class MetricCard extends StatelessWidget {
   }
 }
 
-class AttendanceOverviewChart extends StatelessWidget {
+class AttendanceOverviewChart extends StatefulWidget {
   const AttendanceOverviewChart({super.key});
+
+  @override
+  State<AttendanceOverviewChart> createState() => _AttendanceOverviewChartState();
+}
+
+class _AttendanceOverviewChartState extends State<AttendanceOverviewChart> {
+  String _selectedPeriod = 'this_week'; // 'this_week', 'last_week', 'this_month'
+
+  List<_DayAttendanceStat> _computeStats(AttendanceProvider provider) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final List<DateTime> dates = [];
+    final List<String> labels = [];
+
+    if (_selectedPeriod == 'last_week') {
+      final currentMonday = today.subtract(Duration(days: now.weekday - 1));
+      final lastMonday = currentMonday.subtract(const Duration(days: 7));
+      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      for (int i = 0; i < 7; i++) {
+        dates.add(lastMonday.add(Duration(days: i)));
+        labels.add(dayNames[i]);
+      }
+    } else if (_selectedPeriod == 'this_month') {
+      final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+      for (int i = 1; i <= daysInMonth; i++) {
+        dates.add(DateTime(now.year, now.month, i));
+        labels.add('$i');
+      }
+    } else {
+      // Default: 'this_week'
+      final currentMonday = today.subtract(Duration(days: now.weekday - 1));
+      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      for (int i = 0; i < 7; i++) {
+        dates.add(currentMonday.add(Duration(days: i)));
+        labels.add(dayNames[i]);
+      }
+    }
+
+    final employees = provider.employees;
+    final allRecords = provider.allCompanyRecords;
+    final Map<String, List<AttendanceRecord>> empRecordsMap = {};
+    for (final emp in employees) {
+      final recs = allRecords.where((r) {
+        return provider.matchesEmployeeRecord(r, emp);
+      }).toList();
+      empRecordsMap[emp.id] = recs;
+    }
+
+    final List<_DayAttendanceStat> stats = [];
+
+    for (int i = 0; i < dates.length; i++) {
+      final targetDate = dates[i];
+      final isToday = DateUtils.isSameDay(targetDate, today);
+      final isFuture = targetDate.isAfter(today);
+
+      int presentCount = 0;
+      int activeTotal = 0;
+
+      for (final emp in employees) {
+        if (emp.disabled) {
+          continue;
+        }
+        if (emp.startDate.isNotEmpty) {
+          final sDate = DateTime.tryParse(emp.startDate);
+          if (sDate != null && targetDate.isBefore(DateTime(sDate.year, sDate.month, sDate.day))) {
+            continue;
+          }
+        }
+        if (emp.endDate != null && emp.endDate!.isNotEmpty) {
+          final eDate = DateTime.tryParse(emp.endDate!);
+          if (eDate != null && targetDate.isAfter(DateTime(eDate.year, eDate.month, eDate.day))) {
+            continue;
+          }
+        }
+
+        activeTotal++;
+
+        if (isToday) {
+          final empRecs = empRecordsMap[emp.id] ?? const [];
+          final hasTodayRecord = empRecs.any((r) =>
+              ((r.checkIn.year == now.year &&
+                r.checkIn.month == now.month &&
+                r.checkIn.day == now.day) ||
+               (r.checkOut == null && now.difference(r.checkIn).inHours.abs() < 24)));
+          if (hasTodayRecord) {
+            presentCount++;
+          }
+        } else {
+          final empRecs = empRecordsMap[emp.id] ?? const [];
+          final dayRecs = provider.getRecordsForDate(targetDate, emp: emp, recordsPool: empRecs);
+          if (dayRecs.isNotEmpty) {
+            presentCount++;
+          } else {
+            final hasPunch = empRecs.any((r) =>
+                (r.checkIn.year == targetDate.year &&
+                 r.checkIn.month == targetDate.month &&
+                 r.checkIn.day == targetDate.day) ||
+                (r.checkOut != null &&
+                 r.checkOut!.year == targetDate.year &&
+                 r.checkOut!.month == targetDate.month &&
+                 r.checkOut!.day == targetDate.day));
+            if (hasPunch) {
+              presentCount++;
+            }
+          }
+        }
+      }
+
+      if (activeTotal == 0 && employees.isEmpty) {
+        activeTotal = allRecords.map((r) => r.employeeId).whereType<String>().toSet().length;
+        final presentSet = allRecords.where((r) =>
+            (r.checkIn.year == targetDate.year &&
+             r.checkIn.month == targetDate.month &&
+             r.checkIn.day == targetDate.day)).map((r) => r.employeeId).whereType<String>().toSet();
+        presentCount = presentSet.length;
+      }
+
+      final double rate = activeTotal > 0 ? (presentCount / activeTotal) * 100.0 : 0.0;
+      final fullDateStr = DateFormat('d MMM').format(targetDate);
+
+      stats.add(_DayAttendanceStat(
+        date: targetDate,
+        label: labels[i],
+        fullDateStr: fullDateStr,
+        present: presentCount,
+        total: activeTotal,
+        rate: rate,
+        isFuture: isFuture,
+      ));
+    }
+
+    return stats;
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AttendanceProvider>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stats = _computeStats(provider);
+
+    final elapsedStats = stats.where((s) => !s.isFuture || s.present > 0).toList();
+    final avgRate = elapsedStats.isNotEmpty
+        ? elapsedStats.map((s) => s.rate).reduce((a, b) => a + b) / elapsedStats.length
+        : 0.0;
+
+    final List<FlSpot> spots = [];
+    for (int i = 0; i < stats.length; i++) {
+      final s = stats[i];
+      if (!s.isFuture || s.present > 0) {
+        spots.add(FlSpot(i.toDouble(), s.rate));
+      }
+    }
+    if (spots.isEmpty) {
+      spots.add(const FlSpot(0, 0));
+    }
+
+    final double maxX = stats.isNotEmpty ? (stats.length - 1).toDouble() : 6.0;
+
     return DashboardCard(
       title: provider.translate('attendance_overview'),
-      trailing: _buildDropdown(context, provider.translate('this_week')),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF7E22CE).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${provider.translate('avg_short')}: ${avgRate.toStringAsFixed(1)}%',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF7E22CE),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildDropdown(context, provider),
+        ],
+      ),
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       child: SizedBox(
         height: 250,
         child: LineChart(
           LineChartData(
+            lineTouchData: LineTouchData(
+              enabled: true,
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (_) => isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+                getTooltipItems: (touchedSpots) {
+                  return touchedSpots.map((spot) {
+                    final index = spot.x.toInt();
+                    if (index >= 0 && index < stats.length) {
+                      final s = stats[index];
+                      return LineTooltipItem(
+                        '${s.label} (${s.fullDateStr})\n',
+                        const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${s.rate.toStringAsFixed(1)}% ',
+                            style: const TextStyle(
+                              color: Color(0xFFC084FC),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          TextSpan(
+                            text: '(${s.present}/${s.total} ${provider.translate('present')})',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return null;
+                  }).toList();
+                },
+              ),
+            ),
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
@@ -184,22 +400,41 @@ class AttendanceOverviewChart extends StatelessWidget {
                 sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 30,
-                  interval: 1,
+                  interval: _selectedPeriod == 'this_month' ? 5 : 1,
                   getTitlesWidget: (value, meta) {
-                    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                    if (value.toInt() >= 0 && value.toInt() < days.length) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                          days[value.toInt()],
-                          style: TextStyle(
-                            color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.5),
-                            fontSize: 12,
+                    final index = value.toInt();
+                    if (index >= 0 && index < stats.length) {
+                      if (_selectedPeriod == 'this_month') {
+                        final dayNum = index + 1;
+                        if (dayNum == 1 || dayNum % 5 == 0 || index == stats.length - 1) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              '$dayNum',
+                              style: TextStyle(
+                                color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.5),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      } else {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            stats[index].label,
+                            style: TextStyle(
+                              color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.5),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     }
-                    return const Text('');
+                    return const SizedBox.shrink();
                   },
                 ),
               ),
@@ -209,10 +444,10 @@ class AttendanceOverviewChart extends StatelessWidget {
                   interval: 25,
                   getTitlesWidget: (value, meta) {
                     return Text(
-                      value.toInt().toString(),
+                      '${value.toInt()}%',
                       style: TextStyle(
                         color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.5),
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     );
                   },
@@ -222,25 +457,29 @@ class AttendanceOverviewChart extends StatelessWidget {
             ),
             borderData: FlBorderData(show: false),
             minX: 0,
-            maxX: 6,
+            maxX: maxX,
             minY: 0,
             maxY: 100,
             lineBarsData: [
               LineChartBarData(
-                spots: const [
-                  FlSpot(0, 60),
-                  FlSpot(1, 65),
-                  FlSpot(2, 55),
-                  FlSpot(3, 85),
-                  FlSpot(4, 75),
-                  FlSpot(5, 60),
-                  FlSpot(6, 70),
-                ],
+                spots: spots,
                 isCurved: true,
+                curveSmoothness: 0.35,
+                preventCurveOverShooting: true,
                 color: const Color(0xFF7E22CE), // Purple line
                 barWidth: 3,
                 isStrokeCapRound: true,
-                dotData: const FlDotData(show: true),
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, barData, index) {
+                    return FlDotCirclePainter(
+                      radius: 4,
+                      color: const Color(0xFF7E22CE),
+                      strokeWidth: 2,
+                      strokeColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    );
+                  },
+                ),
                 belowBarData: BarAreaData(
                   show: true,
                   gradient: LinearGradient(
@@ -260,23 +499,133 @@ class AttendanceOverviewChart extends StatelessWidget {
     );
   }
 
-  Widget _buildDropdown(BuildContext context, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(width: 4),
-          const Icon(Icons.keyboard_arrow_down, size: 16),
-        ],
+  Widget _buildDropdown(BuildContext context, AttendanceProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    String currentLabel;
+    switch (_selectedPeriod) {
+      case 'last_week':
+        currentLabel = provider.translate('last_week');
+        break;
+      case 'this_month':
+        currentLabel = provider.translate('this_month');
+        break;
+      default:
+        currentLabel = provider.translate('this_week');
+        break;
+    }
+
+    return PopupMenuButton<String>(
+      initialValue: _selectedPeriod,
+      tooltip: '',
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+      elevation: 4,
+      onSelected: (val) {
+        if (val != _selectedPeriod) {
+          setState(() {
+            _selectedPeriod = val;
+          });
+        }
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: 'this_week',
+          child: Row(
+            children: [
+              Icon(
+                Icons.view_week_rounded,
+                size: 16,
+                color: _selectedPeriod == 'this_week' ? const Color(0xFF7E22CE) : (isDark ? Colors.white60 : Colors.black54),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                provider.translate('this_week'),
+                style: TextStyle(
+                  fontWeight: _selectedPeriod == 'this_week' ? FontWeight.w700 : FontWeight.w500,
+                  color: _selectedPeriod == 'this_week' ? const Color(0xFF7E22CE) : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'last_week',
+          child: Row(
+            children: [
+              Icon(
+                Icons.history_rounded,
+                size: 16,
+                color: _selectedPeriod == 'last_week' ? const Color(0xFF7E22CE) : (isDark ? Colors.white60 : Colors.black54),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                provider.translate('last_week'),
+                style: TextStyle(
+                  fontWeight: _selectedPeriod == 'last_week' ? FontWeight.w700 : FontWeight.w500,
+                  color: _selectedPeriod == 'last_week' ? const Color(0xFF7E22CE) : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'this_month',
+          child: Row(
+            children: [
+              Icon(
+                Icons.calendar_month_rounded,
+                size: 16,
+                color: _selectedPeriod == 'this_month' ? const Color(0xFF7E22CE) : (isDark ? Colors.white60 : Colors.black54),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                provider.translate('this_month'),
+                style: TextStyle(
+                  fontWeight: _selectedPeriod == 'this_month' ? FontWeight.w700 : FontWeight.w500,
+                  color: _selectedPeriod == 'this_month' ? const Color(0xFF7E22CE) : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black).withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(currentLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            const Icon(Icons.keyboard_arrow_down, size: 16),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _DayAttendanceStat {
+  final DateTime date;
+  final String label;
+  final String fullDateStr;
+  final int present;
+  final int total;
+  final double rate;
+  final bool isFuture;
+
+  _DayAttendanceStat({
+    required this.date,
+    required this.label,
+    required this.fullDateStr,
+    required this.present,
+    required this.total,
+    required this.rate,
+    required this.isFuture,
+  });
 }
 
 class QuickActionsList extends StatelessWidget {
@@ -458,22 +807,19 @@ class DepartmentAttendanceChart extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final now = DateTime.now();
 
-    // 1. Identify present employees today
-    final presentIds = provider.allCompanyRecords
-        .where(
-          (r) =>
-              ((r.checkIn.year == now.year &&
-                r.checkIn.month == now.month &&
-                r.checkIn.day == now.day) ||
-               (r.checkOut == null && now.difference(r.checkIn).inHours.abs() < 24)) &&
-              r.employeeId != null,
-        )
-        .map((r) => r.employeeId!)
-        .toSet();
+    // 1. Identify present employees today strictly scoped to current company employees
+    final employees = provider.employees;
+    final presentIds = employees.where((emp) {
+      return provider.allCompanyRecords.any((r) =>
+          provider.matchesEmployeeRecord(r, emp) &&
+          ((r.checkIn.year == now.year &&
+            r.checkIn.month == now.month &&
+            r.checkIn.day == now.day) ||
+           (r.checkOut == null && now.difference(r.checkIn).inHours.abs() < 24)));
+    }).map((e) => e.id).toSet();
 
     // 2. Map structures / departments
     final structures = provider.structures;
-    final employees = provider.employees;
 
     // Group employees by department/structure
     final Map<String, List<CompanyEmployee>> deptEmployees = {};

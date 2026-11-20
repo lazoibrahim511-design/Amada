@@ -677,6 +677,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
   bool isOvernight = shift?.isOvernight ?? false;
   bool isSpecialShift = shift?.isSpecialShift ?? false;
   final crossMidnightCutoffController = TextEditingController(text: shift?.crossMidnightCutoff ?? '');
+  int? maxContinuousHours = shift?.maxContinuousHours;
   
   Map<int, DayShiftConfig> rotationSchedule = {};
   if (shift != null && shift.rotationSchedule.isNotEmpty) {
@@ -1591,6 +1592,8 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
                                         breakDurationMinutes: config.breakDurationMinutes,
                                         isOvernight: true,
                                         crossMidnightCutoff: '$hh:$mm',
+                                        isSpecialShift: isSpecialShift || config.isSpecialShift,
+                                        maxContinuousHours: maxContinuousHours,
                                       );
                                     });
                                   }
@@ -1695,6 +1698,7 @@ void showShiftDialog(BuildContext context, {WorkShift? shift}) {
             isOvernight: isOvernight || WorkShift.isTimeCrossMidnight(startController.text.trim(), endController.text.trim()),
             crossMidnightCutoff: crossMidnightCutoffController.text.trim(),
             isSpecialShift: isSpecialShift,
+            maxContinuousHours: maxContinuousHours,
           );
 
           if (isEditing) {

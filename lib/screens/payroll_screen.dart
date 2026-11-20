@@ -22,10 +22,12 @@ class PayrollScreen extends StatefulWidget {
 class _PayrollScreenState extends State<PayrollScreen> {
   String? _selectedStructureId;
   final ScrollController _tableHorizontalScrollController = ScrollController();
+  final ScrollController _tableVerticalScrollController = ScrollController();
 
   @override
   void dispose() {
     _tableHorizontalScrollController.dispose();
+    _tableVerticalScrollController.dispose();
     super.dispose();
   }
 
@@ -226,19 +228,21 @@ class _PayrollScreenState extends State<PayrollScreen> {
               ),
             ),
 
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (isWebOrDesktopLayout(context))
-                          _buildWebPayrollTable(context, provider)
-                        else ...[
-                          // Main Earnings Card
-                          GlassContainer(
+            Expanded(
+              child: isWebOrDesktopLayout(context)
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 16.0),
+                      child: _buildWebPayrollTable(context, provider),
+                    )
+                  : SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Main Earnings Card
+                            GlassContainer(
                       child: Column(
                         children: [
                           Text(
@@ -692,19 +696,17 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       ),
                     ],
 
-                          // Extra padding for mobile bottom bar
-                          if (!isWebOrDesktopLayout(context)) const SizedBox(height: 120),
-                        ],
-                      ],
-                    ),
+                      const SizedBox(height: 120),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-      );
-  }
+      ),
+    ],
+  ),
+),
+);
+}
 
   Widget _buildWebPayrollTable(BuildContext context, AttendanceProvider provider) {
     List<CompanyEmployee> visibleEmployees = [];
@@ -807,7 +809,6 @@ class _PayrollScreenState extends State<PayrollScreen> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
-    final dividerColor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06);
 
     final String defaultCurrency = reports.isNotEmpty ? reports.first.currency : 'USD';
     final double totalBasicSalary = reports.fold(0.0, (sum, r) => sum + r.basicSalary);
@@ -833,441 +834,493 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final double totalDeductions = reports.fold(0.0, (sum, r) => sum + r.decrementalSalary);
     final double totalNetEarnings = reports.fold(0.0, (sum, r) => sum + r.netEarnings);
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 40),
-      child: GlassContainer(
-        padding: EdgeInsets.zero,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+    const List<double> colWidths = [
+      210.0, // 0: Employee
+      125.0, // 1: Basic Salary
+      125.0, // 2: Salary by Day
+      95.0,  // 3: Days Worked
+      100.0, // 4: Working Hrs
+      105.0, // 5: Overtime Hrs
+      125.0, // 6: Overtime Val
+      100.0, // 7: Deficit Hrs
+      120.0, // 8: Deficit Val
+      110.0, // 9: Unpaid Leave Hrs
+      120.0, // 10: Unpaid Leave Val
+      115.0, // 11: Food Allow
+      115.0, // 12: Trans Allow
+      115.0, // 13: Other Allow
+      115.0, // 14: Ins Salary
+      110.0, // 15: Ins 5%
+      110.0, // 16: Ins 12%
+      115.0, // 17: Additions
+      105.0, // 18: Penalties
+      115.0, // 19: Other Deduct
+      130.0, // 20: Gross Salary
+      125.0, // 21: Deductions
+      135.0, // 22: Net Earnings
+      160.0, // 23: Actions
+    ];
+    final double totalTableWidth = colWidths.reduce((a, b) => a + b);
 
-              ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(
-                  dragDevices: {
-                    PointerDeviceKind.touch,
-                    PointerDeviceKind.mouse,
-                    PointerDeviceKind.trackpad,
-                    PointerDeviceKind.stylus,
-                    PointerDeviceKind.invertedStylus,
-                  },
-                ),
-                child: Scrollbar(
-                  controller: _tableHorizontalScrollController,
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  thickness: 8,
-                  radius: const Radius.circular(4),
-                  notificationPredicate: (notification) => notification.depth == 0,
-                  child: SingleChildScrollView(
-                    controller: _tableHorizontalScrollController,
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Theme(
-                        data: (isDark ? ThemeData.dark() : ThemeData.light()).copyWith(
-                          dividerColor: dividerColor,
+    Widget buildHeaderCell(int index, String label, {Color? color}) {
+      return SizedBox(
+        width: colWidths[index],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color ?? textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 12.5,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget buildDataTextCell(int index, String text, {Color? color, FontWeight fontWeight = FontWeight.normal, double fontSize = 12}) {
+      return SizedBox(
+        width: colWidths[index],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color ?? textColor,
+              fontWeight: fontWeight,
+              fontSize: fontSize,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget buildTotalTextCell(int index, String text, {Color? color, bool isBold = false}) {
+      return SizedBox(
+        width: colWidths[index],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color ?? textColor,
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.bold,
+              fontSize: isBold ? 13 : 12,
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget buildRow(int rowIndex, PayrollReport r) {
+      return _PayrollTableRow(
+        key: ValueKey(r.employee.id),
+        index: rowIndex,
+        isDark: isDark,
+        child: Row(
+          children: [
+            // 0: Employee
+            SizedBox(
+              width: colWidths[0],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF2E65FF).withValues(alpha: 0.15),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        r.employee.name.trim().isNotEmpty
+                            ? r.employee.name.trim().substring(0, 1)
+                            : '?',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2E65FF),
                         ),
-                        child: DataTable(
-                columnSpacing: 22,
-                headingRowColor: WidgetStateProperty.all(
-                  isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        r.employee.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                headingRowHeight: 46,
-                dataRowMinHeight: 44,
-                dataRowMaxHeight: 64,
-                columns: [
-                  DataColumn(label: Text(provider.translate('employee'), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13))),
-                  DataColumn(label: Text(provider.translate('basic_salary'), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13))),
-                  DataColumn(label: Text(provider.translate('salary_by_day'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
-                  DataColumn(label: Text(provider.translate('days_worked'), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13))),
-                  DataColumn(label: Text(provider.translate('working_hrs'), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13))),
-                  DataColumn(label: Text(provider.translate('overtime_hrs'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF00FF87)))),
-                  DataColumn(label: Text(provider.translate('overtime_val'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF00FF87)))),
-                  DataColumn(label: Text(provider.translate('deficit_hrs'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('deficit_val'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('unpaid_leave_hrs'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('unpaid_leave_val'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('food_allow_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
-                  DataColumn(label: Text(provider.translate('trans_allow_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
-                  DataColumn(label: Text(provider.translate('other_allow_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
-                  DataColumn(label: Text(provider.translate('ins_salary_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF5B9BFF)))),
-                  DataColumn(label: Text(provider.translate('ins_5_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('ins_12_short'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF00E5CE)))),
-                  DataColumn(label: Text(provider.translate('additions'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF10B981)))),
-                  DataColumn(label: Text(provider.translate('penalties'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('other_deduct'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('gross_salary'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2EBD96)))),
-                  DataColumn(label: Text(provider.translate('deductions'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFFF5C5C)))),
-                  DataColumn(label: Text(provider.translate('net_earnings'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2EBD96)))),
-                  DataColumn(label: Text(provider.translate('actions'), style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13))),
-                ],
-                rows: [
-                  ...reports.map((r) {
-                    return DataRow(
-                      cells: [
-                        DataCell(Text(r.employee.name, style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 12))),
-                        DataCell(Text(formatEmpAmount(r.basicSalary, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
-                        DataCell(Text(formatEmpAmount(r.salaryCalcByDay, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFF5B9BFF)))),
-                        DataCell(Text('${r.daysWorked} ${provider.translate('unit_days')}', style: TextStyle(color: textColor, fontSize: 12))),
-                        DataCell(Text('${r.workingHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', style: TextStyle(color: textColor, fontSize: 12))),
-                        DataCell(Text('${r.overtimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', style: const TextStyle(fontSize: 12, color: Color(0xFF00FF87)))),
-                        DataCell(Text(formatEmpAmount(r.overtimeValue, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFF00FF87)))),
-                        DataCell(Text('${r.attendanceDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text(formatEmpAmount(r.attendanceDeficit, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text('${r.unpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text(formatEmpAmount(r.unpaidLeaveDeduction, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text(formatEmpAmount(r.foodAllowance, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
-                        DataCell(Text(formatEmpAmount(r.transportationAllowance, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
-                        DataCell(Text(formatEmpAmount(r.otherAllowance, r.currency), style: TextStyle(color: textColor, fontSize: 12))),
-                        DataCell(Text(r.hasInsurance ? formatEmpAmount(r.insuranceSalary, r.currency) : '-', style: TextStyle(color: r.hasInsurance ? const Color(0xFF5B9BFF) : textColor.withValues(alpha: 0.35), fontSize: 12, fontWeight: r.hasInsurance ? FontWeight.w600 : FontWeight.normal))),
-                        DataCell(Text(r.hasInsurance ? '-${formatEmpAmount(r.insuranceEmployee, r.currency)}' : '-', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: r.hasInsurance ? const Color(0xFFFF5C5C) : textColor.withValues(alpha: 0.35)))),
-                        DataCell(Text(r.hasInsurance ? formatEmpAmount(r.insuranceCompany, r.currency) : '-', style: TextStyle(fontSize: 12, color: r.hasInsurance ? const Color(0xFF00E5CE) : textColor.withValues(alpha: 0.35)))),
-                        DataCell(Text(formatEmpAmount(r.monthlyAdditions, r.currency), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF10B981)))),
-                        DataCell(Text(formatEmpAmount(r.monthlyPenalties, r.currency), style: const TextStyle(fontSize: 12, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text(formatEmpAmount(r.monthlyDeductions, r.currency), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text(formatEmpAmount(r.incrementalSalary, r.currency), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Color(0xFF2EBD96)))),
-                        DataCell(Text(formatEmpAmount(r.decrementalSalary, r.currency), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Color(0xFFFF5C5C)))),
-                        DataCell(Text(formatEmpAmount(r.netEarnings, r.currency), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2EBD96)))),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isHrOrAdmin) ...[
-                                Tooltip(
-                                  message: provider.translate('add_addition_for').replaceAll('{name}', r.employee.name),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(50),
-                                      onTap: () => showPayrollAdjustmentDialog(
-                                        context: context,
-                                        employee: r.employee,
-                                        initialType: 'addition',
-                                        initialMonth: provider.selectedMonth,
-                                      ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(5),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: const Color(0xFF00E5CE).withValues(alpha: isDark ? 0.15 : 0.12),
-                                          border: Border.all(
-                                            color: const Color(0xFF00E5CE).withValues(alpha: 0.35),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF00BFA5), size: 16),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Tooltip(
-                                  message: provider.translate('add_deduction_for').replaceAll('{name}', r.employee.name),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(50),
-                                      onTap: () => showPayrollAdjustmentDialog(
-                                        context: context,
-                                        employee: r.employee,
-                                        initialType: 'deduction',
-                                        initialMonth: provider.selectedMonth,
-                                      ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(5),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: const Color(0xFFFF5C5C).withValues(alpha: isDark ? 0.15 : 0.12),
-                                          border: Border.all(
-                                            color: const Color(0xFFFF5C5C).withValues(alpha: 0.35),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFFF5C5C), size: 16),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Tooltip(
-                                  message: provider.translate('view_adjustments_for').replaceAll('{name}', r.employee.name),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(50),
-                                      onTap: () => showManageAdjustmentsDialog(
-                                        context: context,
-                                        targetMonth: provider.selectedMonth,
-                                        filterEmployee: r.employee,
-                                      ),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(5),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
-                                          border: Border.all(
-                                            color: isDark ? Colors.white12 : Colors.black12,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Icon(Icons.receipt_long_outlined, color: isDark ? const Color(0xFF00F0D8) : const Color(0xFF102B94), size: 16),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Tooltip(
-                                message: provider.translate('view_payslip'),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(50),
-                                    onTap: () {
-                                      final structName = provider.structures
-                                          .cast<OrgStructure?>()
-                                          .firstWhere((s) => s?.id == r.employee.structureId, orElse: () => null)
-                                          ?.name;
-                                      final grpName = provider.groups
-                                          .cast<EmployeeGroup?>()
-                                          .firstWhere((g) => g?.id == r.employee.groupId, orElse: () => null)
-                                          ?.name;
-                                      showPayslipDialog(
-                                        context: context,
-                                        report: r,
-                                        month: provider.selectedMonth,
-                                        structureName: structName,
-                                        groupName: grpName,
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(5),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: const Color(0xFF5B9BFF).withValues(alpha: isDark ? 0.18 : 0.12),
-                                        border: Border.all(
-                                          color: const Color(0xFF5B9BFF).withValues(alpha: 0.4),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: const Icon(Icons.badge_outlined, color: Color(0xFF5B9BFF), size: 16),
-                                    ),
-                                  ),
+              ),
+            ),
+            // 1: Basic Salary
+            buildDataTextCell(1, formatEmpAmount(r.basicSalary, r.currency)),
+            // 2: Salary by Day
+            buildDataTextCell(2, formatEmpAmount(r.salaryCalcByDay, r.currency), color: const Color(0xFF5B9BFF)),
+            // 3: Days Worked
+            buildDataTextCell(3, '${r.daysWorked} ${provider.translate('unit_days')}'),
+            // 4: Working Hrs
+            buildDataTextCell(4, '${r.workingHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}'),
+            // 5: Overtime Hrs
+            buildDataTextCell(5, '${r.overtimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', color: const Color(0xFF00FF87)),
+            // 6: Overtime Val
+            buildDataTextCell(6, formatEmpAmount(r.overtimeValue, r.currency), color: const Color(0xFF00FF87)),
+            // 7: Deficit Hrs
+            buildDataTextCell(7, '${r.attendanceDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', color: const Color(0xFFFF5C5C)),
+            // 8: Deficit Val
+            buildDataTextCell(8, formatEmpAmount(r.attendanceDeficit, r.currency), color: const Color(0xFFFF5C5C)),
+            // 9: Unpaid Leave Hrs
+            buildDataTextCell(9, '${r.unpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', color: const Color(0xFFFF5C5C)),
+            // 10: Unpaid Leave Val
+            buildDataTextCell(10, formatEmpAmount(r.unpaidLeaveDeduction, r.currency), color: const Color(0xFFFF5C5C)),
+            // 11: Food Allow
+            buildDataTextCell(11, formatEmpAmount(r.foodAllowance, r.currency)),
+            // 12: Trans Allow
+            buildDataTextCell(12, formatEmpAmount(r.transportationAllowance, r.currency)),
+            // 13: Other Allow
+            buildDataTextCell(13, formatEmpAmount(r.otherAllowance, r.currency)),
+            // 14: Ins Salary
+            buildDataTextCell(
+              14,
+              r.hasInsurance ? formatEmpAmount(r.insuranceSalary, r.currency) : '-',
+              color: r.hasInsurance ? const Color(0xFF5B9BFF) : textColor.withValues(alpha: 0.35),
+              fontWeight: r.hasInsurance ? FontWeight.w600 : FontWeight.normal,
+            ),
+            // 15: Ins 5%
+            buildDataTextCell(
+              15,
+              r.hasInsurance ? '-${formatEmpAmount(r.insuranceEmployee, r.currency)}' : '-',
+              color: r.hasInsurance ? const Color(0xFFFF5C5C) : textColor.withValues(alpha: 0.35),
+              fontWeight: FontWeight.w600,
+            ),
+            // 16: Ins 12%
+            buildDataTextCell(
+              16,
+              r.hasInsurance ? formatEmpAmount(r.insuranceCompany, r.currency) : '-',
+              color: r.hasInsurance ? const Color(0xFF00E5CE) : textColor.withValues(alpha: 0.35),
+            ),
+            // 17: Additions
+            buildDataTextCell(17, formatEmpAmount(r.monthlyAdditions, r.currency), color: const Color(0xFF10B981), fontWeight: FontWeight.w600),
+            // 18: Penalties
+            buildDataTextCell(18, formatEmpAmount(r.monthlyPenalties, r.currency), color: const Color(0xFFFF5C5C)),
+            // 19: Other Deduct
+            buildDataTextCell(19, formatEmpAmount(r.monthlyDeductions, r.currency), color: const Color(0xFFFF5C5C), fontWeight: FontWeight.w600),
+            // 20: Gross Salary
+            buildDataTextCell(20, formatEmpAmount(r.incrementalSalary, r.currency), color: const Color(0xFF2EBD96), fontWeight: FontWeight.w600),
+            // 21: Deductions
+            buildDataTextCell(21, formatEmpAmount(r.decrementalSalary, r.currency), color: const Color(0xFFFF5C5C), fontWeight: FontWeight.w600),
+            // 22: Net Earnings
+            buildDataTextCell(22, formatEmpAmount(r.netEarnings, r.currency), color: const Color(0xFF2EBD96), fontWeight: FontWeight.bold, fontSize: 13),
+            // 23: Actions
+            SizedBox(
+              width: colWidths[23],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isHrOrAdmin) ...[
+                      Tooltip(
+                        message: provider.translate('add_addition_for').replaceAll('{name}', r.employee.name),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(50),
+                            onTap: () => showPayrollAdjustmentDialog(
+                              context: context,
+                              employee: r.employee,
+                              initialType: 'addition',
+                              initialMonth: provider.selectedMonth,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF00E5CE).withValues(alpha: isDark ? 0.15 : 0.12),
+                                border: Border.all(
+                                  color: const Color(0xFF00E5CE).withValues(alpha: 0.35),
+                                  width: 1,
                                 ),
                               ),
+                              child: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF00BFA5), size: 16),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: provider.translate('add_deduction_for').replaceAll('{name}', r.employee.name),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(50),
+                            onTap: () => showPayrollAdjustmentDialog(
+                              context: context,
+                              employee: r.employee,
+                              initialType: 'deduction',
+                              initialMonth: provider.selectedMonth,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFFFF5C5C).withValues(alpha: isDark ? 0.15 : 0.12),
+                                border: Border.all(
+                                  color: const Color(0xFFFF5C5C).withValues(alpha: 0.35),
+                                  width: 1,
+                                ),
+                              ),
+                              child: const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFFF5C5C), size: 16),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: provider.translate('view_adjustments_for').replaceAll('{name}', r.employee.name),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(50),
+                            onTap: () => showManageAdjustmentsDialog(
+                              context: context,
+                              targetMonth: provider.selectedMonth,
+                              filterEmployee: r.employee,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                                border: Border.all(
+                                  color: isDark ? Colors.white12 : Colors.black12,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Icon(Icons.receipt_long_outlined, color: isDark ? const Color(0xFF00F0D8) : const Color(0xFF102B94), size: 16),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Tooltip(
+                      message: provider.translate('view_payslip'),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(50),
+                          onTap: () {
+                            final structName = provider.structures
+                                .cast<OrgStructure?>()
+                                .firstWhere((s) => s?.id == r.employee.structureId, orElse: () => null)
+                                ?.name;
+                            final grpName = provider.groups
+                                .cast<EmployeeGroup?>()
+                                .firstWhere((g) => g?.id == r.employee.groupId, orElse: () => null)
+                                ?.name;
+                            showPayslipDialog(
+                              context: context,
+                              report: r,
+                              month: provider.selectedMonth,
+                              structureName: structName,
+                              groupName: grpName,
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFF5B9BFF).withValues(alpha: isDark ? 0.18 : 0.12),
+                              border: Border.all(
+                                color: const Color(0xFF5B9BFF).withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Icon(Icons.badge_outlined, color: Color(0xFF5B9BFF), size: 16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GlassContainer(
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final double tableHeight = constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : 600.0;
+
+            return ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                  PointerDeviceKind.stylus,
+                  PointerDeviceKind.invertedStylus,
+                },
+              ),
+              child: Scrollbar(
+                controller: _tableHorizontalScrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                thickness: 8,
+                radius: const Radius.circular(4),
+                notificationPredicate: (notification) => notification.depth == 0,
+                child: SingleChildScrollView(
+                  controller: _tableHorizontalScrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                  child: SizedBox(
+                    width: totalTableWidth,
+                    height: tableHeight,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 1. LOCKED HEADER (Sticky at the top!)
+                        Container(
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                            border: Border(
+                              bottom: BorderSide(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              buildHeaderCell(0, provider.translate('employee')),
+                              buildHeaderCell(1, provider.translate('basic_salary')),
+                              buildHeaderCell(2, provider.translate('salary_by_day'), color: const Color(0xFF5B9BFF)),
+                              buildHeaderCell(3, provider.translate('days_worked')),
+                              buildHeaderCell(4, provider.translate('working_hrs')),
+                              buildHeaderCell(5, provider.translate('overtime_hrs'), color: const Color(0xFF00FF87)),
+                              buildHeaderCell(6, provider.translate('overtime_val'), color: const Color(0xFF00FF87)),
+                              buildHeaderCell(7, provider.translate('deficit_hrs'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(8, provider.translate('deficit_val'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(9, provider.translate('unpaid_leave_hrs'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(10, provider.translate('unpaid_leave_val'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(11, provider.translate('food_allow_short'), color: const Color(0xFF5B9BFF)),
+                              buildHeaderCell(12, provider.translate('trans_allow_short'), color: const Color(0xFF5B9BFF)),
+                              buildHeaderCell(13, provider.translate('other_allow_short'), color: const Color(0xFF5B9BFF)),
+                              buildHeaderCell(14, provider.translate('ins_salary_short'), color: const Color(0xFF5B9BFF)),
+                              buildHeaderCell(15, provider.translate('ins_5_short'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(16, provider.translate('ins_12_short'), color: const Color(0xFF00E5CE)),
+                              buildHeaderCell(17, provider.translate('additions'), color: const Color(0xFF10B981)),
+                              buildHeaderCell(18, provider.translate('penalties'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(19, provider.translate('other_deduct'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(20, provider.translate('gross_salary'), color: const Color(0xFF2EBD96)),
+                              buildHeaderCell(21, provider.translate('deductions'), color: const Color(0xFFFF5C5C)),
+                              buildHeaderCell(22, provider.translate('net_earnings'), color: const Color(0xFF2EBD96)),
+                              buildHeaderCell(23, provider.translate('actions')),
+                            ],
+                          ),
+                        ),
+
+                        // 2. SCROLLABLE BODY (Vertical scrolling while header remains locked!)
+                        Expanded(
+                          child: Scrollbar(
+                            controller: _tableVerticalScrollController,
+                            thumbVisibility: true,
+                            trackVisibility: true,
+                            thickness: 8,
+                            radius: const Radius.circular(4),
+                            notificationPredicate: (notification) => notification.depth == 0,
+                            child: SingleChildScrollView(
+                              controller: _tableVerticalScrollController,
+                              scrollDirection: Axis.vertical,
+                              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                              child: Column(
+                                children: [
+                                  for (int i = 0; i < reports.length; i++)
+                                    buildRow(i, reports[i]),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // 3. LOCKED TOTAL SUMMARY ROW (Sticky at bottom!)
+                        Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFE2E8F0),
+                            border: Border(
+                              top: BorderSide(
+                                color: isDark
+                                    ? const Color(0xFF475569)
+                                    : const Color(0xFF94A3B8),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              buildTotalTextCell(0, provider.translate('total'), isBold: true),
+                              buildTotalTextCell(1, formatEmpAmount(totalBasicSalary, defaultCurrency)),
+                              buildTotalTextCell(2, formatEmpAmount(totalSalaryCalcByDay, defaultCurrency), color: const Color(0xFF5B9BFF)),
+                              buildTotalTextCell(3, '$totalDaysWorked ${provider.translate('unit_days')}'),
+                              buildTotalTextCell(4, '${totalWorkingHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}'),
+                              buildTotalTextCell(5, '${totalOvertimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', color: const Color(0xFF00FF87)),
+                              buildTotalTextCell(6, formatEmpAmount(totalOvertimeValue, defaultCurrency), color: const Color(0xFF00FF87)),
+                              buildTotalTextCell(7, '${totalDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(8, formatEmpAmount(totalDeficitValue, defaultCurrency), color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(9, '${totalUnpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}', color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(10, formatEmpAmount(totalUnpaidLeaveValue, defaultCurrency), color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(11, formatEmpAmount(totalFoodAllowance, defaultCurrency)),
+                              buildTotalTextCell(12, formatEmpAmount(totalTransportationAllowance, defaultCurrency)),
+                              buildTotalTextCell(13, formatEmpAmount(totalOtherAllowance, defaultCurrency)),
+                              buildTotalTextCell(14, formatEmpAmount(totalInsuranceSalary, defaultCurrency), color: const Color(0xFF5B9BFF)),
+                              buildTotalTextCell(15, '-${formatEmpAmount(totalInsurance5, defaultCurrency)}', color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(16, formatEmpAmount(totalInsurance12, defaultCurrency), color: const Color(0xFF00E5CE)),
+                              buildTotalTextCell(17, formatEmpAmount(totalMonthlyAdditions, defaultCurrency), color: const Color(0xFF10B981)),
+                              buildTotalTextCell(18, formatEmpAmount(totalPenalties, defaultCurrency), color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(19, formatEmpAmount(totalMonthlyDeductions, defaultCurrency), color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(20, formatEmpAmount(totalGrossSalary, defaultCurrency), color: const Color(0xFF2EBD96)),
+                              buildTotalTextCell(21, formatEmpAmount(totalDeductions, defaultCurrency), color: const Color(0xFFFF5C5C)),
+                              buildTotalTextCell(22, formatEmpAmount(totalNetEarnings, defaultCurrency), color: const Color(0xFF2EBD96), isBold: true),
+                              SizedBox(width: colWidths[23]),
                             ],
                           ),
                         ),
                       ],
-                    );
-                  }),
-                  // Total / Sum Summary Row
-                  DataRow(
-                    color: WidgetStateProperty.all(
-                      isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : const Color(0xFFE2E8F0).withValues(alpha: 0.65),
                     ),
-                    cells: [
-                      DataCell(Text(
-                        provider.translate('total'),
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalBasicSalary, defaultCurrency),
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalSalaryCalcByDay, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF5B9BFF),
-                        ),
-                      )),
-                      DataCell(Text(
-                        '$totalDaysWorked ${provider.translate('unit_days')}',
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )),
-                      DataCell(Text(
-                        '${totalWorkingHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}',
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )),
-                      DataCell(Text(
-                        '${totalOvertimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF00FF87),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalOvertimeValue, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF00FF87),
-                        ),
-                      )),
-                      DataCell(Text(
-                        '${totalDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalDeficitValue, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        '${totalUnpaidLeaveHours.toStringAsFixed(1)} ${provider.translate('unit_hrs')}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalUnpaidLeaveValue, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalFoodAllowance, defaultCurrency),
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalTransportationAllowance, defaultCurrency),
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalOtherAllowance, defaultCurrency),
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalInsuranceSalary, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF5B9BFF),
-                        ),
-                      )),
-                      DataCell(Text(
-                        '-${formatEmpAmount(totalInsurance5, defaultCurrency)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalInsurance12, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF00E5CE),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalMonthlyAdditions, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF10B981),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalPenalties, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalMonthlyDeductions, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalGrossSalary, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFF2EBD96),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalDeductions, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Color(0xFFFF5C5C),
-                        ),
-                      )),
-                      DataCell(Text(
-                        formatEmpAmount(totalNetEarnings, defaultCurrency),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          color: Color(0xFF2EBD96),
-                        ),
-                      )),
-                      const DataCell(SizedBox.shrink()),
-                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  ],
-),
+            );
+          },
         ),
       ),
     );
@@ -2264,6 +2317,62 @@ class _PayrollScreenState extends State<PayrollScreen> {
             });
           },
         ),
+      ),
+    );
+  }
+}
+
+class _PayrollTableRow extends StatefulWidget {
+  final int index;
+  final bool isDark;
+  final Widget child;
+
+  const _PayrollTableRow({
+    super.key,
+    required this.index,
+    required this.isDark,
+    required this.child,
+  });
+
+  @override
+  State<_PayrollTableRow> createState() => _PayrollTableRowState();
+}
+
+class _PayrollTableRowState extends State<_PayrollTableRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    Color bg;
+    if (_isHovered) {
+      bg = widget.isDark
+          ? const Color(0xFF243248)
+          : const Color(0xFFE2E8F0).withValues(alpha: 0.8);
+    } else if (widget.index.isEven) {
+      // First row / even rows: Light
+      bg = widget.isDark ? const Color(0xFF1E293B) : Colors.white;
+    } else {
+      // Second row / odd rows: Dark / distinct shade
+      bg = widget.isDark ? const Color(0xFF131C2A) : const Color(0xFFF1F5F9);
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border(
+            bottom: BorderSide(
+              color: widget.isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+          ),
+        ),
+        child: widget.child,
       ),
     );
   }

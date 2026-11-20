@@ -33,6 +33,30 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
 
   BackgroundServiceStatus? _bgStatus;
   bool _isBgActionLoading = false;
+  int _rightPanelTab = 0; // 0: Sync & Service, 1: Live Logs, 2: User Mapping
+
+  String _cleanErrorMessage(String raw) {
+    if (raw.contains('timed out') || raw.contains('10060')) {
+      return 'Connection timed out';
+    }
+    if (raw.contains('Connection refused') || raw.contains('10061')) {
+      return 'Connection refused';
+    }
+    if (raw.contains('Host unreachable') || raw.contains('No route')) {
+      return 'Device unreachable';
+    }
+    if (raw.contains('SocketException')) {
+      return 'Network socket error';
+    }
+    var clean = raw
+        .replaceAll('ZKError: Failed to connect to device: ', '')
+        .replaceAll('ZKError: ', '')
+        .replaceAll('Failed: ', '');
+    if (clean.length > 50) {
+      clean = '${clean.substring(0, 47)}...';
+    }
+    return clean;
+  }
 
   @override
   void initState() {
@@ -632,65 +656,92 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     }).toList();
     final onlineCount = devices.where((d) => d.cachedInfo?.isConnected == true).length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 950;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (kIsWeb) _buildWebBridgeBanner(textColor, provider),
+              _buildCompactHeader(context, textColor, subtextColor, devices, onlineCount, provider, firebase),
+              const SizedBox(height: 14),
+              _buildMetricStrip(context, textColor, subtextColor, devices, onlineCount, provider),
+              const SizedBox(height: 16),
+              if (isWide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildDevicesSectionHeader(context, textColor, subtextColor, devices, provider),
+                          const SizedBox(height: 10),
+                          _buildDevicesList(context, textColor, subtextColor, devices, provider, firebase),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 5,
+                      child: _buildControlHub(context, textColor, subtextColor, devices, provider, firebase),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDevicesSectionHeader(context, textColor, subtextColor, devices, provider),
+                    const SizedBox(height: 10),
+                    _buildDevicesList(context, textColor, subtextColor, devices, provider, firebase),
+                    const SizedBox(height: 16),
+                    _buildControlHub(context, textColor, subtextColor, devices, provider, firebase),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWebBridgeBanner(Color textColor, AttendanceProvider provider) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E65FF).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.3)),
+      ),
+      child: Row(
         children: [
-          if (kIsWeb)
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2E65FF).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2E65FF).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.hub_outlined, color: Color(0xFF2E65FF), size: 22),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      provider.translate('zk_web_bridge_hint'),
-                      style: TextStyle(fontSize: 12.5, height: 1.4, color: textColor),
-                    ),
-                  ),
-                ],
-              ),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2E65FF).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
-
-          // 1. Multi-Device Header Card
-          _buildMultiDeviceHeaderCard(context, textColor, subtextColor, devices, onlineCount, provider, firebase),
-          const SizedBox(height: 16),
-
-          // 2. Devices Grid / List
-          _buildDevicesList(context, textColor, subtextColor, devices, provider, firebase),
-          const SizedBox(height: 16),
-
-          // 3. Smart Auto-Sync & Multi-Device Settings
-          _buildSmartSyncCard(context, textColor, subtextColor, provider, firebase),
-          const SizedBox(height: 16),
-
-          // 4. Device Users & Employee Mapping
-          _buildUserMappingCard(context, textColor, subtextColor, provider, devices),
-          const SizedBox(height: 16),
-
-          // 5. Live Sync Activity Log
-          _buildSyncLogsCard(context, textColor, subtextColor),
+            child: const Icon(Icons.hub_outlined, color: Color(0xFF2E65FF), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              provider.translate('zk_web_bridge_hint'),
+              style: TextStyle(fontSize: 12, height: 1.4, color: textColor),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMultiDeviceHeaderCard(
+  Widget _buildCompactHeader(
     BuildContext context,
     Color textColor,
     Color subtextColor,
@@ -702,143 +753,292 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 700;
 
-    final headerInfo = Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2E65FF).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.3)),
-          ),
-          child: const Icon(Icons.hub_rounded, color: Color(0xFF2E65FF), size: 24),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return GlassContainer(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 18, vertical: isMobile ? 12 : 14),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2E65FF), Color(0xFF6366F1)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2E65FF).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.hub_rounded, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     provider.translate('zk_devices_title'),
                     style: TextStyle(
-                      fontSize: isMobile ? 16 : 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: textColor,
+                      letterSpacing: -0.2,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      provider.translate('zk_configured_online', params: {
-                        'total': '${devices.length}',
-                        'online': '$onlineCount',
-                      }),
-                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
-                    ),
+                  Text(
+                    provider.translate('zk_devices_subtitle'),
+                    style: TextStyle(fontSize: 11.5, color: subtextColor),
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                provider.translate('zk_devices_subtitle'),
-                style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.3),
-              ),
             ],
           ),
-        ),
-      ],
-    );
-
-    final actionButtons = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        NeuButton(
-          onPressed: () => _showAddEditDeviceDialog(context),
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: provider.translate('add_device_btn'),
-          variant: NeuButtonVariant.primary,
-          height: 38,
-          fontSize: 12.5,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-        ),
-        NeuButton(
-          onPressed: _isTestingAll ? null : () => _handleTestAllDevices(provider),
-          isLoading: _isTestingAll,
-          icon: const Icon(Icons.cable_rounded, size: 18),
-          label: provider.translate('test_all_btn'),
-          variant: NeuButtonVariant.whitePill,
-          height: 38,
-          fontSize: 12.5,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-        ),
-        NeuButton(
-          onPressed: _isSyncingAll ? null : () => _handleSyncAllDevices(provider, firebase),
-          isLoading: _isSyncingAll,
-          icon: const Icon(Icons.sync_rounded, size: 18),
-          label: provider.translate('sync_all_devices_btn'),
-          variant: NeuButtonVariant.navy,
-          height: 38,
-          fontSize: 12.5,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-        ),
-        if (WindowsBackgroundService.isSupported)
-          NeuButton(
-            onPressed: _isBgActionLoading
-                ? null
-                : () => _autoSync
-                    ? _handleStopBgService(provider)
-                    : _handleStartBgService(provider),
-            isLoading: _isBgActionLoading,
-            icon: Icon(
-              _autoSync ? Icons.stop_rounded : Icons.play_arrow_rounded,
-              size: 18,
-            ),
-            label: _autoSync
-                ? provider.translate('stop_bg_service_btn')
-                : provider.translate('run_in_background_btn'),
-            variant: _autoSync
-                ? NeuButtonVariant.danger
-                : NeuButtonVariant.navy,
-            height: 38,
-            fontSize: 12.5,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              NeuButton(
+                onPressed: () => _showAddEditDeviceDialog(context),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: provider.translate('add_device_btn'),
+                variant: NeuButtonVariant.primary,
+                height: 34,
+                fontSize: 12,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              if (devices.isNotEmpty) ...[
+                NeuButton(
+                  onPressed: _isTestingAll ? null : () => _handleTestAllDevices(provider),
+                  isLoading: _isTestingAll,
+                  icon: const Icon(Icons.cable_rounded, size: 15),
+                  label: provider.translate('test_all_btn'),
+                  variant: NeuButtonVariant.whitePill,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                NeuButton(
+                  onPressed: _isSyncingAll ? null : () => _handleSyncAllDevices(provider, firebase),
+                  isLoading: _isSyncingAll,
+                  icon: const Icon(Icons.sync_rounded, size: 15),
+                  label: provider.translate('sync_all_devices_btn'),
+                  variant: NeuButtonVariant.navy,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+              ],
+              if (WindowsBackgroundService.isSupported)
+                NeuButton(
+                  onPressed: _isBgActionLoading
+                      ? null
+                      : () => _autoSync
+                          ? _handleStopBgService(provider)
+                          : _handleStartBgService(provider),
+                  isLoading: _isBgActionLoading,
+                  icon: Icon(
+                    _autoSync ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                    size: 15,
+                  ),
+                  label: _autoSync
+                      ? provider.translate('stop_bg_service_btn')
+                      : provider.translate('run_in_background_btn'),
+                  variant: _autoSync
+                      ? NeuButtonVariant.danger
+                      : NeuButtonVariant.whitePill,
+                  height: 34,
+                  fontSize: 12,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+            ],
           ),
-      ],
+        ],
+      ),
     );
+  }
 
-    return GlassContainer(
-      padding: EdgeInsets.all(isMobile ? 14 : 20),
-      child: isMobile
-          ? Column(
+  Widget _buildMetricStrip(
+    BuildContext context,
+    Color textColor,
+    Color subtextColor,
+    List<ZkDeviceConfig> devices,
+    int onlineCount,
+    AttendanceProvider provider,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgRunning = _autoSync;
+    final totalCount = devices.length;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = constraints.maxWidth >= 720
+            ? (constraints.maxWidth - 24) / 3
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 10,
+          children: [
+            SizedBox(
+              width: itemWidth,
+              child: _buildMetricTile(
+                icon: Icons.devices_rounded,
+                iconColor: const Color(0xFF2E65FF),
+                title: provider.translate('terminals_label'),
+                value: '$onlineCount / $totalCount ${provider.translate('status_online')}',
+                subtitle: totalCount == 0
+                    ? provider.translate('no_zk_devices_title')
+                    : '$totalCount ${provider.translate('devices_configured_count')}',
+                isDark: isDark,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+            ),
+            SizedBox(
+              width: itemWidth,
+              child: _buildMetricTile(
+                icon: Icons.sync_rounded,
+                iconColor: _autoSync ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                title: provider.translate('sync_engine_label'),
+                value: _autoSync
+                    ? provider.translate('status_active')
+                    : provider.translate('status_paused'),
+                subtitle: '${provider.translate('auto_sync_interval_label')}: ${_syncInterval}m',
+                isDark: isDark,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+            ),
+            SizedBox(
+              width: itemWidth,
+              child: _buildMetricTile(
+                icon: Icons.window_rounded,
+                iconColor: bgRunning ? const Color(0xFF10B981) : subtextColor,
+                title: provider.translate('win_service_label'),
+                value: bgRunning
+                    ? provider.translate('bg_service_running')
+                    : provider.translate('bg_service_stopped'),
+                subtitle: (_bgStatus?.isAutoStartEnabled ?? false)
+                    ? provider.translate('auto_start_on_boot')
+                    : provider.translate('manual_start_only'),
+                isDark: isDark,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String value,
+    required String subtitle,
+    required bool isDark,
+    required Color textColor,
+    required Color subtextColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                headerInfo,
-                const SizedBox(height: 14),
-                actionButtons,
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(child: headerInfo),
-                const SizedBox(width: 16),
-                actionButtons,
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 11, color: subtextColor, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 10.5, color: subtextColor),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDevicesSectionHeader(
+    BuildContext context,
+    Color textColor,
+    Color subtextColor,
+    List<ZkDeviceConfig> devices,
+    AttendanceProvider provider,
+  ) {
+    return Row(
+      children: [
+        Icon(Icons.biotech_rounded, size: 18, color: textColor.withValues(alpha: 0.7)),
+        const SizedBox(width: 8),
+        Text(
+          provider.translate('active_terminals_title'),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2E65FF).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '${devices.length}',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2E65FF)),
+          ),
+        ),
+      ],
     );
   }
 
@@ -852,28 +1052,37 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
   ) {
     if (devices.isEmpty) {
       return GlassContainer(
-        padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
         child: Column(
           children: [
-            const Icon(Icons.devices_other_rounded, size: 48, color: Colors.grey),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E65FF).withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.devices_other_rounded, size: 36, color: Color(0xFF2E65FF)),
+            ),
             const SizedBox(height: 12),
             Text(
               provider.translate('no_zk_devices_title'),
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               provider.translate('no_zk_devices_subtitle'),
               style: TextStyle(fontSize: 12, color: subtextColor),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             NeuButton(
               onPressed: () => _showAddEditDeviceDialog(context),
-              icon: const Icon(Icons.add_rounded, size: 18),
+              icon: const Icon(Icons.add_rounded, size: 16),
               label: provider.translate('add_first_device_btn'),
               variant: NeuButtonVariant.primary,
-              height: 38,
+              height: 34,
+              fontSize: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
             ),
           ],
         ),
@@ -888,280 +1097,235 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
         final isConnected = info?.isConnected ?? false;
         final isSyncingThis = _syncingDeviceId == dev.id;
         final isTestingThis = _testingDeviceId == dev.id;
+        final hasError = !isConnected && info != null;
+        final rawError = info?.errorMessage ?? '';
+        final cleanError = _cleanErrorMessage(rawError);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: GlassContainer(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isRowLayout = constraints.maxWidth >= 760;
-
-                    final deviceIdentity = Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: isConnected
-                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                // Top Row: Identity & Enable Switch
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: isConnected
+                            ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                            : hasError
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.12)
                                 : (isDark ? Colors.white10 : Colors.grey.shade200),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isConnected
-                                  ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isConnected
+                              ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                              : hasError
+                                  ? const Color(0xFFEF4444).withValues(alpha: 0.3)
                                   : Colors.transparent,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.fingerprint_rounded,
+                        color: isConnected
+                            ? const Color(0xFF10B981)
+                            : hasError
+                                ? const Color(0xFFEF4444)
+                                : Colors.grey,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            dev.name,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
                             ),
                           ),
-                          child: Icon(
-                            Icons.fingerprint,
-                            color: isConnected ? const Color(0xFF10B981) : Colors.grey,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text(
-                                    dev.name,
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: (isDark ? Colors.white12 : Colors.grey.shade200),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      '${dev.ip}:${dev.port}',
-                                      style: TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.w600, color: subtextColor),
-                                    ),
-                                  ),
-                                  if (dev.password > 0)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.amber.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        provider.translate('key_prefix', params: {'key': '${dev.password}'}),
-                                        style: const TextStyle(fontSize: 10, color: Colors.amber),
-                                      ),
-                                    ),
-                                ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
                               ),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 2,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: BoxDecoration(
-                                          color: isConnected
-                                              ? const Color(0xFF10B981)
-                                              : (info != null ? const Color(0xFFEF4444) : Colors.grey),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Flexible(
-                                        child: Text(
-                                          isConnected
-                                              ? provider.translate('device_online_status', params: {'name': info!.deviceName.isNotEmpty ? info.deviceName : 'ZKTeco Terminal'})
-                                              : (info != null
-                                                  ? provider.translate('device_offline_status', params: {'error': info.errorMessage ?? 'Unreachable'})
-                                                  : provider.translate('device_ready_connect')),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                            color: isConnected
-                                                ? const Color(0xFF10B981)
-                                                : (info != null ? const Color(0xFFEF4444) : subtextColor),
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Text(
-                                    '• ${provider.translate('device_last_sync', params: {'status': dev.lastSyncStatus})}',
-                                    style: TextStyle(fontSize: 11, color: subtextColor),
-                                  ),
-                                ],
+                            ),
+                            child: Text(
+                              '${dev.ip}:${dev.port}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600,
+                                color: subtextColor,
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-
-                    final deviceActions = Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        NeuButton(
-                          onPressed: isTestingThis ? null : () => _handleTestSingleDevice(dev, provider),
-                          isLoading: isTestingThis,
-                          icon: const Icon(Icons.cable, size: 14),
-                          label: provider.translate('test_connection_btn'),
-                          variant: NeuButtonVariant.whitePill,
-                          height: 32,
-                          fontSize: 11.5,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                        ),
-                        const SizedBox(width: 6),
-                        NeuButton(
-                          onPressed: () => _handleFetchUsers(dev, provider),
-                          icon: const Icon(Icons.people_outline, size: 14),
-                          label: provider.translate('device_users_btn'),
-                          variant: NeuButtonVariant.whitePill,
-                          height: 32,
-                          fontSize: 11.5,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                        ),
-                        const SizedBox(width: 6),
-                        NeuButton(
-                          onPressed: isSyncingThis ? null : () => _handleSyncSingleDevice(dev, provider, firebase),
-                          isLoading: isSyncingThis,
-                          icon: const Icon(Icons.sync, size: 14),
-                          label: provider.translate('sync_this_btn'),
-                          variant: NeuButtonVariant.primary,
-                          height: 32,
-                          fontSize: 11.5,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          tooltip: provider.translate('edit_device_tooltip'),
-                          onPressed: () => _showAddEditDeviceDialog(context, device: dev),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                          tooltip: provider.translate('delete_device_tooltip'),
-                          onPressed: () => _confirmDeleteDevice(context, dev),
-                        ),
-                        const SizedBox(width: 4),
-                        Switch(
-                          value: dev.isEnabled,
-                          activeThumbColor: const Color(0xFF10B981),
-                          onChanged: (val) => _zkService.toggleDevice(dev.id, val),
-                        ),
-                      ],
-                    );
-
-                    if (isRowLayout) {
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(child: deviceIdentity),
-                          const SizedBox(width: 16),
-                          deviceActions,
+                          if (dev.password > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                provider.translate('key_prefix', params: {'key': '${dev.password}'}),
+                                style: const TextStyle(fontSize: 10, color: Colors.amber, fontWeight: FontWeight.w600),
+                              ),
+                            ),
                         ],
-                      );
-                    } else {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: deviceIdentity),
-                              Switch(
-                                value: dev.isEnabled,
-                                activeThumbColor: const Color(0xFF10B981),
-                                onChanged: (val) => _zkService.toggleDevice(dev.id, val),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            alignment: WrapAlignment.start,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              NeuButton(
-                                onPressed: isTestingThis ? null : () => _handleTestSingleDevice(dev, provider),
-                                isLoading: isTestingThis,
-                                icon: const Icon(Icons.cable, size: 14),
-                                label: provider.translate('test_connection_btn'),
-                                variant: NeuButtonVariant.whitePill,
-                                height: 32,
-                                fontSize: 11.5,
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                              ),
-                              NeuButton(
-                                onPressed: () => _handleFetchUsers(dev, provider),
-                                icon: const Icon(Icons.people_outline, size: 14),
-                                label: provider.translate('device_users_btn'),
-                                variant: NeuButtonVariant.whitePill,
-                                height: 32,
-                                fontSize: 11.5,
-                                padding: const EdgeInsets.symmetric(horizontal: 10),
-                              ),
-                              NeuButton(
-                                onPressed: isSyncingThis ? null : () => _handleSyncSingleDevice(dev, provider, firebase),
-                                isLoading: isSyncingThis,
-                                icon: const Icon(Icons.sync, size: 14),
-                                label: provider.translate('sync_this_btn'),
-                                variant: NeuButtonVariant.primary,
-                                height: 32,
-                                fontSize: 11.5,
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                tooltip: provider.translate('edit_device_tooltip'),
-                                onPressed: () => _showAddEditDeviceDialog(context, device: dev),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                                tooltip: provider.translate('delete_device_tooltip'),
-                                onPressed: () => _confirmDeleteDevice(context, dev),
-                              ),
-                            ],
-                          ),
-                        ],
-                      );
-                    }
-                  },
+                      ),
+                    ),
+                    Switch(
+                      value: dev.isEnabled,
+                      activeThumbColor: const Color(0xFF10B981),
+                      onChanged: (val) => _zkService.toggleDevice(dev.id, val),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 8),
+
+                // Status info line
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: isConnected
+                            ? const Color(0xFF10B981)
+                            : hasError
+                                ? const Color(0xFFEF4444)
+                                : Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Tooltip(
+                        message: hasError ? rawError : '',
+                        child: Text(
+                          isConnected
+                              ? provider.translate('device_online_status', params: {
+                                  'name': info!.deviceName.isNotEmpty ? info.deviceName : 'ZKTeco Terminal'
+                                })
+                              : hasError
+                                  ? provider.translate('device_offline_status', params: {'error': cleanError})
+                                  : provider.translate('device_ready_connect'),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: isConnected
+                                ? const Color(0xFF10B981)
+                                : hasError
+                                    ? const Color(0xFFEF4444)
+                                    : subtextColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      provider.translate('device_last_sync', params: {'status': dev.lastSyncStatus}),
+                      style: TextStyle(fontSize: 10.5, color: subtextColor),
+                    ),
+                  ],
+                ),
+
+                // Device Hardware Info (if connected)
                 if (isConnected && info != null) ...[
-                  const SizedBox(height: 12),
-                  const Divider(height: 1),
                   const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 6,
-                    children: [
-                      _buildMiniBadge(provider.translate('device_serial_badge'), info.serialNumber.isNotEmpty ? info.serialNumber : 'N/A', textColor, subtextColor),
-                      _buildMiniBadge(provider.translate('device_firmware_badge'), info.firmwareVersion.isNotEmpty ? info.firmwareVersion : 'N/A', textColor, subtextColor),
-                      _buildMiniBadge(provider.translate('device_users_badge'), '${info.userCount}', textColor, subtextColor),
-                      _buildMiniBadge(provider.translate('device_logs_badge'), '${info.logCount}', textColor, subtextColor),
-                      if (info.deviceTime != null)
-                        _buildMiniBadge(provider.translate('device_clock_badge'), info.deviceTime.toString().substring(0, 16), textColor, subtextColor),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                    ),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: [
+                        _buildMiniBadge(provider.translate('device_serial_badge'), info.serialNumber.isNotEmpty ? info.serialNumber : 'N/A', textColor, subtextColor),
+                        _buildMiniBadge(provider.translate('device_firmware_badge'), info.firmwareVersion.isNotEmpty ? info.firmwareVersion : 'N/A', textColor, subtextColor),
+                        _buildMiniBadge(provider.translate('device_users_badge'), '${info.userCount}', textColor, subtextColor),
+                        _buildMiniBadge(provider.translate('device_logs_badge'), '${info.logCount}', textColor, subtextColor),
+                        if (info.deviceTime != null)
+                          _buildMiniBadge(provider.translate('device_clock_badge'), info.deviceTime.toString().substring(0, 16), textColor, subtextColor),
+                      ],
+                    ),
                   ),
                 ],
+
+                const SizedBox(height: 10),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+
+                // Actions bar
+                Row(
+                  children: [
+                    NeuButton(
+                      onPressed: isSyncingThis ? null : () => _handleSyncSingleDevice(dev, provider, firebase),
+                      isLoading: isSyncingThis,
+                      icon: const Icon(Icons.sync_rounded, size: 14),
+                      label: provider.translate('sync_this_btn'),
+                      variant: NeuButtonVariant.primary,
+                      height: 30,
+                      fontSize: 11.5,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                    const SizedBox(width: 6),
+                    NeuButton(
+                      onPressed: isTestingThis ? null : () => _handleTestSingleDevice(dev, provider),
+                      isLoading: isTestingThis,
+                      icon: const Icon(Icons.cable_rounded, size: 13),
+                      label: provider.translate('test_connection_btn'),
+                      variant: NeuButtonVariant.whitePill,
+                      height: 30,
+                      fontSize: 11.5,
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                    ),
+                    const SizedBox(width: 6),
+                    NeuButton(
+                      onPressed: () => _handleFetchUsers(dev, provider),
+                      icon: const Icon(Icons.people_outline_rounded, size: 13),
+                      label: provider.translate('device_users_btn'),
+                      variant: NeuButtonVariant.whitePill,
+                      height: 30,
+                      fontSize: 11.5,
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 17),
+                      tooltip: provider.translate('edit_device_tooltip'),
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _showAddEditDeviceDialog(context, device: dev),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 17, color: Colors.redAccent),
+                      tooltip: provider.translate('delete_device_tooltip'),
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => _confirmDeleteDevice(context, dev),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1180,32 +1344,207 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     );
   }
 
-  Widget _buildSmartSyncCard(
+  Widget _buildControlHub(
+    BuildContext context,
+    Color textColor,
+    Color subtextColor,
+    List<ZkDeviceConfig> devices,
+    AttendanceProvider provider,
+    FirebaseService firebase,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final logsCount = _zkService.syncLogs.length;
+    final usersCount = _zkService.cachedUsers.length;
+
+    return GlassContainer(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Hub Header with Section Title
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2E65FF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.tune_rounded, size: 18, color: Color(0xFF2E65FF)),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                provider.translate('controls_hub_title'),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Segmented Tabs Pill Bar
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildTabPill(
+                    index: 0,
+                    icon: Icons.sync_alt_rounded,
+                    label: provider.translate('tab_sync_service'),
+                    isSelected: _rightPanelTab == 0,
+                    badgeCount: null,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildTabPill(
+                    index: 1,
+                    icon: Icons.terminal_rounded,
+                    label: provider.translate('tab_activity_logs'),
+                    isSelected: _rightPanelTab == 1,
+                    badgeCount: logsCount > 0 ? logsCount : null,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _buildTabPill(
+                    index: 2,
+                    icon: Icons.badge_rounded,
+                    label: provider.translate('tab_user_mapping'),
+                    isSelected: _rightPanelTab == 2,
+                    badgeCount: usersCount > 0 ? usersCount : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Tab Content
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: KeyedSubtree(
+              key: ValueKey<int>(_rightPanelTab),
+              child: _rightPanelTab == 0
+                  ? _buildAutoSyncSettingsSection(context, textColor, subtextColor, provider, firebase)
+                  : _rightPanelTab == 1
+                      ? _buildCompactSyncLogsSection(context, textColor, subtextColor, provider)
+                      : _buildCompactUserMappingSection(context, textColor, subtextColor, devices, provider),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabPill({
+    required int index,
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    int? badgeCount,
+  }) {
+    return InkWell(
+      onTap: () => setState(() => _rightPanelTab = index),
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2E65FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF2E65FF).withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.white : const Color(0xFF64748B),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (badgeCount != null) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white24 : const Color(0xFF2E65FF).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badgeCount > 99 ? '99+' : '$badgeCount',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? Colors.white : const Color(0xFF2E65FF),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAutoSyncSettingsSection(
     BuildContext context,
     Color textColor,
     Color subtextColor,
     AttendanceProvider provider,
     FirebaseService firebase,
   ) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 650;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final syncIntervalField = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(provider.translate('auto_sync_interval_label'), style: TextStyle(fontSize: 12, color: subtextColor)),
+        Text(provider.translate('auto_sync_interval_label'), style: TextStyle(fontSize: 11.5, color: subtextColor)),
         const SizedBox(height: 4),
         DropdownButtonFormField<int>(
           initialValue: _syncInterval,
           isDense: true,
-          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            isDense: true,
+          ),
           items: [
-            DropdownMenuItem(value: 1, child: Text(provider.translate('every_1_min'))),
-            DropdownMenuItem(value: 5, child: Text(provider.translate('every_mins', params: {'mins': '5'}))),
-            DropdownMenuItem(value: 10, child: Text(provider.translate('every_mins', params: {'mins': '10'}))),
-            DropdownMenuItem(value: 15, child: Text('${provider.translate('every_mins', params: {'mins': '15'})} ${provider.translate('default_suffix')}')),
-            DropdownMenuItem(value: 30, child: Text(provider.translate('every_mins', params: {'mins': '30'}))),
-            DropdownMenuItem(value: 60, child: Text(provider.translate('every_1_hour'))),
+            DropdownMenuItem(value: 1, child: Text(provider.translate('every_1_min'), style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 5, child: Text(provider.translate('every_mins', params: {'mins': '5'}), style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 10, child: Text(provider.translate('every_mins', params: {'mins': '10'}), style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 15, child: Text('${provider.translate('every_mins', params: {'mins': '15'})} ${provider.translate('default_suffix')}', style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 30, child: Text(provider.translate('every_mins', params: {'mins': '30'}), style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 60, child: Text(provider.translate('every_1_hour'), style: const TextStyle(fontSize: 12))),
           ],
           onChanged: (val) {
             if (val != null) {
@@ -1220,17 +1559,21 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final cooldownField = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(provider.translate('duplicate_cooldown_label'), style: TextStyle(fontSize: 12, color: subtextColor)),
+        Text(provider.translate('duplicate_cooldown_label'), style: TextStyle(fontSize: 11.5, color: subtextColor)),
         const SizedBox(height: 4),
         DropdownButtonFormField<int>(
           initialValue: _cooldown,
           isDense: true,
-          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            isDense: true,
+          ),
           items: [
-            DropdownMenuItem(value: 1, child: Text(provider.translate('cooldown_1_min'))),
-            DropdownMenuItem(value: 2, child: Text(provider.translate('cooldown_mins', params: {'mins': '2'}))),
-            DropdownMenuItem(value: 3, child: Text('${provider.translate('cooldown_mins', params: {'mins': '3'})} ${provider.translate('default_suffix')}')),
-            DropdownMenuItem(value: 5, child: Text(provider.translate('cooldown_mins', params: {'mins': '5'}))),
+            DropdownMenuItem(value: 1, child: Text(provider.translate('cooldown_1_min'), style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 2, child: Text(provider.translate('cooldown_mins', params: {'mins': '2'}), style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 3, child: Text('${provider.translate('cooldown_mins', params: {'mins': '3'})} ${provider.translate('default_suffix')}', style: const TextStyle(fontSize: 12))),
+            DropdownMenuItem(value: 5, child: Text(provider.translate('cooldown_mins', params: {'mins': '5'}), style: const TextStyle(fontSize: 12))),
           ],
           onChanged: (val) {
             if (val != null) {
@@ -1242,82 +1585,84 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
       ],
     );
 
-    return GlassContainer(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Auto-Sync Toggle Card
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+          ),
+          child: Row(
             children: [
-              const Icon(Icons.auto_awesome, color: Color(0xFF10B981), size: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      provider.translate('auto_sync_title'),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                    ),
+                    Text(
+                      provider.translate('auto_sync_subtitle'),
+                      style: TextStyle(fontSize: 11, color: subtextColor),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _autoSync,
+                activeThumbColor: const Color(0xFF10B981),
+                onChanged: (val) {
+                  setState(() => _autoSync = val);
+                  _handleSaveGlobalSettings(provider, firebase);
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Interval and Cooldown Row
+        Row(
+          children: [
+            Expanded(child: syncIntervalField),
+            const SizedBox(width: 10),
+            Expanded(child: cooldownField),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Smart Pairing Callout
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2E65FF).withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF2E65FF), size: 16),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  provider.translate('smart_pairing_title'),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
+                  provider.translate('cross_terminal_pairing_desc'),
+                  style: TextStyle(fontSize: 11.5, color: textColor, height: 1.3),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              provider.translate('auto_sync_title'),
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
-            ),
-            subtitle: Text(
-              provider.translate('auto_sync_subtitle'),
-              style: TextStyle(fontSize: 12, color: subtextColor),
-            ),
-            value: _autoSync,
-            activeThumbColor: const Color(0xFF10B981),
-            onChanged: (val) {
-              setState(() => _autoSync = val);
-              _handleSaveGlobalSettings(provider, firebase);
-            },
-          ),
-          const Divider(height: 16),
-          if (isMobile) ...[
-            syncIntervalField,
-            const SizedBox(height: 12),
-            cooldownField,
-          ] else ...[
-            Row(
-              children: [
-                Expanded(child: syncIntervalField),
-                const SizedBox(width: 12),
-                Expanded(child: cooldownField),
-              ],
-            ),
-          ],
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2E65FF).withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF2E65FF).withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.check_circle_outline, color: Color(0xFF2E65FF), size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    provider.translate('cross_terminal_pairing_desc'),
-                    style: TextStyle(fontSize: 12, color: textColor, height: 1.3),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildWindowsBackgroundServiceSection(context, textColor, subtextColor, provider),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+
+        // Windows 24/7 Background Service Section
+        _buildWindowsBackgroundServiceSection(context, textColor, subtextColor, provider),
+      ],
     );
   }
 
@@ -1333,16 +1678,16 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     final count = _bgStatus?.runningPids.length ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isRunning
-            ? const Color(0xFF10B981).withValues(alpha: 0.08)
-            : const Color(0xFF2E65FF).withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+            ? const Color(0xFF10B981).withValues(alpha: 0.06)
+            : const Color(0xFF2E65FF).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isRunning
-              ? const Color(0xFF10B981).withValues(alpha: 0.3)
-              : const Color(0xFF2E65FF).withValues(alpha: 0.25),
+              ? const Color(0xFF10B981).withValues(alpha: 0.25)
+              : const Color(0xFF2E65FF).withValues(alpha: 0.2),
         ),
       ),
       child: Column(
@@ -1352,20 +1697,20 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: isRunning
                       ? const Color(0xFF10B981).withValues(alpha: 0.2)
                       : const Color(0xFF2E65FF).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   Icons.desktop_windows_rounded,
                   color: isRunning ? const Color(0xFF10B981) : const Color(0xFF2E65FF),
-                  size: 20,
+                  size: 16,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1373,160 +1718,146 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
                     Text(
                       provider.translate('bg_service_title'),
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: textColor,
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
                       provider.translate('bg_service_desc'),
-                      style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.3),
+                      style: TextStyle(fontSize: 10.5, color: subtextColor, height: 1.2),
                     ),
                   ],
                 ),
               ),
               if (isSupported)
                 IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
                   tooltip: 'Refresh',
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  padding: EdgeInsets.zero,
                   onPressed: _isBgActionLoading ? null : _loadBgStatus,
                 ),
             ],
           ),
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           if (isSupported) ...[
             Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 6,
+              runSpacing: 4,
               children: [
-                // Status Chip
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: isRunning
                         ? const Color(0xFF10B981).withValues(alpha: 0.15)
                         : Colors.grey.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isRunning
-                          ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                          : Colors.grey.withValues(alpha: 0.3),
-                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 6,
+                        height: 6,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
                           color: isRunning ? const Color(0xFF10B981) : Colors.grey,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 5),
                       Text(
                         isRunning
                             ? provider.translate('bg_service_status_running', params: {'count': '$count'})
                             : provider.translate('bg_service_status_stopped'),
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.bold,
-                          color: isRunning ? const Color(0xFF10B981) : subtextColor,
+                          color: isRunning ? const Color(0xFF10B981) : Colors.grey,
                         ),
                       ),
                     ],
                   ),
                 ),
-                // Auto Start Chip
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     color: isAutoStart
-                        ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
-                        : Colors.grey.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isAutoStart
-                          ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
-                          : Colors.grey.withValues(alpha: 0.25),
-                    ),
+                        ? const Color(0xFF2E65FF).withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     isAutoStart
                         ? provider.translate('bg_service_autostart_enabled')
                         : provider.translate('bg_service_autostart_disabled'),
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isAutoStart ? const Color(0xFF8B5CF6) : subtextColor,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: isAutoStart ? const Color(0xFF2E65FF) : Colors.grey,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 6,
+              runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (!isRunning)
                   NeuButton(
                     onPressed: _isBgActionLoading ? null : () => _handleStartBgService(provider),
                     isLoading: _isBgActionLoading,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 15),
                     label: provider.translate('run_in_background_btn'),
                     variant: NeuButtonVariant.primary,
-                    height: 36,
-                    fontSize: 12,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    height: 30,
+                    fontSize: 11.5,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                   )
                 else
                   NeuButton(
                     onPressed: _isBgActionLoading ? null : () => _handleStopBgService(provider),
                     isLoading: _isBgActionLoading,
-                    icon: const Icon(Icons.stop_rounded, size: 18),
+                    icon: const Icon(Icons.stop_rounded, size: 15),
                     label: provider.translate('stop_bg_service_btn'),
                     variant: NeuButtonVariant.danger,
-                    height: 36,
-                    fontSize: 12,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    height: 30,
+                    fontSize: 11.5,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
                 NeuButton(
                   onPressed: _isBgActionLoading ? null : () => _handleToggleAutoStart(provider, !isAutoStart),
                   isLoading: _isBgActionLoading,
                   icon: Icon(
                     isAutoStart ? Icons.power_settings_new_rounded : Icons.check_circle_outline_rounded,
-                    size: 16,
+                    size: 14,
                   ),
                   label: isAutoStart
                       ? provider.translate('disable_autostart_btn')
                       : provider.translate('enable_autostart_btn'),
                   variant: NeuButtonVariant.whitePill,
-                  height: 36,
-                  fontSize: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  height: 30,
+                  fontSize: 11.5,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
                 NeuButton(
                   onPressed: () => WindowsBackgroundService.exitApp(),
-                  icon: const Icon(Icons.power_settings_new_rounded, size: 16),
+                  icon: const Icon(Icons.power_settings_new_rounded, size: 14),
                   label: provider.translate('exit_app_btn'),
                   variant: NeuButtonVariant.navy,
-                  height: 36,
-                  fontSize: 12,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  height: 30,
+                  fontSize: 11.5,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
               ],
             ),
           ] else ...[
             Text(
               'Windows 24/7 Background Sync: Available when running the Windows Desktop application on your office PC. Download the Windows installer or launch "start_amada_zk_bridge.bat".',
-              style: TextStyle(fontSize: 12, color: subtextColor, height: 1.3),
+              style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.3),
             ),
           ],
         ],
@@ -1534,281 +1865,287 @@ class _HrDeviceTabState extends State<HrDeviceTab> {
     );
   }
 
-  Widget _buildUserMappingCard(
+  Widget _buildCompactUserMappingSection(
+    BuildContext context,
+    Color textColor,
+    Color subtextColor,
+    List<ZkDeviceConfig> devices,
+    AttendanceProvider provider,
+  ) {
+    final deviceUsers = _zkService.cachedUsers;
+    final employees = provider.employees;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Controls Row
+        Row(
+          children: [
+            if (devices.isNotEmpty)
+              Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                ),
+                child: DropdownButton<String>(
+                  value: _selectedDeviceForUsers ?? devices.first.id,
+                  underline: const SizedBox(),
+                  isDense: true,
+                  style: TextStyle(fontSize: 11.5, color: textColor),
+                  items: devices.map((d) {
+                    return DropdownMenuItem(value: d.id, child: Text(d.name));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedDeviceForUsers = val);
+                  },
+                ),
+              ),
+            const Spacer(),
+            NeuButton(
+              onPressed: _isFetchingUsers
+                  ? null
+                  : () {
+                      final dev = devices.cast<ZkDeviceConfig?>().firstWhere(
+                            (d) => d != null && d.id == _selectedDeviceForUsers,
+                            orElse: () => devices.isNotEmpty ? devices.first : null,
+                          );
+                      _handleFetchUsers(dev, provider);
+                    },
+              isLoading: _isFetchingUsers,
+              icon: const Icon(Icons.download_rounded, size: 14),
+              label: provider.translate('fetch_users_btn'),
+              variant: NeuButtonVariant.primary,
+              height: 30,
+              fontSize: 11.5,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        // User list container
+        Container(
+          height: 380,
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+          ),
+          child: deviceUsers.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.people_outline_rounded, size: 36, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        Text(
+                          provider.translate('fetch_users_hint'),
+                          style: TextStyle(fontSize: 12, color: subtextColor),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.all(8),
+                  itemCount: deviceUsers.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final u = deviceUsers[index];
+                    final matched = employees.cast<CompanyEmployee?>().firstWhere(
+                          (e) {
+                            if (e == null) return false;
+                            if (e.id.trim().toLowerCase() == u.userId.trim().toLowerCase()) return true;
+                            if (e.name.trim().toLowerCase() == u.name.trim().toLowerCase()) return true;
+                            final eDigits = e.id.replaceAll(RegExp(r'[^0-9]'), '');
+                            final uDigits = u.userId.replaceAll(RegExp(r'[^0-9]'), '');
+                            if (eDigits.isNotEmpty && uDigits.isNotEmpty && int.tryParse(eDigits) == int.tryParse(uDigits)) {
+                              return true;
+                            }
+                            return false;
+                          },
+                          orElse: () => null,
+                        );
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              u.userId,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF8B5CF6)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  u.name.isNotEmpty ? u.name : 'User ${u.userId}',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'UID: ${u.uid} • Card: ${u.card > 0 ? u.card : "None"}',
+                                  style: TextStyle(fontSize: 10, color: subtextColor),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (matched != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.check, size: 12, color: Color(0xFF10B981)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    matched.name,
+                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.warning_amber, size: 12, color: Color(0xFFF59E0B)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    provider.translate('user_not_matched_badge'),
+                                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactSyncLogsSection(
     BuildContext context,
     Color textColor,
     Color subtextColor,
     AttendanceProvider provider,
-    List<ZkDeviceConfig> devices,
   ) {
-    final deviceUsers = _zkService.cachedUsers;
-    final employees = provider.employees;
+    final logs = _zkService.syncLogs;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 650;
-
-    final headerTitle = Row(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.badge_outlined, color: Color(0xFF8B5CF6), size: 20),
-        const SizedBox(width: 8),
-        Text(
-          provider.translate('user_mapping_title'),
-          style: TextStyle(fontSize: isMobile ? 15 : 16, fontWeight: FontWeight.bold, color: textColor),
-        ),
-      ],
-    );
-
-    final controls = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (devices.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: subtextColor.withValues(alpha: 0.25)),
+        Row(
+          children: [
+            Text(
+              provider.translate('activity_log_title'),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
             ),
-            child: DropdownButton<String>(
-              value: _selectedDeviceForUsers ?? devices.first.id,
-              underline: const SizedBox(),
-              isDense: true,
-              style: TextStyle(fontSize: 12, color: textColor),
-              items: devices.map((d) {
-                return DropdownMenuItem(value: d.id, child: Text(d.name));
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedDeviceForUsers = val);
-              },
-            ),
-          ),
-        NeuButton(
-          onPressed: _isFetchingUsers
-              ? null
-              : () {
-                  final dev = devices.cast<ZkDeviceConfig?>().firstWhere(
-                        (d) => d != null && d.id == _selectedDeviceForUsers,
-                        orElse: () => devices.isNotEmpty ? devices.first : null,
-                      );
-                  _handleFetchUsers(dev, provider);
-                },
-          isLoading: _isFetchingUsers,
-          icon: const Icon(Icons.download, size: 16),
-          label: provider.translate('fetch_users_btn'),
-          variant: NeuButtonVariant.whitePill,
-          height: 34,
-          fontSize: 12,
-        ),
-      ],
-    );
-
-    return GlassContainer(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isMobile) ...[
-            headerTitle,
-            const SizedBox(height: 12),
-            controls,
-          ] else ...[
-            Row(
-              children: [
-                Expanded(child: headerTitle),
-                const SizedBox(width: 8),
-                controls,
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          if (deviceUsers.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              alignment: Alignment.center,
-              child: Text(
-                provider.translate('fetch_users_hint'),
-                style: TextStyle(fontSize: 13, color: subtextColor),
+            const SizedBox(width: 8),
+            if (logs.isNotEmpty)
+              Text(
+                '(${logs.length})',
+                style: TextStyle(fontSize: 11.5, color: subtextColor),
               ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: deviceUsers.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final u = deviceUsers[index];
-                final matched = employees.cast<CompanyEmployee?>().firstWhere(
-                      (e) {
-                        if (e == null) return false;
-                        if (e.id.trim().toLowerCase() == u.userId.trim().toLowerCase()) return true;
-                        if (e.name.trim().toLowerCase() == u.name.trim().toLowerCase()) return true;
-                        final eDigits = e.id.replaceAll(RegExp(r'[^0-9]'), '');
-                        final uDigits = u.userId.replaceAll(RegExp(r'[^0-9]'), '');
-                        if (eDigits.isNotEmpty && uDigits.isNotEmpty && int.tryParse(eDigits) == int.tryParse(uDigits)) {
-                          return true;
-                        }
-                        return false;
-                      },
-                      orElse: () => null,
-                    );
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Row(
+            const Spacer(),
+            if (logs.isNotEmpty)
+              TextButton.icon(
+                onPressed: () => setState(() => _zkService.clearLogs()),
+                icon: const Icon(Icons.delete_sweep_rounded, size: 14, color: Colors.grey),
+                label: Text(provider.translate('clear'), style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 380,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isDark ? Colors.white12 : const Color(0xFF1E293B)),
+          ),
+          child: logs.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          u.userId,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF8B5CF6)),
-                        ),
+                      const Icon(Icons.receipt_long_rounded, color: Colors.white24, size: 32),
+                      const SizedBox(height: 8),
+                      Text(
+                        provider.translate('no_activity_log'),
+                        style: const TextStyle(fontSize: 12, color: Colors.white54),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              u.name.isNotEmpty ? u.name : 'User ${u.userId}',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textColor),
-                            ),
-                            Text(
-                              'Device UID: ${u.uid} • Card: ${u.card > 0 ? u.card : "None"}',
-                              style: TextStyle(fontSize: 11, color: subtextColor),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (matched != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.check, size: 14, color: Color(0xFF10B981)),
-                              const SizedBox(width: 4),
-                              Text(
-                                provider.translate('user_matched_badge', params: {
-                                  'name': matched.name,
-                                  'position': matched.position,
-                                }),
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.warning_amber, size: 14, color: Color(0xFFF59E0B)),
-                              const SizedBox(width: 4),
-                              Text(
-                                provider.translate('user_not_matched_badge'),
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
-                              ),
-                            ],
-                          ),
-                        ),
                     ],
                   ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
+                )
+              : ListView.builder(
+                  itemCount: logs.length,
+                  itemBuilder: (context, idx) {
+                    final log = logs[idx];
+                    final isError = log.contains('failed') || log.contains('error') || log.contains('Error') || log.contains('✗');
+                    final isSuccess = log.contains('success') || log.contains('Synced') || log.contains('Connected') || log.contains('✓');
 
-  Widget _buildSyncLogsCard(BuildContext context, Color textColor, Color subtextColor) {
-    final provider = Provider.of<AttendanceProvider>(context, listen: false);
-    final logs = _zkService.syncLogs;
-
-    return GlassContainer(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.list_alt, color: Color(0xFF06B6D4), size: 20),
-              const SizedBox(width: 8),
-              Text(
-                provider.translate('activity_log_title'),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
-              ),
-              const Spacer(),
-              if (logs.isNotEmpty)
-                Text(
-                  provider.translate('events_count', params: {'count': '${logs.length}'}),
-                  style: TextStyle(fontSize: 12, color: subtextColor),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            height: 180,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: subtextColor.withValues(alpha: 0.2)),
-            ),
-            child: logs.isEmpty
-                ? Center(
-                    child: Text(
-                      provider.translate('no_activity_log'),
-                      style: TextStyle(fontSize: 12, color: subtextColor),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: logs.length,
-                    itemBuilder: (context, idx) {
-                      final log = logs[idx];
-                      final isError = log.contains('failed') || log.contains('error') || log.contains('Error') || log.contains('✗');
-                      final isSuccess = log.contains('success') || log.contains('Synced') || log.contains('Connected') || log.contains('✓');
-
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2.5),
-                        child: Text(
-                          log,
-                          style: TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11.5,
-                            color: isError
-                                ? const Color(0xFFEF4444)
-                                : isSuccess
-                                    ? const Color(0xFF10B981)
-                                    : textColor.withValues(alpha: 0.85),
-                          ),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        log,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          color: isError
+                              ? const Color(0xFFF87171)
+                              : isSuccess
+                                  ? const Color(0xFF34D399)
+                                  : Colors.white70,
                         ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }

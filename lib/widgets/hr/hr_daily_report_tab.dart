@@ -171,7 +171,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     ];
 
     final empRequests = allRequests.where((r) {
-      return provider.matchesEmployeeIdentifier(r.employeeId, emp);
+      return provider.matchesEmployeeRequest(r, emp);
     }).toList();
 
     final dateRecords = provider.getRecordsForDate(
@@ -260,8 +260,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
       shiftEndMinutes % 60,
     );
     if (shiftEnd.isBefore(shiftStart) ||
-        shiftEnd.isAtSameMomentAs(shiftStart) ||
-        shift.isOvernightForDate(date)) {
+        shiftEnd.isAtSameMomentAs(shiftStart)) {
       shiftEnd = shiftEnd.add(const Duration(days: 1));
     }
 
@@ -2014,10 +2013,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
 
   /// Popup dialog displaying detailed punch sessions and day requests
   void _showEmployeeDayDialog(BuildContext context, Map<String, dynamic> row) {
-    final provider = Provider.of<AttendanceProvider>(context, listen: false);
     final emp = row['employee'] as CompanyEmployee;
-    final records = row['records'] as List<AttendanceRecord>;
-    final requests = row['requests'] as List<Request>;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1E293B);
 
@@ -2029,7 +2025,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
           elevation: 0,
           insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560, maxHeight: 650),
+            constraints: const BoxConstraints(maxWidth: 580, maxHeight: 680),
             child: Container(
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
@@ -2043,362 +2039,668 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Title Row
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: const Color(0xFF00E5CE).withValues(alpha: 0.15),
-                        child: Text(
-                          emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'U',
-                          style: const TextStyle(
-                            color: Color(0xFF00BD96),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              emp.name,
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            Text(
-                              '${emp.position} • ${DateFormat('d MMMM yyyy').format(_selectedDate)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: textColor.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                        color: textColor.withValues(alpha: 0.6),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
+              child: Consumer<AttendanceProvider>(
+                builder: (dialogCtx, liveProvider, _) {
+                  final activeGroupId = liveProvider.getGroupIdForDate(emp, _selectedDate);
+                  final group = liveProvider.groups.where((g) => g.id == activeGroupId).firstOrNull;
+                  final shift = liveProvider.getShiftForDate(emp, _selectedDate);
+                  final structure = liveProvider.structures.where((s) => s.id == emp.structureId).firstOrNull;
 
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  final structureName = structure?.name ?? (row['structureName'] as String? ?? '-');
+                  final shiftName = shift.name.isNotEmpty ? shift.name : (row['shiftName'] as String? ?? '-');
+                  final groupName = group?.name ?? (row['groupName'] as String? ?? '-');
+
+                  final allRequests = [
+                    ...liveProvider.allCompanyRequests,
+                    ...liveProvider.requests,
+                  ];
+                  final empRequests = allRequests.where((r) {
+                    return liveProvider.matchesEmployeeRequest(r, emp);
+                  }).toList();
+
+                  final dateRecords = liveProvider.getRecordsForDate(
+                    _selectedDate,
+                    emp: emp,
+                    requestsPool: empRequests,
+                  );
+                  final sortedRecords = List<AttendanceRecord>.from(dateRecords)
+                    ..sort((a, b) => a.checkIn.compareTo(b.checkIn));
+
+                  final dayRequests = empRequests.where((req) {
+                    final reqDate = req.date;
+                    if (reqDate.contains(' - ')) {
+                      try {
+                        final parts = reqDate.split(' - ');
+                        final sDate = DateFormat('yyyy-MM-dd').parse(parts[0].trim());
+                        final eDate = DateFormat('yyyy-MM-dd').parse(parts[1].trim());
+                        final cur = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+                        return (cur.isAfter(sDate) || cur.isAtSameMomentAs(sDate)) &&
+                            (cur.isBefore(eDate) || cur.isAtSameMomentAs(eDate));
+                      } catch (_) {}
+                    } else {
+                      try {
+                        final sDate = DateFormat('yyyy-MM-dd').parse(reqDate.trim());
+                        return DateUtils.isSameDay(sDate, _selectedDate);
+                      } catch (_) {}
+                    }
+                    return false;
+                  }).toList();
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Title Row
+                      Row(
                         children: [
-                          // Shift & Department specs
-                          Text(
-                            provider.translate('shift_configuration'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: textColor.withValues(alpha: 0.8),
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundColor: const Color(0xFF00E5CE).withValues(alpha: 0.15),
+                            child: Text(
+                              emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'U',
+                              style: const TextStyle(
+                                color: Color(0xFF00BD96),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                          const SizedBox(width: 12),
+                          Expanded(
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildDetailRow(provider.translate('structure'), row['structureName'] as String, textColor),
-                                const SizedBox(height: 6),
-                                _buildDetailRow(provider.translate('shift'), row['shiftName'] as String, textColor),
-                                const SizedBox(height: 6),
-                                _buildDetailRow(provider.translate('group'), row['groupName'] as String, textColor),
+                                Text(
+                                  emp.name,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                Text(
+                                  '${emp.position} • ${DateFormat('d MMMM yyyy').format(_selectedDate)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: textColor.withValues(alpha: 0.6),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
-
-                          // Session Timestamps
-                          Text(
-                            provider.translate('punch_sessions_count', params: {'count': '${records.length}'}),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: textColor.withValues(alpha: 0.8),
-                            ),
+                          IconButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            icon: const Icon(Icons.close_rounded),
+                            color: textColor.withValues(alpha: 0.6),
                           ),
-                          const SizedBox(height: 8),
-                          if (records.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                provider.translate('no_punch_sessions_day'),
-                                style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.5)),
-                              ),
-                            )
-                          else
-                            ...records.map((r) {
-                              final inStr = DateFormat('hh:mm:ss a').format(r.checkIn);
-                              final outStr = r.checkOut != null
-                                  ? DateFormat('hh:mm:ss a').format(r.checkOut!)
-                                  : provider.translate('ongoing_not_clocked_out');
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.fingerprint, size: 16, color: Color(0xFF00E5CE)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Wrap(
-                                        spacing: 12,
-                                        runSpacing: 4,
-                                        alignment: WrapAlignment.spaceBetween,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
-                                        children: [
-                                          Text(
-                                            provider.translate('in_time_label', params: {'time': inStr}),
-                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: textColor),
-                                          ),
-                                          Text(
-                                            provider.translate('out_time_label', params: {'time': outStr}),
-                                            style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.85)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
-                                      tooltip: 'Delete & Exclude from Device Sync',
-                                      padding: const EdgeInsets.all(4),
-                                      constraints: const BoxConstraints(),
-                                      splashRadius: 16,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (delCtx) => AlertDialog(
-                                            title: Row(
-                                              children: [
-                                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
-                                                const SizedBox(width: 8),
-                                                Text(provider.translate('delete_punch_session_title')),
-                                              ],
-                                            ),
-                                            content: Text(
-                                              provider.translate('delete_punch_session_confirm', params: {
-                                                'name': emp.name,
-                                                'inTime': inStr,
-                                                'outTime': outStr,
-                                              }),
-                                              style: const TextStyle(fontSize: 13, height: 1.4),
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(delCtx).pop(),
-                                                child: Text(provider.translate('cancel')),
-                                              ),
-                                              ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: const Color(0xFFEF4444),
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () async {
-                                                  Navigator.of(delCtx).pop();
-                                                  Navigator.of(ctx).pop();
-                                                  await provider.deletePunchSession(
-                                                    employeeId: emp.id,
-                                                    record: r,
-                                                    reason: 'Deleted from daily report',
-                                                  );
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(provider.translate('punch_deleted_blacklist_success')),
-                                                        backgroundColor: const Color(0xFF10B981),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                child: Text(provider.translate('delete_and_blacklist_btn')),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          const SizedBox(height: 16),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 16),
 
-                          // Requests for this day
-                          Text(
-                            provider.translate('day_requests_count', params: {'count': '${requests.length}'}),
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: textColor.withValues(alpha: 0.8),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (requests.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                provider.translate('no_day_requests'),
-                                style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.5)),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Shift & Department specs
+                              Text(
+                                liveProvider.translate('shift_configuration'),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor.withValues(alpha: 0.8),
+                                ),
                               ),
-                            )
-                          else
-                            ...requests.map((req) {
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
+                              const SizedBox(height: 8),
+                              Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: req.statusColor.withValues(alpha: 0.3),
-                                  ),
                                 ),
-                                child: Row(
+                                child: Column(
                                   children: [
-                                    Icon(Icons.assignment_outlined, size: 18, color: req.statusColor),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            req.type,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: textColor,
-                                            ),
-                                          ),
-                                          Text(
-                                            req.duration,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: textColor.withValues(alpha: 0.6),
-                                            ),
-                                          ),
-                                        ],
+                                    _buildDetailRow(liveProvider.translate('structure'), structureName, textColor),
+                                    const SizedBox(height: 6),
+                                    _buildDetailRow(liveProvider.translate('shift'), shiftName, textColor),
+                                    const SizedBox(height: 6),
+                                    _buildDetailRow(liveProvider.translate('group'), groupName, textColor),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Session Timestamps
+                              Text(
+                                liveProvider.translate('punch_sessions_count', params: {'count': '${sortedRecords.length}'}),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor.withValues(alpha: 0.8),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (sortedRecords.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Text(
+                                    liveProvider.translate('no_punch_sessions_day'),
+                                    style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.5)),
+                                  ),
+                                )
+                              else
+                                ...sortedRecords.map((r) {
+                                  final isMissedCheckIn = r.checkIn == r.checkOut;
+                                  final hasCheckIn = !isMissedCheckIn;
+                                  final hasCheckOut = r.checkOut != null;
+
+                                  final inStr = hasCheckIn
+                                      ? DateFormat('hh:mm:ss a').format(r.checkIn)
+                                      : liveProvider.translate('not_recorded');
+                                  final outStr = hasCheckOut
+                                      ? DateFormat('hh:mm:ss a').format(r.checkOut!)
+                                      : (DateUtils.isSameDay(_selectedDate, DateTime.now())
+                                          ? liveProvider.translate('ongoing_not_clocked_out')
+                                          : liveProvider.translate('not_recorded'));
+
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE2E8F0),
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: req.statusColor.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        req.status,
-                                        style: TextStyle(
-                                          color: req.statusColor,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF00E5CE).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Icon(Icons.fingerprint, size: 16, color: Color(0xFF00BD96)),
                                         ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
-                                      tooltip: provider.translate('delete_request'),
-                                      padding: const EdgeInsets.all(4),
-                                      constraints: const BoxConstraints(),
-                                      splashRadius: 16,
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (delCtx) => AlertDialog(
-                                            title: Row(
-                                              children: [
-                                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
-                                                const SizedBox(width: 8),
-                                                Text(provider.translate('delete_request')),
-                                              ],
-                                            ),
-                                            content: Text(
-                                              '${provider.translate('confirm_delete_request')}\n\n• ${req.type}\n• ${req.duration}',
-                                              style: const TextStyle(fontSize: 13, height: 1.4),
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(delCtx).pop(),
-                                                child: Text(provider.translate('cancel')),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Wrap(
+                                            spacing: 8,
+                                            runSpacing: 4,
+                                            alignment: WrapAlignment.start,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              // Check-In Badge with separate delete
+                                              _buildPunchBadge(
+                                                context: context,
+                                                provider: liveProvider,
+                                                isDark: isDark,
+                                                textColor: textColor,
+                                                label: liveProvider.translate('in_time_label', params: {'time': inStr}),
+                                                isAvailable: hasCheckIn,
+                                                badgeColor: const Color(0xFF10B981),
+                                                icon: Icons.login_rounded,
+                                                tooltip: liveProvider.translate('delete_check_in_tooltip'),
+                                                onDelete: hasCheckIn
+                                                    ? () => _confirmDeleteCheckIn(
+                                                          context,
+                                                          liveProvider,
+                                                          emp,
+                                                          r,
+                                                          inStr,
+                                                          outStr,
+                                                          hasCheckOut,
+                                                        )
+                                                    : null,
                                               ),
-                                              ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: const Color(0xFFEF4444),
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                onPressed: () async {
-                                                  Navigator.of(delCtx).pop();
-                                                  Navigator.of(ctx).pop();
-                                                  await provider.deleteRequest(emp.id, req.id);
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(provider.translate('delete_request')),
-                                                        backgroundColor: const Color(0xFF10B981),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                child: Text(provider.translate('delete')),
+
+                                              // Check-Out Badge with separate delete
+                                              _buildPunchBadge(
+                                                context: context,
+                                                provider: liveProvider,
+                                                isDark: isDark,
+                                                textColor: textColor,
+                                                label: liveProvider.translate('out_time_label', params: {'time': outStr}),
+                                                isAvailable: hasCheckOut,
+                                                badgeColor: const Color(0xFFF59E0B),
+                                                icon: Icons.logout_rounded,
+                                                tooltip: liveProvider.translate('delete_check_out_tooltip'),
+                                                onDelete: hasCheckOut
+                                                    ? () => _confirmDeleteCheckOut(
+                                                          context,
+                                                          liveProvider,
+                                                          emp,
+                                                          r,
+                                                          inStr,
+                                                          outStr,
+                                                          hasCheckIn,
+                                                        )
+                                                    : null,
                                               ),
                                             ],
                                           ),
-                                        );
-                                      },
+                                        ),
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                                          tooltip: liveProvider.translate('delete_session_tooltip'),
+                                          padding: const EdgeInsets.all(4),
+                                          constraints: const BoxConstraints(),
+                                          splashRadius: 16,
+                                          onPressed: () => _confirmDeleteSession(
+                                            context,
+                                            liveProvider,
+                                            emp,
+                                            r,
+                                            inStr,
+                                            outStr,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              );
-                            }),
-                        ],
-                      ),
-                    ),
-                  ),
+                                  );
+                                }),
+                              const SizedBox(height: 16),
 
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: NeuButton(
-                      label: provider.translate('close'),
-                      variant: NeuButtonVariant.navy,
-                      height: 38,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ),
-                ],
+                              // Requests for this day
+                              Text(
+                                liveProvider.translate('day_requests_count', params: {'count': '${dayRequests.length}'}),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor.withValues(alpha: 0.8),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (dayRequests.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Text(
+                                    liveProvider.translate('no_day_requests'),
+                                    style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.5)),
+                                  ),
+                                )
+                              else
+                                ...dayRequests.map((req) {
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: req.statusColor.withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.assignment_outlined, size: 18, color: req.statusColor),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                req.type,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: textColor,
+                                                ),
+                                              ),
+                                              Text(
+                                                req.duration,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: textColor.withValues(alpha: 0.6),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: req.statusColor.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            req.status,
+                                            style: TextStyle(
+                                              color: req.statusColor,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                                          tooltip: liveProvider.translate('delete_request'),
+                                          padding: const EdgeInsets.all(4),
+                                          constraints: const BoxConstraints(),
+                                          splashRadius: 16,
+                                          onPressed: () {
+                                            showDialog(
+                                              context: context,
+                                              builder: (delCtx) => AlertDialog(
+                                                title: Row(
+                                                  children: [
+                                                    const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+                                                    const SizedBox(width: 8),
+                                                    Text(liveProvider.translate('delete_request')),
+                                                  ],
+                                                ),
+                                                content: Text(
+                                                  '${liveProvider.translate('confirm_delete_request')}\n\n• ${req.type}\n• ${req.duration}',
+                                                  style: const TextStyle(fontSize: 13, height: 1.4),
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(delCtx).pop(),
+                                                    child: Text(liveProvider.translate('cancel')),
+                                                  ),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: const Color(0xFFEF4444),
+                                                      foregroundColor: Colors.white,
+                                                    ),
+                                                    onPressed: () async {
+                                                      Navigator.of(delCtx).pop();
+                                                      await liveProvider.deleteRequest(emp.id, req.id);
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(context).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(liveProvider.translate('delete_request')),
+                                                            backgroundColor: const Color(0xFF10B981),
+                                                          ),
+                                                        );
+                                                      }
+                                                    },
+                                                    child: Text(liveProvider.translate('delete')),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: NeuButton(
+                          label: liveProvider.translate('close'),
+                          variant: NeuButtonVariant.navy,
+                          height: 38,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPunchBadge({
+    required BuildContext context,
+    required AttendanceProvider provider,
+    required bool isDark,
+    required Color textColor,
+    required String label,
+    required bool isAvailable,
+    required Color badgeColor,
+    required IconData icon,
+    String? tooltip,
+    VoidCallback? onDelete,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isAvailable
+            ? badgeColor.withValues(alpha: isDark ? 0.16 : 0.08)
+            : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isAvailable
+              ? badgeColor.withValues(alpha: isDark ? 0.35 : 0.25)
+              : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 13,
+            color: isAvailable ? badgeColor : textColor.withValues(alpha: 0.35),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isAvailable ? FontWeight.w600 : FontWeight.w400,
+              color: isAvailable ? textColor : textColor.withValues(alpha: 0.45),
+            ),
+          ),
+          if (isAvailable && onDelete != null) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: tooltip ?? provider.translate('delete_punch_confirm_title'),
+              child: InkWell(
+                onTap: onDelete,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(1),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 13,
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteCheckIn(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String inStr,
+    String outStr,
+    bool hasCheckOut,
+  ) {
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+            const SizedBox(width: 8),
+            Text(provider.translate('delete_check_in_title')),
+          ],
+        ),
+        content: Text(
+          provider.translate('delete_check_in_confirm', params: {
+            'name': emp.name,
+            'time': inStr,
+            'outTime': hasCheckOut ? outStr : provider.translate('not_recorded'),
+          }),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              await provider.deletePunchCheckInOnly(
+                employeeId: emp.id,
+                record: record,
+                reason: 'Deleted Check-In from daily report',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('check_in_deleted_success')),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('delete_check_in_btn')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteCheckOut(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String inStr,
+    String outStr,
+    bool hasCheckIn,
+  ) {
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+            const SizedBox(width: 8),
+            Text(provider.translate('delete_check_out_title')),
+          ],
+        ),
+        content: Text(
+          provider.translate('delete_check_out_confirm', params: {
+            'name': emp.name,
+            'time': outStr,
+            'inTime': hasCheckIn ? inStr : provider.translate('not_recorded'),
+          }),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              await provider.deletePunchCheckOutOnly(
+                employeeId: emp.id,
+                record: record,
+                reason: 'Deleted Check-Out from daily report',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('check_out_deleted_success')),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('delete_check_out_btn')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteSession(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String inStr,
+    String outStr,
+  ) {
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+            const SizedBox(width: 8),
+            Text(provider.translate('delete_entire_session_title')),
+          ],
+        ),
+        content: Text(
+          provider.translate('delete_punch_session_confirm', params: {
+            'name': emp.name,
+            'inTime': inStr,
+            'outTime': outStr,
+          }),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              await provider.deletePunchSession(
+                employeeId: emp.id,
+                record: record,
+                reason: 'Deleted session from daily report',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('punch_deleted_blacklist_success')),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('delete_session_btn')),
+          ),
+        ],
+      ),
     );
   }
 

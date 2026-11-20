@@ -85,7 +85,8 @@ class _HrEmployeesTabState extends State<HrEmployeesTab> {
           emp.structureId == _selectedStructureFilter;
 
       return matchesQuery && matchesRole && matchesStatus && matchesStructure;
-    }).toList();
+    }).toList()
+      ..sort(CompanyEmployee.compareById);
 
     // System KPI Stats
     final totalCount = allEmployees.length;

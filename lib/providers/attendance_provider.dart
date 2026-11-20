@@ -168,6 +168,10 @@ class AttendanceProvider with ChangeNotifier {
         _currentCompanyCode = savedCompany.trim().toLowerCase();
       }
       await loadCompanyLicense(_currentCompanyCode);
+      if (_currentLicense == null && _currentCompanyCode != 'amada' && _currentCompanyCode != 'all') {
+        _currentCompanyCode = 'amada';
+        await loadCompanyLicense('amada');
+      }
       final isLoggedInSaved = prefs.getBool('isLoggedIn') ?? false;
       final savedEmployeeId = prefs.getString('loggedInEmployeeId');
       final savedName = prefs.getString('loggedInUserName');
@@ -234,6 +238,17 @@ class AttendanceProvider with ChangeNotifier {
 
     try {
       final code = (companyCode ?? _currentCompanyCode).trim().toLowerCase();
+
+      // If logging into a specific client company, verify that it actually exists first!
+      if (_firebaseService.isAvailable && code.isNotEmpty && code != 'all' && code != 'amada') {
+        final lic = await _firebaseService.getCompanyLicense(code);
+        if (lic == null) {
+          _isLoading = false;
+          notifyListeners();
+          return translate('company_not_found', params: {'code': code});
+        }
+      }
+
       if (code.isNotEmpty && code != 'all') {
         await setCompanyCode(code);
       }
@@ -262,8 +277,10 @@ class AttendanceProvider with ChangeNotifier {
             (e.password == null || e.password == password),
       );
 
-      // Default Admin Auto-Provisioning for newly created client companies
+      // Default Admin Auto-Provisioning for newly created client companies (requires a valid company license)
       if (matchIndex == -1 &&
+          _currentLicense != null &&
+          _currentLicense!.companyCode.trim().toLowerCase() == code &&
           password == 'admin123' &&
           (input == 'admin' ||
               input == 'admin@$code.com' ||
@@ -1069,23 +1086,31 @@ class AttendanceProvider with ChangeNotifier {
             g.companyCode.isEmpty ||
             g.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase()),
       );
-  List<CompanyEmployee> get allEmployees => List.unmodifiable(_employees);
-  List<CompanyEmployee> get employees => List.unmodifiable(
-        _employees.where((e) {
-          if (isSystemAdminAccount(e)) return false;
-          if (_currentCompanyCode == 'all') return true;
-          return e.companyCode.isEmpty ||
-              e.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase();
-        }),
-      );
-  List<CompanyEmployee> get companyUsers => List.unmodifiable(
-        _employees.where((e) {
-          if (isSuperAdminUser(e)) return false;
-          if (_currentCompanyCode == 'all') return true;
-          return e.companyCode.isEmpty ||
-              e.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase();
-        }),
-      );
+  List<CompanyEmployee> get allEmployees {
+    final list = List<CompanyEmployee>.from(_employees);
+    list.sort(CompanyEmployee.compareById);
+    return List.unmodifiable(list);
+  }
+  List<CompanyEmployee> get employees {
+    final list = _employees.where((e) {
+      if (isSystemAdminAccount(e)) return false;
+      if (_currentCompanyCode == 'all') return true;
+      return e.companyCode.isEmpty ||
+          e.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase();
+    }).toList();
+    list.sort(CompanyEmployee.compareById);
+    return List.unmodifiable(list);
+  }
+  List<CompanyEmployee> get companyUsers {
+    final list = _employees.where((e) {
+      if (isSuperAdminUser(e)) return false;
+      if (_currentCompanyCode == 'all') return true;
+      return e.companyCode.isEmpty ||
+          e.companyCode.toLowerCase() == _currentCompanyCode.toLowerCase();
+    }).toList();
+    list.sort(CompanyEmployee.compareById);
+    return List.unmodifiable(list);
+  }
   List<Holiday> get holidays => List.unmodifiable(
         _holidays.where((h) =>
             _currentCompanyCode == 'all' ||
@@ -1116,9 +1141,20 @@ class AttendanceProvider with ChangeNotifier {
   FirebaseService get firebaseService => _firebaseService;
   CompanyProfile? get companyProfile => _companyProfile;
 
-  Future<void> loadCompanyLicense(String companyCode) async {
+  void clearCurrentLicense() {
+    _licenseSubscription?.cancel();
+    _currentLicense = null;
+    _companyProfile = null;
+    notifyListeners();
+  }
+
+  Future<void> loadCompanyLicense(String companyCode, {bool autoCreate = false}) async {
     final clean = companyCode.trim().toLowerCase();
-    _currentCompanyCode = clean.isEmpty ? 'amada' : clean;
+    if (clean.isEmpty) {
+      clearCurrentLicense();
+      return;
+    }
+    _currentCompanyCode = clean;
     if (_currentCompanyCode == 'all') {
       _licenseSubscription?.cancel();
       _currentLicense = CompanyLicense.defaultLicense(
@@ -1140,12 +1176,20 @@ class AttendanceProvider with ChangeNotifier {
       if (lic != null) {
         _currentLicense = lic;
         _syncProfileFromLicense(lic);
+        _listenToCompanyLicense(_currentCompanyCode);
       } else {
-        final defaultLic = CompanyLicense.defaultLicense(code: _currentCompanyCode);
-        await _firebaseService.saveCompanyLicense(defaultLic);
-        _currentLicense = defaultLic;
+        _licenseSubscription?.cancel();
+        if (autoCreate || _currentCompanyCode == 'amada') {
+          final defaultLic = CompanyLicense.defaultLicense(code: _currentCompanyCode);
+          await _firebaseService.saveCompanyLicense(defaultLic);
+          _currentLicense = defaultLic;
+          _syncProfileFromLicense(defaultLic);
+          _listenToCompanyLicense(_currentCompanyCode);
+        } else {
+          _currentLicense = null;
+          _companyProfile = null;
+        }
       }
-      _listenToCompanyLicense(_currentCompanyCode);
     } else {
       _currentLicense ??= CompanyLicense.defaultLicense(code: _currentCompanyCode);
       if (_currentLicense != null) {
@@ -1161,8 +1205,11 @@ class AttendanceProvider with ChangeNotifier {
       if (lic != null) {
         _currentLicense = lic;
         _syncProfileFromLicense(lic);
-        notifyListeners();
+      } else {
+        _currentLicense = null;
+        _companyProfile = null;
       }
+      notifyListeners();
     });
   }
 
@@ -1184,17 +1231,37 @@ class AttendanceProvider with ChangeNotifier {
     if (clean.isEmpty) return;
     final bool changed = _currentCompanyCode != clean;
     _currentCompanyCode = clean;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (clean != 'all') {
-        await prefs.setString('app_company_code', clean);
-      }
-    } catch (_) {}
     await loadCompanyLicense(clean);
+    if (_currentLicense != null || clean == 'amada' || clean == 'all') {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (clean != 'all') {
+          await prefs.setString('app_company_code', clean);
+        }
+      } catch (_) {}
+    }
     if (changed) {
+      // Clear all company-specific caches so data from previous company never leaks
+      _allCompanyRecords.clear();
+      _allCompanyRequests.clear();
+      _allRequestsMap.clear();
+      _records.clear();
+      _activeRecord = null;
+      _deletedPunchSignatures.clear();
+      _structures.clear();
+      _shifts.clear();
+      _groups.clear();
+      _employees.clear();
+      _holidays.clear();
+      _locations.clear();
+      _payrollAdjustments.clear();
+      _payrollClosures.clear();
+
       await _loadPayrollClosuresFromPrefs();
       _listenToPayrollClosures();
       await _setupFirestoreListeners();
+      recalculateAllStats();
+      notifyListeners();
     }
   }
 
@@ -1338,7 +1405,9 @@ class AttendanceProvider with ChangeNotifier {
         pos.contains('إداري') ||
         pos.contains('اداري') ||
         pos.contains('اداره') ||
-        pos.contains('ئیدارە')) return true;
+        pos.contains('ئیدارە')) {
+      return true;
+    }
     return isSuperAdmin;
   }
 
@@ -1661,9 +1730,13 @@ class AttendanceProvider with ChangeNotifier {
             _firebaseService.saveEmployee(superAdmin);
           }
 
-          // --- ENSURE CLIENT COMPANY ADMIN REMAINS ---
+          // --- ENSURE CLIENT COMPANY ADMIN REMAINS (Only for valid, existing client companies) ---
           final code = (filterCode ?? '').trim().toLowerCase();
-          if (code.isNotEmpty && code != 'all' && code != 'amada') {
+          if (code.isNotEmpty &&
+              code != 'all' &&
+              code != 'amada' &&
+              _currentLicense != null &&
+              _currentLicense!.companyCode.trim().toLowerCase() == code) {
             final clientAdminId = '${code}_admin';
             if (!_employees.any((e) => e.id == clientAdminId || e.email == 'admin@$code.com')) {
               final compName = _currentLicense?.companyName ?? code.toUpperCase();
@@ -1687,6 +1760,7 @@ class AttendanceProvider with ChangeNotifier {
             }
           }
 
+          _employees.sort(CompanyEmployee.compareById);
           _syncCurrentEmployeeInfo();
           _avatarPath = currentEmployee?.avatarUrl;
           loadChatsForCurrentUser();
@@ -2193,14 +2267,44 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
 
+  bool isRecordStillActive(AttendanceRecord r, DateTime now, CompanyEmployee emp) {
+    if (r.checkOut != null) return false;
+    if (r.checkIn.isAfter(now.add(const Duration(minutes: 5)))) return false;
+    final checkInDate = DateTime(r.checkIn.year, r.checkIn.month, r.checkIn.day);
+    final nowDate = DateTime(now.year, now.month, now.day);
+    if (checkInDate == nowDate) {
+      return now.difference(r.checkIn).inHours.abs() < 18;
+    }
+    final isNextDay = nowDate == checkInDate.add(const Duration(days: 1));
+    final shift = getShiftForDate(emp, checkInDate);
+    final isSpecial = shift.isSpecialShiftForDate(checkInDate);
+    final is24h = isSpecial || shift.getShiftDurationMinutesForDate(checkInDate) >= 20 * 60;
+    final isOvernight = shift.isOvernightForDate(checkInDate);
+    final maxContinuousHours = shift.getMaxContinuousHoursForDate(checkInDate);
+
+    final elapsedMinutes = now.difference(r.checkIn).inMinutes.abs();
+    if (elapsedMinutes > maxContinuousHours * 60) {
+      return false;
+    }
+
+    if (isNextDay && (is24h || isOvernight)) {
+      final cutoffStr = shift.getCrossMidnightCutoffForDate(checkInDate);
+      final cParts = cutoffStr.split(':');
+      final cH = int.tryParse(cParts[0]) ?? (is24h ? 9 : 3);
+      final cM = cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? (is24h ? 30 : 0)) : 0;
+      final cutoffMinutes = cH * 60 + cM;
+      final nowMinutes = now.hour * 60 + now.minute;
+      return nowMinutes <= cutoffMinutes;
+    }
+    return false;
+  }
+
   void _restoreActiveRecordFromRecords() {
     final now = DateTime.now();
     try {
+      final emp = currentEmployee ?? CompanyEmployee(id: _employeeId, name: _userName, email: _email, position: _position);
       final active = _records.firstWhere(
-        (r) =>
-            r.checkOut == null &&
-            now.difference(r.checkIn).inHours.abs() < 24 &&
-            r.checkIn.isBefore(now.add(const Duration(minutes: 5))),
+        (r) => isRecordStillActive(r, now, emp),
       );
       _isClockedIn = true;
       _activeRecord = active;
@@ -2368,24 +2472,32 @@ class AttendanceProvider with ChangeNotifier {
     );
   }
 
-  DateTime getEffectiveDateForRecord(AttendanceRecord rec, CompanyEmployee emp) {
-    final checkIn = rec.checkIn;
-    final dayOfCheckIn = DateTime(checkIn.year, checkIn.month, checkIn.day);
-    final prevDay = dayOfCheckIn.subtract(const Duration(days: 1));
+  DateTime getEffectiveDateForPunch(DateTime punchTime, CompanyEmployee emp) {
+    final dayOfPunch = DateTime(punchTime.year, punchTime.month, punchTime.day);
+    final prevDay = dayOfPunch.subtract(const Duration(days: 1));
     final prevShift = getShiftForDate(emp, prevDay);
-    if (prevShift.isOvernightForDate(prevDay)) {
+    final isPrevSpecial = prevShift.isSpecialShiftForDate(prevDay);
+    final isPrev24h = isPrevSpecial || prevShift.getShiftDurationMinutesForDate(prevDay) >= 20 * 60;
+
+    if (isPrev24h || prevShift.isOvernightForDate(prevDay)) {
       final cutoffStr = prevShift.getCrossMidnightCutoffForDate(prevDay);
       final cParts = cutoffStr.split(':');
       if (cParts.length >= 2) {
-        final cH = int.tryParse(cParts[0]) ?? 3;
-        final cM = int.tryParse(cParts[1]) ?? 0;
-        final cutoffDateTime = DateTime(dayOfCheckIn.year, dayOfCheckIn.month, dayOfCheckIn.day, cH, cM);
-        if (checkIn.isBefore(cutoffDateTime)) {
+        final cH = int.tryParse(cParts[0]) ?? (isPrev24h ? 9 : 3);
+        final cM = int.tryParse(cParts[1]) ?? (isPrev24h ? 30 : 0);
+        final cutoffMinutes = cH * 60 + cM;
+        final punchMinutes = punchTime.hour * 60 + punchTime.minute;
+        if (punchMinutes <= cutoffMinutes) {
           return prevDay;
         }
       }
+      return dayOfPunch;
     }
-    return dayOfCheckIn;
+    return dayOfPunch;
+  }
+
+  DateTime getEffectiveDateForRecord(AttendanceRecord rec, CompanyEmployee emp) {
+    return getEffectiveDateForPunch(rec.checkIn, emp);
   }
 
   DateTime? _parseTimeToDateTime(DateTime baseDate, String tStr, WorkShift shift) {
@@ -2404,7 +2516,7 @@ class AttendanceProvider with ChangeNotifier {
         final cutoffMins = (int.tryParse(cParts[0]) ?? 3) * 60 +
             (cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? 0) : 0);
         final mins = dt.hour * 60 + dt.minute;
-        if (mins < cutoffMins) {
+        if (mins <= cutoffMins) {
           result = result.add(const Duration(days: 1));
         }
       }
@@ -2599,7 +2711,45 @@ class AttendanceProvider with ChangeNotifier {
     return reconciled;
   }
 
-  bool matchesEmployeeIdentifier(String? identifier, CompanyEmployee emp) {
+  bool matchesEmployeeRecord(AttendanceRecord rec, CompanyEmployee emp) {
+    final empComp = emp.companyCode.trim().toLowerCase();
+    final recComp = (rec.companyCode ?? '').trim().toLowerCase();
+
+    // 1. Strict Company Isolation:
+    if (empComp.isNotEmpty && empComp != 'all') {
+      if (recComp.isNotEmpty && recComp != 'all') {
+        if (recComp != empComp) return false;
+      } else {
+        // Record has no companyCode (legacy record).
+        // Only allow if this is the root/legacy company 'amada'
+        if (empComp != 'amada') {
+          return false;
+        }
+      }
+    }
+
+    // 2. Identifier match
+    return matchesEmployeeIdentifier(rec.employeeId, emp, companyCode: rec.companyCode);
+  }
+
+  bool matchesEmployeeRequest(Request req, CompanyEmployee emp) {
+    final empComp = emp.companyCode.trim().toLowerCase();
+    final reqComp = (req.companyCode ?? '').trim().toLowerCase();
+
+    if (empComp.isNotEmpty && empComp != 'all') {
+      if (reqComp.isNotEmpty && reqComp != 'all') {
+        if (reqComp != empComp) return false;
+      } else {
+        if (empComp != 'amada') {
+          return false;
+        }
+      }
+    }
+
+    return matchesEmployeeIdentifier(req.employeeId, emp, companyCode: req.companyCode);
+  }
+
+  bool matchesEmployeeIdentifier(String? identifier, CompanyEmployee emp, {String? companyCode}) {
     if (identifier == null || identifier.trim().isEmpty) return false;
     final cleanTarget = identifier.trim().toLowerCase();
     final cleanId = emp.id.trim().toLowerCase();
@@ -2607,12 +2757,34 @@ class AttendanceProvider with ChangeNotifier {
     final cleanEmail = emp.email.trim().toLowerCase();
     final comp = emp.companyCode.trim().toLowerCase();
 
-    // 1. Direct match with ID, Name, or Email
+    // 1. Strict Company Code isolation:
+    if (companyCode != null && companyCode.trim().isNotEmpty) {
+      final cleanComp = companyCode.trim().toLowerCase();
+      if (comp.isNotEmpty && comp != 'all' && cleanComp != 'all' && cleanComp != comp) {
+        return false;
+      }
+    }
+
+    // 2. If target identifier has a company prefix (e.g. "bestenergy_1"), it MUST match employee's company
+    if (comp.isNotEmpty && comp != 'all') {
+      if (cleanTarget.contains('_')) {
+        final targetPrefix = cleanTarget.split('_').first;
+        if (targetPrefix.isNotEmpty &&
+            targetPrefix != comp &&
+            targetPrefix != 'admin' &&
+            targetPrefix != 'emp' &&
+            targetPrefix != 'employee') {
+          return false;
+        }
+      }
+    }
+
+    // 3. Direct match with ID, Name, or Email
     if (cleanTarget == cleanId) return true;
     if (cleanName.isNotEmpty && cleanTarget == cleanName) return true;
     if (cleanEmail.isNotEmpty && cleanTarget == cleanEmail) return true;
 
-    // 2. Company scoped ID match: e.g. "bestenergy_6" vs "6"
+    // 4. Company scoped ID match: e.g. "bestenergy_6" vs "6"
     if (comp.isNotEmpty && comp != 'all') {
       if (cleanTarget == '${comp}_$cleanId') return true;
       if (cleanId.startsWith('${comp}_') && cleanTarget == cleanId.substring(comp.length + 1)) return true;
@@ -2629,22 +2801,70 @@ class AttendanceProvider with ChangeNotifier {
     bool includeApprovedMissingPunches = true,
   }) {
     final baseRecords = recordsPool ??
-        ((emp.id == _employeeId)
+        ((emp.id == _employeeId && _currentCompanyCode == emp.companyCode.toLowerCase())
             ? _records
-            : _allCompanyRecords);
+            : allCompanyRecords);
 
-    final rawRecords = baseRecords.where((rec) {
-      if (rec.employeeId != null && rec.employeeId!.trim().isNotEmpty) {
-        if (!matchesEmployeeIdentifier(rec.employeeId, emp)) return false;
-      } else if (emp.id != _employeeId) {
-        return false;
+    final targetDate = DateTime(date.year, date.month, date.day);
+    final List<AttendanceRecord> rawRecords = [];
+
+    for (final rec in baseRecords) {
+      if (!matchesEmployeeRecord(rec, emp)) continue;
+
+      final checkInDate = DateTime(rec.checkIn.year, rec.checkIn.month, rec.checkIn.day);
+      final checkInShift = getShiftForDate(emp, checkInDate);
+      final isCheckInSpecial = checkInShift.isSpecialShiftForDate(checkInDate);
+      final isCheckIn24h = isCheckInSpecial || checkInShift.getShiftDurationMinutesForDate(checkInDate) >= 20 * 60;
+
+      // Special 24h / continuous shift handling:
+      // If a completed record started on a 24-hour shift, verify it completed before cutoff & within max hours
+      if (isCheckIn24h && rec.checkOut != null && rec.checkIn != rec.checkOut) {
+        final elapsed = rec.checkOut!.difference(rec.checkIn);
+        final maxHours = checkInShift.getMaxContinuousHoursForDate(checkInDate);
+        if (elapsed.inHours >= 8 && elapsed.inMinutes <= (maxHours * 60)) {
+          final outEff = getEffectiveDateForPunch(rec.checkOut!, emp);
+          if (DateUtils.isSameDay(checkInDate, outEff)) {
+            if (DateUtils.isSameDay(checkInDate, targetDate)) {
+              rawRecords.add(rec);
+            }
+            continue;
+          }
+        }
       }
 
-      final effDate = getEffectiveDateForRecord(rec, emp);
-      return effDate.year == date.year &&
-          effDate.month == date.month &&
-          effDate.day == date.day;
-    }).toList();
+      final inEff = getEffectiveDateForPunch(rec.checkIn, emp);
+      final inMatches = DateUtils.isSameDay(inEff, targetDate);
+
+      if (rec.checkOut == null || rec.checkIn == rec.checkOut) {
+        if (inMatches) {
+          rawRecords.add(rec);
+        }
+      } else {
+        final outEff = getEffectiveDateForPunch(rec.checkOut!, emp);
+        final outMatches = DateUtils.isSameDay(outEff, targetDate);
+
+        if (inMatches && outMatches) {
+          // Normal pair where both punches belong to targetDate
+          rawRecords.add(rec);
+        } else if (inMatches && !outMatches) {
+          // Check-in belongs to targetDate, but checkout belongs to next day (exceeded cutoff)
+          rawRecords.add(AttendanceRecord(
+            checkIn: rec.checkIn,
+            checkOut: null,
+            employeeId: rec.employeeId ?? emp.id,
+            companyCode: rec.companyCode ?? emp.companyCode,
+          ));
+        } else if (!inMatches && outMatches) {
+          // Checkout belongs to targetDate as a punch because it occurred after cutoff
+          rawRecords.add(AttendanceRecord(
+            checkIn: rec.checkOut!,
+            checkOut: null,
+            employeeId: emp.id,
+            companyCode: emp.companyCode,
+          ));
+        }
+      }
+    }
 
     if (!includeApprovedMissingPunches) {
       return rawRecords;
@@ -2652,9 +2872,9 @@ class AttendanceProvider with ChangeNotifier {
 
     final baseRequests = requestsPool ??
         _allRequestsMap[emp.id] ??
-        ((emp.id == _employeeId)
+        ((emp.id == _employeeId && _currentCompanyCode == emp.companyCode.toLowerCase())
             ? requests
-            : _allCompanyRequests);
+            : allCompanyRequests);
 
     final shift = getShiftForDate(emp, date);
     final isOvernight = shift.isOvernightForDate(date);
@@ -2669,11 +2889,7 @@ class AttendanceProvider with ChangeNotifier {
       if (req.status != 'Approved') continue;
 
       // CRITICAL TENANCY & EMPLOYEE ISOLATION: Request MUST belong to THIS employee!
-      if (req.employeeId != null && req.employeeId!.trim().isNotEmpty) {
-        if (!matchesEmployeeIdentifier(req.employeeId, emp)) continue;
-      } else {
-        if (emp.id != _employeeId) continue;
-      }
+      if (!matchesEmployeeRequest(req, emp)) continue;
 
       DateTime? rDate;
       try {
@@ -2716,7 +2932,7 @@ class AttendanceProvider with ChangeNotifier {
           final cParts = cutoffStr.split(':');
           final cutoffMins = (int.tryParse(cParts[0]) ?? 3) * 60 +
               (cParts.length >= 2 ? (int.tryParse(cParts[1]) ?? 0) : 0);
-          if (punchMins < cutoffMins) {
+          if (punchMins <= cutoffMins) {
             missingPunchReqs.add(req);
           }
         } catch (_) {}
@@ -2724,7 +2940,13 @@ class AttendanceProvider with ChangeNotifier {
     }
 
     if (missingPunchReqs.isEmpty) {
-      return rawRecords;
+      if (rawRecords.length <= 1) {
+        return rawRecords;
+      }
+      final hasUnpaired = rawRecords.any((r) => r.checkOut == null || r.checkIn == r.checkOut);
+      if (!hasUnpaired) {
+        return rawRecords;
+      }
     }
 
     return _reconcilePunchesWithMissingRequests(
@@ -2778,22 +3000,14 @@ class AttendanceProvider with ChangeNotifier {
     // Records for this employee
     final employeeRecords =
         customRecords ??
-        ((emp.id == _employeeId)
+        ((emp.id == _employeeId && _currentCompanyCode == emp.companyCode.toLowerCase())
             ? _records
-            : _allCompanyRecords
-                .where((r) =>
-                    r.employeeId != null &&
-                    (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
-                     r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                     r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+            : allCompanyRecords
+                .where((r) => matchesEmployeeRecord(r, emp))
                 .toList());
     final employeeRequests = _allRequestsMap[emp.id] ??
-        _allCompanyRequests
-            .where((r) =>
-                r.employeeId != null &&
-                (r.employeeId!.trim().toLowerCase() == emp.id.trim().toLowerCase() ||
-                 r.employeeId!.trim().toLowerCase() == emp.name.trim().toLowerCase() ||
-                 r.employeeId!.trim().toLowerCase() == emp.email.trim().toLowerCase()))
+        allCompanyRequests
+            .where((r) => matchesEmployeeRequest(r, emp))
             .toList();
 
     final daysInMonth = DateUtils.getDaysInMonth(
@@ -2977,7 +3191,7 @@ class AttendanceProvider with ChangeNotifier {
         shiftEndMins ~/ 60,
         shiftEndMins % 60,
       );
-      if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart) || shift.isOvernightForDate(date)) {
+      if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart)) {
         shiftEnd = shiftEnd.add(const Duration(days: 1));
       }
 
@@ -5010,7 +5224,8 @@ class AttendanceProvider with ChangeNotifier {
 
     // If _activeRecord is null, locate the latest open record
     if (_activeRecord == null) {
-      final openIdx = _records.indexWhere((r) => r.checkOut == null);
+      final emp = currentEmployee ?? CompanyEmployee(id: _employeeId, name: _userName, email: _email, position: _position);
+      final openIdx = _records.indexWhere((r) => isRecordStillActive(r, now, emp));
       if (openIdx != -1) {
         _activeRecord = _records[openIdx];
       }
@@ -5235,6 +5450,228 @@ class AttendanceProvider with ChangeNotifier {
             reason: reason,
           ));
         }
+      } catch (e) {
+        debugPrint('Error saving deleted punch tombstone: $e');
+      }
+    }
+  }
+
+  /// Delete ONLY the Check-In punch of a session, leaving Check-Out intact
+  Future<void> deletePunchCheckInOnly({
+    required String employeeId,
+    required AttendanceRecord record,
+    String? reason,
+  }) async {
+    if (isMonthClosed(record.checkIn)) {
+      debugPrint('Cannot delete punch for closed month');
+      return;
+    }
+
+    // If session only has one punch (no checkOut, or checkIn == checkOut), deleting checkIn deletes the whole session
+    if (record.checkOut == null || record.checkIn == record.checkOut) {
+      await deletePunchSession(employeeId: employeeId, record: record, reason: reason);
+      return;
+    }
+
+    final cleanEmpId = employeeId.trim().toLowerCase();
+    final cleanComp = (record.companyCode ?? '').trim().toLowerCase();
+    final inPunchTime = record.checkIn;
+    final outPunchTime = record.checkOut!;
+
+    // Surviving record is clock-out only (represented by checkIn == checkOut == outPunchTime)
+    final survivingRecord = AttendanceRecord(
+      checkIn: outPunchTime,
+      checkOut: outPunchTime,
+      employeeId: record.employeeId ?? employeeId,
+      companyCode: record.companyCode ?? _currentCompanyCode,
+    );
+
+    // 1. Update _allCompanyRecords
+    final idxAll = _allCompanyRecords.indexWhere((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == inPunchTime.year &&
+          r.checkIn.month == inPunchTime.month &&
+          r.checkIn.day == inPunchTime.day &&
+          r.checkIn.hour == inPunchTime.hour &&
+          r.checkIn.minute == inPunchTime.minute;
+    });
+
+    if (idxAll != -1) {
+      _allCompanyRecords[idxAll] = survivingRecord;
+    } else {
+      _allCompanyRecords.add(survivingRecord);
+    }
+
+    // 2. Update _records if currently logged-in user
+    final currentComp = _currentCompanyCode.trim().toLowerCase();
+    final bool matchesCurrentCompany = cleanComp.isEmpty ||
+        currentComp.isEmpty ||
+        currentComp == 'all' ||
+        cleanComp == currentComp;
+
+    if (matchesCurrentCompany && cleanEmpId == _employeeId.trim().toLowerCase()) {
+      final idx = _records.indexWhere((r) =>
+          r.checkIn.year == inPunchTime.year &&
+          r.checkIn.month == inPunchTime.month &&
+          r.checkIn.day == inPunchTime.day &&
+          r.checkIn.hour == inPunchTime.hour &&
+          r.checkIn.minute == inPunchTime.minute);
+      if (idx != -1) {
+        _records[idx] = survivingRecord;
+      } else {
+        _records.add(survivingRecord);
+      }
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+
+    // 3. Blacklist only inPunchTime
+    recordDeletedPunchSignature(cleanEmpId, inPunchTime, companyCode: cleanComp);
+
+    // 4. Remove matching missing punch request for inPunchTime if any
+    final inH = inPunchTime.hour.toString().padLeft(2, '0');
+    final inM = inPunchTime.minute.toString().padLeft(2, '0');
+    final inStr = '$inH:$inM';
+    final matchingRequests = _allCompanyRequests.where((req) {
+      if (req.employeeId == null || req.employeeId!.trim().toLowerCase() != cleanEmpId) return false;
+      if (req.type != 'Missing Punch' && req.type != 'Forgot to Clock In') return false;
+      return req.duration.contains(inStr);
+    }).toList();
+
+    for (final mReq in matchingRequests) {
+      await deleteRequest(employeeId, mReq.id);
+    }
+
+    // 5. Update Firebase
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteRecord(employeeId, record, companyCode: record.companyCode);
+      await _firebaseService.saveRecord(employeeId, survivingRecord, companyCode: record.companyCode);
+      try {
+        await _firebaseService.saveDeletedPunch(DeletedPunch(
+          id: '${cleanEmpId}_${inPunchTime.millisecondsSinceEpoch}',
+          employeeId: cleanEmpId,
+          companyCode: record.companyCode ?? _currentCompanyCode,
+          punchTime: inPunchTime,
+          punchType: 'checkIn',
+          reason: reason,
+        ));
+      } catch (e) {
+        debugPrint('Error saving deleted punch tombstone: $e');
+      }
+    }
+  }
+
+  /// Delete ONLY the Check-Out punch of a session, leaving Check-In intact
+  Future<void> deletePunchCheckOutOnly({
+    required String employeeId,
+    required AttendanceRecord record,
+    String? reason,
+  }) async {
+    if (isMonthClosed(record.checkIn)) {
+      debugPrint('Cannot delete punch for closed month');
+      return;
+    }
+
+    // If session only had clock-out (checkIn == checkOut), deleting checkOut deletes the only punch, so delete whole session
+    if (record.checkIn == record.checkOut) {
+      await deletePunchSession(employeeId: employeeId, record: record, reason: reason);
+      return;
+    }
+
+    if (record.checkOut == null) {
+      // Nothing to delete
+      return;
+    }
+
+    final cleanEmpId = employeeId.trim().toLowerCase();
+    final cleanComp = (record.companyCode ?? '').trim().toLowerCase();
+    final inPunchTime = record.checkIn;
+    final outPunchTime = record.checkOut!;
+
+    // Surviving record is check-in only (checkOut: null)
+    final survivingRecord = AttendanceRecord(
+      checkIn: inPunchTime,
+      checkOut: null,
+      employeeId: record.employeeId ?? employeeId,
+      companyCode: record.companyCode ?? _currentCompanyCode,
+    );
+
+    // 1. Update _allCompanyRecords
+    final idxAll = _allCompanyRecords.indexWhere((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == inPunchTime.year &&
+          r.checkIn.month == inPunchTime.month &&
+          r.checkIn.day == inPunchTime.day &&
+          r.checkIn.hour == inPunchTime.hour &&
+          r.checkIn.minute == inPunchTime.minute;
+    });
+
+    if (idxAll != -1) {
+      _allCompanyRecords[idxAll] = survivingRecord;
+    } else {
+      _allCompanyRecords.add(survivingRecord);
+    }
+
+    // 2. Update _records if currently logged-in user
+    final currentComp = _currentCompanyCode.trim().toLowerCase();
+    final bool matchesCurrentCompany = cleanComp.isEmpty ||
+        currentComp.isEmpty ||
+        currentComp == 'all' ||
+        cleanComp == currentComp;
+
+    if (matchesCurrentCompany && cleanEmpId == _employeeId.trim().toLowerCase()) {
+      final idx = _records.indexWhere((r) =>
+          r.checkIn.year == inPunchTime.year &&
+          r.checkIn.month == inPunchTime.month &&
+          r.checkIn.day == inPunchTime.day &&
+          r.checkIn.hour == inPunchTime.hour &&
+          r.checkIn.minute == inPunchTime.minute);
+      if (idx != -1) {
+        _records[idx] = survivingRecord;
+      } else {
+        _records.add(survivingRecord);
+      }
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+
+    // 3. Blacklist only outPunchTime
+    recordDeletedPunchSignature(cleanEmpId, outPunchTime, companyCode: cleanComp);
+
+    // 4. Remove matching missing punch request for outPunchTime if any
+    final outH = outPunchTime.hour.toString().padLeft(2, '0');
+    final outM = outPunchTime.minute.toString().padLeft(2, '0');
+    final outStr = '$outH:$outM';
+    final matchingRequests = _allCompanyRequests.where((req) {
+      if (req.employeeId == null || req.employeeId!.trim().toLowerCase() != cleanEmpId) return false;
+      if (req.type != 'Missing Punch' && req.type != 'Forgot to Clock Out') return false;
+      return req.duration.contains(outStr);
+    }).toList();
+
+    for (final mReq in matchingRequests) {
+      await deleteRequest(employeeId, mReq.id);
+    }
+
+    // 5. Update Firebase
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.clearRecordCheckOut(employeeId, record, companyCode: record.companyCode);
+      try {
+        await _firebaseService.saveDeletedPunch(DeletedPunch(
+          id: '${cleanEmpId}_${outPunchTime.millisecondsSinceEpoch}',
+          employeeId: cleanEmpId,
+          companyCode: record.companyCode ?? _currentCompanyCode,
+          punchTime: outPunchTime,
+          punchType: 'checkOut',
+          reason: reason,
+        ));
       } catch (e) {
         debugPrint('Error saving deleted punch tombstone: $e');
       }

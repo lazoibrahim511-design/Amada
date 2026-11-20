@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import '../utils/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -46,8 +47,10 @@ class _LoginScreenState extends State<LoginScreen> {
     _companyDebounce?.cancel();
     _companyDebounce = Timer(const Duration(milliseconds: 400), () {
       final trimmed = value.trim().toLowerCase();
-      if (trimmed.isNotEmpty && trimmed != 'all') {
-        final provider = Provider.of<AttendanceProvider>(context, listen: false);
+      final provider = Provider.of<AttendanceProvider>(context, listen: false);
+      if (trimmed.isEmpty) {
+        provider.clearCurrentLicense();
+      } else if (trimmed != 'all') {
         provider.loadCompanyLicense(trimmed);
       }
     });
@@ -284,9 +287,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 child: Padding(
                                   padding: const EdgeInsets.all(28),
-                                  child: Form(
-                                    key: _formKey,
-                                    child: Column(
+                                  child: CallbackShortcuts(
+                                    bindings: <ShortcutActivator, VoidCallback>{
+                                      const SingleActivator(LogicalKeyboardKey.enter): () {
+                                        if (!_isLoggingIn) _handleLogin();
+                                      },
+                                      const SingleActivator(LogicalKeyboardKey.numpadEnter): () {
+                                        if (!_isLoggingIn) _handleLogin();
+                                      },
+                                    },
+                                    child: Form(
+                                      key: _formKey,
+                                      child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         // Header Row with "Welcome back" on the left and Language selector on top right
@@ -362,13 +374,20 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                       ),
                                       if (provider.currentLicense != null)
-                                        Text(
-                                          provider.currentLicense!.companyName,
-                                          style: const TextStyle(
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF2E65FF),
-                                          ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.check_circle_rounded, size: 13, color: Color(0xFF10B981)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              provider.currentLicense!.companyName,
+                                              style: const TextStyle(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF10B981),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                     ],
                                   ),
@@ -376,6 +395,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                   TextFormField(
                                     controller: _companyCodeController,
                                     onChanged: _onCompanyCodeChanged,
+                                    textInputAction: TextInputAction.next,
+                                    onFieldSubmitted: (_) {
+                                      if (_identifierController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
+                                        if (!_isLoggingIn) _handleLogin();
+                                      } else {
+                                        FocusScope.of(context).nextFocus();
+                                      }
+                                    },
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -407,6 +434,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(height: 8),
                                   TextFormField(
                                     controller: _identifierController,
+                                    textInputAction: TextInputAction.next,
+                                    onFieldSubmitted: (_) {
+                                      if (_passwordController.text.isNotEmpty) {
+                                        if (!_isLoggingIn) _handleLogin();
+                                      } else {
+                                        FocusScope.of(context).nextFocus();
+                                      }
+                                    },
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: isDark ? Colors.white : Colors.black87,
@@ -439,6 +474,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   TextFormField(
                                     controller: _passwordController,
                                     obscureText: _obscurePassword,
+                                    textInputAction: TextInputAction.done,
+                                    onFieldSubmitted: (_) {
+                                      if (!_isLoggingIn) _handleLogin();
+                                    },
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: isDark ? Colors.white : Colors.black87,
@@ -561,6 +600,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
+                      ),
                             ],
                           ),
                         ),

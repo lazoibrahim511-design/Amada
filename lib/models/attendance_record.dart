@@ -42,12 +42,13 @@ class AttendanceRecord {
   AttendanceRecord copyWith({
     DateTime? checkIn,
     DateTime? checkOut,
+    bool clearCheckOut = false,
     String? employeeId,
     String? companyCode,
   }) {
     return AttendanceRecord(
       checkIn: checkIn ?? this.checkIn,
-      checkOut: checkOut ?? this.checkOut,
+      checkOut: clearCheckOut ? null : (checkOut ?? this.checkOut),
       employeeId: employeeId ?? this.employeeId,
       companyCode: companyCode ?? this.companyCode,
     );
