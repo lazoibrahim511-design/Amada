@@ -2,8 +2,8 @@
 ; Download Inno Setup from: https://jrsoftware.org/isdl.php
 ; Right-click this file -> "Compile" to generate Amada_Attendance_Setup_v1.0.exe
 
-#define MyAppName "Amada Attendance"
-#define MyAppVersion "1.0.0"
+#define MyAppName "Amada"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Amada"
 #define MyAppExeName "attendance_app.exe"
 

@@ -5678,6 +5678,392 @@ class AttendanceProvider with ChangeNotifier {
     }
   }
 
+  /// Remove an attendance record from local state (_allCompanyRecords and _records) without blacklisting
+  void removeRecordLocally(
+    AttendanceRecord record, {
+    required String employeeId,
+    required String companyCode,
+  }) {
+    final cleanEmpId = employeeId.trim().toLowerCase();
+    final cleanComp = companyCode.trim().toLowerCase();
+
+    _allCompanyRecords.removeWhere((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == record.checkIn.year &&
+          r.checkIn.month == record.checkIn.month &&
+          r.checkIn.day == record.checkIn.day &&
+          r.checkIn.hour == record.checkIn.hour &&
+          r.checkIn.minute == record.checkIn.minute;
+    });
+
+    final currentComp = _currentCompanyCode.trim().toLowerCase();
+    final bool matchesCurrentCompany = cleanComp.isEmpty ||
+        currentComp.isEmpty ||
+        currentComp == 'all' ||
+        cleanComp == currentComp;
+
+    if (matchesCurrentCompany && cleanEmpId == _employeeId.trim().toLowerCase()) {
+      _records.removeWhere((r) =>
+          r.checkIn.year == record.checkIn.year &&
+          r.checkIn.month == record.checkIn.month &&
+          r.checkIn.day == record.checkIn.day &&
+          r.checkIn.hour == record.checkIn.hour &&
+          r.checkIn.minute == record.checkIn.minute);
+    }
+  }
+
+  /// Smart Action: Attach an early morning punch to the previous calendar day's night shift as Check-Out.
+  /// If the current session contains a second punch (e.g. evening arrival), that punch is detached
+  /// and preserved as today's new open Check-In.
+  Future<bool> attachPunchToPreviousDayAsCheckOut({
+    required String employeeId,
+    required AttendanceRecord currentRecord,
+    required DateTime punchTime,
+  }) async {
+    if (isMonthClosed(currentRecord.checkIn) || isMonthClosed(punchTime)) {
+      debugPrint('Cannot modify attendance record for closed month');
+      return false;
+    }
+
+    final cleanEmpId = employeeId.trim().toLowerCase();
+    final cleanComp = (currentRecord.companyCode ?? _currentCompanyCode).trim().toLowerCase();
+    final targetPrevDay = DateTime(punchTime.year, punchTime.month, punchTime.day).subtract(const Duration(days: 1));
+
+    // 1. Locate existing records for this employee on previous day
+    final prevDayRecords = _allCompanyRecords.where((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == targetPrevDay.year &&
+          r.checkIn.month == targetPrevDay.month &&
+          r.checkIn.day == targetPrevDay.day;
+    }).toList()..sort((a, b) => a.checkIn.compareTo(b.checkIn));
+
+    // Find candidate record on previous day to attach checkout to:
+    // Prefer: open session (checkOut == null), or missed in (checkIn == checkOut), or last record
+    AttendanceRecord? targetRecord;
+    for (final r in prevDayRecords) {
+      if (r.checkOut == null && r.checkIn != r.checkOut) {
+        targetRecord = r;
+        break;
+      }
+    }
+    targetRecord ??= prevDayRecords.where((r) => r.checkIn == r.checkOut).firstOrNull;
+    targetRecord ??= prevDayRecords.isNotEmpty ? prevDayRecords.last : null;
+
+    if (targetRecord != null) {
+      final updatedPrevRecord = targetRecord.copyWith(
+        checkOut: punchTime,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(updatedPrevRecord);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, updatedPrevRecord, companyCode: cleanComp);
+      }
+    } else {
+      // No record existed yesterday; create a check-out-only record representing this punch
+      final newPrevRecord = AttendanceRecord(
+        checkIn: punchTime,
+        checkOut: punchTime,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(newPrevRecord);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, newPrevRecord, companyCode: cleanComp);
+      }
+    }
+
+    // 2. Adjust today's record
+    final bool hasBothPunches = currentRecord.checkOut != null && currentRecord.checkIn != currentRecord.checkOut;
+
+    if (hasBothPunches) {
+      final isPunchCheckIn = currentRecord.checkIn.year == punchTime.year &&
+          currentRecord.checkIn.month == punchTime.month &&
+          currentRecord.checkIn.day == punchTime.day &&
+          currentRecord.checkIn.hour == punchTime.hour &&
+          currentRecord.checkIn.minute == punchTime.minute;
+
+      final survivingPunchTime = isPunchCheckIn ? currentRecord.checkOut! : currentRecord.checkIn;
+
+      // Remove the old combined record
+      removeRecordLocally(currentRecord, employeeId: cleanEmpId, companyCode: cleanComp);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.deleteRecord(employeeId, currentRecord, companyCode: cleanComp);
+      }
+
+      // Create new open Check-In with survivingPunchTime
+      final survivingRecord = AttendanceRecord(
+        checkIn: survivingPunchTime,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(survivingRecord);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, survivingRecord, companyCode: cleanComp);
+      }
+    } else {
+      // The session only had this single punch; remove it completely since it moved to yesterday
+      removeRecordLocally(currentRecord, employeeId: cleanEmpId, companyCode: cleanComp);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.deleteRecord(employeeId, currentRecord, companyCode: cleanComp);
+      }
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+    return true;
+  }
+
+  /// Revert / Smart Action: Detach a Check-Out punch from yesterday's session and restore it
+  /// to the next calendar day as Check-In.
+  /// If the next day already has an open Check-In (e.g. evening arrival), it re-pairs them:
+  /// [checkIn: outPunchTime, checkOut: nextDayOpenCheckIn].
+  Future<bool> moveCheckOutToNextDayAsCheckIn({
+    required String employeeId,
+    required AttendanceRecord record,
+  }) async {
+    if (record.checkOut == null) return false;
+    final outPunchTime = record.checkOut!;
+    if (isMonthClosed(record.checkIn) || isMonthClosed(outPunchTime)) {
+      debugPrint('Cannot modify attendance record for closed month');
+      return false;
+    }
+
+    final cleanEmpId = employeeId.trim().toLowerCase();
+    final cleanComp = (record.companyCode ?? _currentCompanyCode).trim().toLowerCase();
+    final nextDay = DateTime(outPunchTime.year, outPunchTime.month, outPunchTime.day);
+
+    // 1. Adjust yesterday's session
+    if (record.checkIn == record.checkOut) {
+      // The session only had this punch as checkout; remove it completely
+      removeRecordLocally(record, employeeId: cleanEmpId, companyCode: cleanComp);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.deleteRecord(employeeId, record, companyCode: cleanComp);
+      }
+    } else {
+      // Clear checkOut from yesterday's record
+      final survivingYesterdayRecord = AttendanceRecord(
+        checkIn: record.checkIn,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(survivingYesterdayRecord);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.clearRecordCheckOut(employeeId, record, companyCode: cleanComp);
+      }
+    }
+
+    // 2. Look for records on nextDay for this employee
+    final nextDayRecords = _allCompanyRecords.where((r) {
+      if (r.employeeId?.trim().toLowerCase() != cleanEmpId) return false;
+      if (cleanComp.isNotEmpty && r.companyCode != null && r.companyCode!.trim().isNotEmpty) {
+        if (r.companyCode!.trim().toLowerCase() != cleanComp) return false;
+      }
+      return r.checkIn.year == nextDay.year &&
+          r.checkIn.month == nextDay.month &&
+          r.checkIn.day == nextDay.day;
+    }).toList()..sort((a, b) => a.checkIn.compareTo(b.checkIn));
+
+    // Find if nextDay has an open check-in that was created when punch was detached
+    AttendanceRecord? nextDayTarget;
+    for (final r in nextDayRecords) {
+      if (r.checkOut == null && r.checkIn.isAfter(outPunchTime)) {
+        nextDayTarget = r;
+        break;
+      }
+    }
+
+    if (nextDayTarget != null) {
+      // Re-pair: outPunchTime becomes checkIn, nextDayTarget.checkIn becomes checkOut!
+      // Delete nextDayTarget document
+      removeRecordLocally(nextDayTarget, employeeId: cleanEmpId, companyCode: cleanComp);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.deleteRecord(employeeId, nextDayTarget, companyCode: cleanComp);
+      }
+
+      final restoredNextDayRecord = AttendanceRecord(
+        checkIn: outPunchTime,
+        checkOut: nextDayTarget.checkIn,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(restoredNextDayRecord);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, restoredNextDayRecord, companyCode: cleanComp);
+      }
+    } else {
+      // Create new open check-in on nextDay with outPunchTime
+      final newNextDayRecord = AttendanceRecord(
+        checkIn: outPunchTime,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(newNextDayRecord);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, newNextDayRecord, companyCode: cleanComp);
+      }
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+    return true;
+  }
+
+  /// Convert a Check-In only session into a Check-Out only session (checkIn == checkOut == punchTime)
+  /// Or if session has both punches, split them so punch1 is Check-Out and punch2 is Check-In.
+  Future<bool> convertCheckInToCheckOut({
+    required String employeeId,
+    required AttendanceRecord record,
+  }) async {
+    if (isMonthClosed(record.checkIn)) return false;
+
+    final cleanComp = (record.companyCode ?? _currentCompanyCode).trim().toLowerCase();
+
+    if (record.checkOut == null || record.checkIn == record.checkOut) {
+      // Single punch: convert to check-out only (checkIn == checkOut)
+      final updated = AttendanceRecord(
+        checkIn: record.checkIn,
+        checkOut: record.checkIn,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(updated);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, updated, companyCode: cleanComp);
+      }
+    } else {
+      // Both punches exist: split into Check-Out only for punch 1, and Check-In only for punch 2
+      removeRecordLocally(record, employeeId: employeeId, companyCode: cleanComp);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.deleteRecord(employeeId, record, companyCode: cleanComp);
+      }
+
+      final r1 = AttendanceRecord(
+        checkIn: record.checkIn,
+        checkOut: record.checkIn,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      final r2 = AttendanceRecord(
+        checkIn: record.checkOut!,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(r1);
+      upsertRecordLocally(r2);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, r1, companyCode: cleanComp);
+        await _firebaseService.saveRecord(employeeId, r2, companyCode: cleanComp);
+      }
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+    return true;
+  }
+
+  /// Convert a Check-Out only session (checkIn == checkOut) into a Check-In only session (checkOut: null)
+  /// Or if session has both punches, split into two Check-In sessions.
+  Future<bool> convertCheckOutToCheckIn({
+    required String employeeId,
+    required AttendanceRecord record,
+  }) async {
+    if (isMonthClosed(record.checkIn)) return false;
+
+    final cleanComp = (record.companyCode ?? _currentCompanyCode).trim().toLowerCase();
+
+    if (record.checkIn == record.checkOut || record.checkOut == null) {
+      final updated = AttendanceRecord(
+        checkIn: record.checkIn,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(updated);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.clearRecordCheckOut(employeeId, record, companyCode: cleanComp);
+      }
+    } else {
+      // Both punches: convert punch 2 to a separate Check-In
+      removeRecordLocally(record, employeeId: employeeId, companyCode: cleanComp);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.deleteRecord(employeeId, record, companyCode: cleanComp);
+      }
+
+      final r1 = AttendanceRecord(
+        checkIn: record.checkIn,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      final r2 = AttendanceRecord(
+        checkIn: record.checkOut!,
+        checkOut: null,
+        employeeId: employeeId,
+        companyCode: cleanComp,
+      );
+      upsertRecordLocally(r1);
+      upsertRecordLocally(r2);
+      if (_firebaseService.isAvailable) {
+        await _firebaseService.saveRecord(employeeId, r1, companyCode: cleanComp);
+        await _firebaseService.saveRecord(employeeId, r2, companyCode: cleanComp);
+      }
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+    return true;
+  }
+
+  /// Split a combined session [In, Out] into two separate open Check-In sessions [In, null] and [Out, null]
+  Future<bool> splitPunchSession({
+    required String employeeId,
+    required AttendanceRecord record,
+  }) async {
+    if (isMonthClosed(record.checkIn)) return false;
+    if (record.checkOut == null || record.checkIn == record.checkOut) return false;
+
+    final cleanComp = (record.companyCode ?? _currentCompanyCode).trim().toLowerCase();
+
+    removeRecordLocally(record, employeeId: employeeId, companyCode: cleanComp);
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.deleteRecord(employeeId, record, companyCode: cleanComp);
+    }
+
+    final r1 = AttendanceRecord(
+      checkIn: record.checkIn,
+      checkOut: null,
+      employeeId: employeeId,
+      companyCode: cleanComp,
+    );
+    final r2 = AttendanceRecord(
+      checkIn: record.checkOut!,
+      checkOut: null,
+      employeeId: employeeId,
+      companyCode: cleanComp,
+    );
+    upsertRecordLocally(r1);
+    upsertRecordLocally(r2);
+    if (_firebaseService.isAvailable) {
+      await _firebaseService.saveRecord(employeeId, r1, companyCode: cleanComp);
+      await _firebaseService.saveRecord(employeeId, r2, companyCode: cleanComp);
+    }
+
+    recalculateAllStats();
+    notifyListeners();
+    return true;
+  }
+
   // HR Management
   List<CompanyEmployee> getEmployeesInStructure(dynamic structId) {
     return employees.where((e) => e.structureId == structId).toList();

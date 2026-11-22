@@ -69,3 +69,5 @@ Output/
 
 *.mp4
 ffmpeg_bin/
+
+*.hprof

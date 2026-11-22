@@ -2206,6 +2206,9 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
                                           ? liveProvider.translate('ongoing_not_clocked_out')
                                           : liveProvider.translate('not_recorded'));
 
+                                  final canAttachPrevNight = hasCheckIn && r.checkIn.hour < 12;
+                                  final canMoveToNextDay = hasCheckOut && (r.checkOut!.day != r.checkIn.day || r.checkOut!.hour < 12);
+
                                   return Container(
                                     margin: const EdgeInsets.only(bottom: 8),
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -2216,91 +2219,245 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
                                         color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE2E8F0),
                                       ),
                                     ),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
                                       children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(5),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF00E5CE).withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: const Icon(Icons.fingerprint, size: 16, color: Color(0xFF00BD96)),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Wrap(
-                                            spacing: 8,
-                                            runSpacing: 4,
-                                            alignment: WrapAlignment.start,
-                                            crossAxisAlignment: WrapCrossAlignment.center,
-                                            children: [
-                                              // Check-In Badge with separate delete
-                                              _buildPunchBadge(
-                                                context: context,
-                                                provider: liveProvider,
-                                                isDark: isDark,
-                                                textColor: textColor,
-                                                label: liveProvider.translate('in_time_label', params: {'time': inStr}),
-                                                isAvailable: hasCheckIn,
-                                                badgeColor: const Color(0xFF10B981),
-                                                icon: Icons.login_rounded,
-                                                tooltip: liveProvider.translate('delete_check_in_tooltip'),
-                                                onDelete: hasCheckIn
-                                                    ? () => _confirmDeleteCheckIn(
-                                                          context,
-                                                          liveProvider,
-                                                          emp,
-                                                          r,
-                                                          inStr,
-                                                          outStr,
-                                                          hasCheckOut,
-                                                        )
-                                                    : null,
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF00E5CE).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
                                               ),
+                                              child: const Icon(Icons.fingerprint, size: 16, color: Color(0xFF00BD96)),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Wrap(
+                                                spacing: 8,
+                                                runSpacing: 4,
+                                                alignment: WrapAlignment.start,
+                                                crossAxisAlignment: WrapCrossAlignment.center,
+                                                children: [
+                                                  // Check-In Badge with separate delete & actions
+                                                  _buildPunchBadge(
+                                                    context: context,
+                                                    provider: liveProvider,
+                                                    isDark: isDark,
+                                                    textColor: textColor,
+                                                    label: liveProvider.translate('in_time_label', params: {'time': inStr}),
+                                                    isAvailable: hasCheckIn,
+                                                    badgeColor: const Color(0xFF10B981),
+                                                    icon: Icons.login_rounded,
+                                                    tooltip: liveProvider.translate('delete_check_in_tooltip'),
+                                                    onDelete: hasCheckIn
+                                                        ? () => _confirmDeleteCheckIn(
+                                                              context,
+                                                              liveProvider,
+                                                              emp,
+                                                              r,
+                                                              inStr,
+                                                              outStr,
+                                                              hasCheckOut,
+                                                            )
+                                                        : null,
+                                                    onToggleType: hasCheckIn
+                                                        ? () => _confirmConvertCheckIn(
+                                                              context,
+                                                              liveProvider,
+                                                              emp,
+                                                              r,
+                                                              inStr,
+                                                            )
+                                                        : null,
+                                                    onAttachToPreviousNight: canAttachPrevNight
+                                                        ? () => _confirmAttachToPreviousNight(
+                                                              context,
+                                                              liveProvider,
+                                                              emp,
+                                                              r,
+                                                              r.checkIn,
+                                                              inStr,
+                                                              outStr,
+                                                              hasCheckOut,
+                                                            )
+                                                        : null,
+                                                  ),
 
-                                              // Check-Out Badge with separate delete
-                                              _buildPunchBadge(
-                                                context: context,
-                                                provider: liveProvider,
-                                                isDark: isDark,
-                                                textColor: textColor,
-                                                label: liveProvider.translate('out_time_label', params: {'time': outStr}),
-                                                isAvailable: hasCheckOut,
-                                                badgeColor: const Color(0xFFF59E0B),
-                                                icon: Icons.logout_rounded,
-                                                tooltip: liveProvider.translate('delete_check_out_tooltip'),
-                                                onDelete: hasCheckOut
-                                                    ? () => _confirmDeleteCheckOut(
-                                                          context,
-                                                          liveProvider,
-                                                          emp,
-                                                          r,
-                                                          inStr,
-                                                          outStr,
-                                                          hasCheckIn,
-                                                        )
-                                                    : null,
+                                                  // Check-Out Badge with separate delete & actions
+                                                  _buildPunchBadge(
+                                                    context: context,
+                                                    provider: liveProvider,
+                                                    isDark: isDark,
+                                                    textColor: textColor,
+                                                    label: liveProvider.translate('out_time_label', params: {'time': outStr}),
+                                                    isAvailable: hasCheckOut,
+                                                    badgeColor: const Color(0xFFF59E0B),
+                                                    icon: Icons.logout_rounded,
+                                                    tooltip: liveProvider.translate('delete_check_out_tooltip'),
+                                                    onDelete: hasCheckOut
+                                                        ? () => _confirmDeleteCheckOut(
+                                                              context,
+                                                              liveProvider,
+                                                              emp,
+                                                              r,
+                                                              inStr,
+                                                              outStr,
+                                                              hasCheckIn,
+                                                            )
+                                                        : null,
+                                                    onToggleType: hasCheckOut
+                                                        ? () => _confirmConvertCheckOut(
+                                                              context,
+                                                              liveProvider,
+                                                              emp,
+                                                              r,
+                                                              outStr,
+                                                            )
+                                                        : null,
+                                                    onMoveToNextDay: canMoveToNextDay
+                                                        ? () => _confirmMoveToNextDay(
+                                                              context,
+                                                              liveProvider,
+                                                              emp,
+                                                              r,
+                                                              outStr,
+                                                            )
+                                                        : null,
+                                                  ),
+                                                ],
                                               ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            // Split session button if both punches exist
+                                            if (hasCheckIn && hasCheckOut) ...[
+                                              IconButton(
+                                                icon: const Icon(Icons.call_split_rounded, size: 16, color: Color(0xFF6366F1)),
+                                                tooltip: liveProvider.translate('split_session_btn'),
+                                                padding: const EdgeInsets.all(4),
+                                                constraints: const BoxConstraints(),
+                                                splashRadius: 16,
+                                                onPressed: () => _confirmSplitSession(
+                                                  context,
+                                                  liveProvider,
+                                                  emp,
+                                                  r,
+                                                  inStr,
+                                                  outStr,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
                                             ],
-                                          ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
+                                              tooltip: liveProvider.translate('delete_session_tooltip'),
+                                              padding: const EdgeInsets.all(4),
+                                              constraints: const BoxConstraints(),
+                                              splashRadius: 16,
+                                              onPressed: () => _confirmDeleteSession(
+                                                context,
+                                                liveProvider,
+                                                emp,
+                                                r,
+                                                inStr,
+                                                outStr,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 6),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFEF4444)),
-                                          tooltip: liveProvider.translate('delete_session_tooltip'),
-                                          padding: const EdgeInsets.all(4),
-                                          constraints: const BoxConstraints(),
-                                          splashRadius: 16,
-                                          onPressed: () => _confirmDeleteSession(
-                                            context,
-                                            liveProvider,
-                                            emp,
-                                            r,
-                                            inStr,
-                                            outStr,
+
+                                        // Smart Suggestion Banner: Move early morning check-in to previous night
+                                        if (canAttachPrevNight) ...[
+                                          const SizedBox(height: 8),
+                                          InkWell(
+                                            onTap: () => _confirmAttachToPreviousNight(
+                                              context,
+                                              liveProvider,
+                                              emp,
+                                              r,
+                                              r.checkIn,
+                                              inStr,
+                                              outStr,
+                                              hasCheckOut,
+                                            ),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.18 : 0.08),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.4 : 0.25),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.nightlight_round, size: 14, color: Color(0xFF6366F1)),
+                                                  const SizedBox(width: 6),
+                                                  Flexible(
+                                                    child: Text(
+                                                      liveProvider.translate('attach_to_previous_night_btn'),
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Color(0xFF6366F1),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Color(0xFF6366F1)),
+                                                ],
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                        ],
+
+                                        // Smart Suggestion Banner: Move early morning check-out back to next day
+                                        if (canMoveToNextDay) ...[
+                                          const SizedBox(height: 8),
+                                          InkWell(
+                                            onTap: () => _confirmMoveToNextDay(
+                                              context,
+                                              liveProvider,
+                                              emp,
+                                              r,
+                                              outStr,
+                                            ),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.18 : 0.08),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.4 : 0.25),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.wb_sunny_rounded, size: 14, color: Color(0xFFF59E0B)),
+                                                  const SizedBox(width: 6),
+                                                  Flexible(
+                                                    child: Text(
+                                                      liveProvider.translate('move_to_next_day_checkout_btn'),
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Color(0xFFF59E0B),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Color(0xFFF59E0B)),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   );
@@ -2471,6 +2628,9 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     required IconData icon,
     String? tooltip,
     VoidCallback? onDelete,
+    VoidCallback? onToggleType,
+    VoidCallback? onAttachToPreviousNight,
+    VoidCallback? onMoveToNextDay,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -2502,24 +2662,427 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
               color: isAvailable ? textColor : textColor.withValues(alpha: 0.45),
             ),
           ),
-          if (isAvailable && onDelete != null) ...[
-            const SizedBox(width: 6),
-            Tooltip(
-              message: tooltip ?? provider.translate('delete_punch_confirm_title'),
-              child: InkWell(
-                onTap: onDelete,
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(1),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 13,
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.85),
+          if (isAvailable) ...[
+            if (onToggleType != null || onAttachToPreviousNight != null || onMoveToNextDay != null) ...[
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  size: 14,
+                  color: textColor.withValues(alpha: 0.6),
+                ),
+                tooltip: provider.translate('actions'),
+                onSelected: (val) {
+                  if (val == 'prev_night' && onAttachToPreviousNight != null) {
+                    onAttachToPreviousNight();
+                  } else if (val == 'next_day' && onMoveToNextDay != null) {
+                    onMoveToNextDay();
+                  } else if (val == 'toggle' && onToggleType != null) {
+                    onToggleType();
+                  } else if (val == 'delete' && onDelete != null) {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  if (onAttachToPreviousNight != null)
+                    PopupMenuItem(
+                      value: 'prev_night',
+                      height: 34,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.nightlight_round, size: 14, color: Color(0xFF6366F1)),
+                          const SizedBox(width: 8),
+                          Text(
+                            provider.translate('attach_to_previous_night_btn'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (onMoveToNextDay != null)
+                    PopupMenuItem(
+                      value: 'next_day',
+                      height: 34,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.wb_sunny_rounded, size: 14, color: Color(0xFFF59E0B)),
+                          const SizedBox(width: 8),
+                          Text(
+                            provider.translate('move_to_next_day_checkout_btn'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (onToggleType != null)
+                    PopupMenuItem(
+                      value: 'toggle',
+                      height: 34,
+                      child: Row(
+                        children: [
+                          Icon(
+                            icon == Icons.login_rounded ? Icons.logout_rounded : Icons.login_rounded,
+                            size: 14,
+                            color: const Color(0xFF3B82F6),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            icon == Icons.login_rounded
+                                ? provider.translate('convert_to_checkout_btn')
+                                : provider.translate('convert_to_checkin_btn'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (onDelete != null)
+                    PopupMenuItem(
+                      value: 'delete',
+                      height: 34,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.delete_outline, size: 14, color: Color(0xFFEF4444)),
+                          const SizedBox(width: 8),
+                          Text(
+                            icon == Icons.login_rounded
+                                ? provider.translate('delete_check_in_btn')
+                                : provider.translate('delete_check_out_btn'),
+                            style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            if (onDelete != null) ...[
+              const SizedBox(width: 4),
+              Tooltip(
+                message: tooltip ?? provider.translate('delete_punch_confirm_title'),
+                child: InkWell(
+                  onTap: onDelete,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(1),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 13,
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.85),
+                    ),
                   ),
                 ),
               ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _confirmAttachToPreviousNight(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    DateTime punchTime,
+    String inStr,
+    String outStr,
+    bool hasCheckOut,
+  ) {
+    final prevDate = punchTime.subtract(const Duration(days: 1));
+    final prevDateStr = DateFormat('EEEE, d MMMM yyyy').format(prevDate);
+    final punchTimeStr = DateFormat('hh:mm a').format(punchTime);
+
+    final extraNote = hasCheckOut
+        ? provider.translate('attach_to_previous_night_note_split', params: {'outTime': outStr})
+        : '';
+
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.nightlight_round, color: Color(0xFF6366F1)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                provider.translate('attach_to_previous_night_title'),
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
           ],
+        ),
+        content: Text(
+          provider.translate('attach_to_previous_night_confirm', params: {
+            'time': punchTimeStr,
+            'prevDate': prevDateStr,
+            'extraNote': extraNote,
+          }),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6366F1),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              final success = await provider.attachPunchToPreviousDayAsCheckOut(
+                employeeId: emp.id,
+                currentRecord: record,
+                punchTime: punchTime,
+              );
+              if (context.mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      provider.translate('attach_to_previous_night_success', params: {'time': punchTimeStr}),
+                    ),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('attach_to_previous_night_btn')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmMoveToNextDay(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String outStr,
+  ) {
+    if (record.checkOut == null) return;
+    final nextDay = record.checkOut!;
+    final nextDateStr = DateFormat('EEEE, d MMMM yyyy').format(nextDay);
+    final punchTimeStr = DateFormat('hh:mm a').format(nextDay);
+
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.wb_sunny_rounded, color: Color(0xFFF59E0B)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                provider.translate('move_to_next_day_checkout_title'),
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          provider.translate('move_to_next_day_checkout_confirm', params: {
+            'time': punchTimeStr,
+            'nextDate': nextDateStr,
+          }),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              final success = await provider.moveCheckOutToNextDayAsCheckIn(
+                employeeId: emp.id,
+                record: record,
+              );
+              if (context.mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      provider.translate('move_to_next_day_checkout_success', params: {'time': punchTimeStr}),
+                    ),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('move_to_next_day_checkout_btn')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmConvertCheckIn(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String inStr,
+  ) {
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.swap_horiz_rounded, color: Color(0xFF3B82F6)),
+            const SizedBox(width: 8),
+            Text(provider.translate('convert_to_checkout_title')),
+          ],
+        ),
+        content: Text(
+          provider.translate('convert_to_checkout_confirm', params: {'time': inStr}),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              final success = await provider.convertCheckInToCheckOut(
+                employeeId: emp.id,
+                record: record,
+              );
+              if (context.mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('punch_updated_success')),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('convert_to_checkout_btn')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmConvertCheckOut(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String outStr,
+  ) {
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.swap_horiz_rounded, color: Color(0xFF3B82F6)),
+            const SizedBox(width: 8),
+            Text(provider.translate('convert_to_checkin_title')),
+          ],
+        ),
+        content: Text(
+          provider.translate('convert_to_checkin_confirm', params: {'time': outStr}),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              final success = await provider.convertCheckOutToCheckIn(
+                employeeId: emp.id,
+                record: record,
+              );
+              if (context.mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('punch_updated_success')),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('convert_to_checkin_btn')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmSplitSession(
+    BuildContext context,
+    AttendanceProvider provider,
+    CompanyEmployee emp,
+    AttendanceRecord record,
+    String inStr,
+    String outStr,
+  ) {
+    showDialog(
+      context: context,
+      builder: (delCtx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.call_split_rounded, color: Color(0xFF6366F1)),
+            const SizedBox(width: 8),
+            Text(provider.translate('split_session_title')),
+          ],
+        ),
+        content: Text(
+          provider.translate('split_session_confirm', params: {
+            'inTime': inStr,
+            'outTime': outStr,
+          }),
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(delCtx).pop(),
+            child: Text(provider.translate('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6366F1),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(delCtx).pop();
+              final success = await provider.splitPunchSession(
+                employeeId: emp.id,
+                record: record,
+              );
+              if (context.mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(provider.translate('punch_updated_success')),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+              }
+            },
+            child: Text(provider.translate('split_session_btn')),
+          ),
         ],
       ),
     );
