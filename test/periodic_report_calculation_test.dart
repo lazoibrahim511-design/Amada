@@ -64,19 +64,15 @@ void main() {
 
     test('Weekend / Holiday 100% Extra Time rule logic', () {
       // When an employee works on an off-day (scheduled = 0):
-      const workedMinutes = 360; // 6 hours
-      const isWorkingDay = false;
-      const isHoliday = false;
+      int getScheduled(bool working) => working ? 480 : 0;
+      int getExtra(bool working, bool holiday, int worked) =>
+          (!working || holiday) ? worked : 0;
 
-      final scheduledMinutes = isWorkingDay ? 480 : 0;
-      final extraTimeMinutes = !isWorkingDay || isHoliday ? workedMinutes : 0;
-
-      expect(scheduledMinutes, 0);
-      expect(extraTimeMinutes, 360);
+      expect(getScheduled(false), 0);
+      expect(getExtra(false, false, 360), 360);
     });
 
     test('Overnight shift comparison with DateTime handles cross-midnight correctly', () {
-      final date = DateTime(2026, 11, 15);
       final shiftStart = DateTime(2026, 11, 15, 17, 0); // 17:00
       var shiftEnd = DateTime(2026, 11, 15, 1, 0); // 01:00
       if (shiftEnd.isBefore(shiftStart)) {

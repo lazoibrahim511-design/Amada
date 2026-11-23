@@ -13,7 +13,7 @@ import '../providers/attendance_provider.dart';
 import '../widgets/avatar_image_helper.dart';
 import '../widgets/glass_dialog.dart';
 import '../widgets/neu_button.dart';
-import 'user_management_screen.dart';
+import 'hr_management_screen.dart';
 import 'face_auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -249,17 +249,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             secondaryTextColor,
                                             isRtl,
                                           ),
-                                          if (currentEmp?.role == 'hr' || currentEmp?.role == 'admin') ...[
+                                          if (provider.isHRManager ||
+                                              currentEmp?.role == 'hr' ||
+                                              currentEmp?.role == 'admin' ||
+                                              currentEmp?.role == 'super_admin' ||
+                                              provider.canEditCompanyInfo ||
+                                              AttendanceProvider.isEmployeeHROrAdmin(currentEmp)) ...[
                                             const SizedBox(height: 24),
                                             _buildSectionTitle(
-                                              icon: Icons.admin_panel_settings_outlined,
-                                              iconColor: const Color(0xFF1E3DB8),
-                                              title: provider.translate('user_and_access_mgmt'),
+                                              icon: Icons.admin_panel_settings_rounded,
+                                              iconColor: const Color(0xFF00E5CE),
+                                              title: provider.translate('hr_admin'),
                                               textColor: secondaryTextColor,
                                             ),
                                             const SizedBox(height: 12),
-                                            _buildUserManagementCard(
+                                            _buildHrAdminCard(
                                               context,
+                                              provider,
                                               isDark,
                                               cardBg,
                                               cardBorder,
@@ -388,16 +394,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(height: 24),
 
                               // Administrative Access (If applicable)
-                              if (currentEmp?.role == 'hr' || currentEmp?.role == 'admin') ...[
+                              if (provider.isHRManager ||
+                                  currentEmp?.role == 'hr' ||
+                                  currentEmp?.role == 'admin' ||
+                                  currentEmp?.role == 'super_admin' ||
+                                  provider.canEditCompanyInfo ||
+                                  AttendanceProvider.isEmployeeHROrAdmin(currentEmp)) ...[
                                 _buildSectionTitle(
-                                  icon: Icons.admin_panel_settings_outlined,
-                                  iconColor: const Color(0xFF1E3DB8),
-                                  title: provider.translate('user_and_access_mgmt'),
+                                  icon: Icons.admin_panel_settings_rounded,
+                                  iconColor: const Color(0xFF00E5CE),
+                                  title: provider.translate('hr_admin'),
                                   textColor: secondaryTextColor,
                                 ),
                                 const SizedBox(height: 12),
-                                _buildUserManagementCard(
+                                _buildHrAdminCard(
                                   context,
+                                  provider,
                                   isDark,
                                   cardBg,
                                   cardBorder,
@@ -1887,9 +1899,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- USER MANAGEMENT CARD (ADMIN / HR) ---
-  Widget _buildUserManagementCard(
+  // --- HR ADMIN CARD (ADMIN / HR) ---
+  Widget _buildHrAdminCard(
     BuildContext context,
+    AttendanceProvider provider,
     bool isDark,
     Color cardBg,
     Color cardBorder,
@@ -1903,7 +1916,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const UserManagementScreen()),
+            MaterialPageRoute(
+              builder: (context) => const HrManagementScreen(),
+            ),
           );
         },
         borderRadius: BorderRadius.circular(20),
@@ -1924,24 +1939,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF1E3DB8).withValues(alpha: isDark ? 0.25 : 0.12),
-                      const Color(0xFF122684).withValues(alpha: isDark ? 0.20 : 0.08),
-                    ],
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00E5CE), Color(0xFF1E3DB8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(50),
-                  border: Border.all(
-                    color: const Color(0xFF1E3DB8).withValues(alpha: isDark ? 0.4 : 0.25),
-                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00E5CE).withValues(alpha: isDark ? 0.35 : 0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: const Icon(
-                  Icons.manage_accounts_rounded,
-                  color: Color(0xFF1E3DB8),
-                  size: 22,
+                  Icons.admin_panel_settings_rounded,
+                  color: Colors.white,
+                  size: 24,
                 ),
               ),
               const SizedBox(width: 14),
@@ -1950,7 +1968,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Manage System Users & Roles',
+                      provider.translate('hr_admin'),
                       style: TextStyle(
                         color: primaryColor,
                         fontSize: 15,
@@ -1959,7 +1977,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Configure employee permissions and accounts',
+                      provider.translate('hr_admin_desc'),
                       style: TextStyle(
                         color: secondaryColor,
                         fontSize: 12,
@@ -1968,6 +1986,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 width: 34,
                 height: 34,

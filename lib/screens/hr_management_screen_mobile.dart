@@ -22,6 +22,8 @@ import '../widgets/hr/hr_employees_tab.dart';
 import '../widgets/hr/hr_daily_report_tab.dart';
 import '../widgets/hr/hr_periodic_report_tab.dart';
 import '../widgets/hr/hr_device_tab.dart';
+import '../widgets/hr/system_users_tab.dart';
+import 'requests_screen.dart';
 
 
 class HrManagementScreenMobile extends StatefulWidget {
@@ -71,6 +73,10 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
         return provider.translate('groups');
       case HrTab.employees:
         return provider.translate('employees');
+      case HrTab.systemUsers:
+        return provider.translate('user_and_access_mgmt');
+      case HrTab.approvals:
+        return provider.translate('approvals');
       case HrTab.holidays:
         return provider.translate('holidays');
       case HrTab.locations:
@@ -158,7 +164,7 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                provider.translate('hr_management'),
+                                provider.translate('hr_admin'),
                                 style: TextStyle(
                                   color: primaryTextColor,
                                   fontSize: 22,
@@ -178,6 +184,8 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
                             ],
                           ),
                         ),
+                        _buildSectionsMenuButton(provider, isDark),
+                        const SizedBox(width: 8),
                         _buildAddNewButton(provider),
                       ],
                     ),
@@ -198,6 +206,10 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
                         _buildPillTab(tab: HrTab.groups, icon: Icons.people_outline_rounded, label: provider.translate('groups'), isDark: isDark),
                         const SizedBox(width: 8),
                         _buildPillTab(tab: HrTab.employees, icon: Icons.badge_outlined, label: provider.translate('employees'), isDark: isDark),
+                        const SizedBox(width: 8),
+                        _buildPillTab(tab: HrTab.systemUsers, icon: Icons.manage_accounts_rounded, label: provider.translate('user_management'), isDark: isDark),
+                        const SizedBox(width: 8),
+                        _buildPillTab(tab: HrTab.approvals, icon: Icons.how_to_reg_rounded, label: provider.translate('approvals'), isDark: isDark),
                         const SizedBox(width: 8),
                         _buildPillTab(tab: HrTab.holidays, icon: Icons.event_available_rounded, label: provider.translate('holidays'), isDark: isDark),
                         const SizedBox(width: 8),
@@ -237,6 +249,178 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
       ),
       size: 42,
       variant: NeuButtonVariant.whitePill,
+    );
+  }
+
+  Widget _buildSectionsMenuButton(AttendanceProvider provider, bool isDark) {
+    return NeuIconButton(
+      onPressed: () => _showAllSectionsSheet(provider, isDark),
+      icon: const Icon(
+        Icons.grid_view_rounded,
+        size: 20,
+        color: Color(0xFF00E5CE),
+      ),
+      size: 42,
+      variant: NeuButtonVariant.whitePill,
+    );
+  }
+
+  void _showAllSectionsSheet(AttendanceProvider provider, bool isDark) {
+    final sections = [
+      (HrTab.structures, Icons.business_rounded, provider.translate('structures'), const Color(0xFF3B82F6)),
+      (HrTab.shifts, Icons.access_time_rounded, provider.translate('shifts'), const Color(0xFF10B981)),
+      (HrTab.groups, Icons.people_outline_rounded, provider.translate('groups'), const Color(0xFF8B5CF6)),
+      (HrTab.employees, Icons.badge_outlined, provider.translate('employees'), const Color(0xFF00E5CE)),
+      (HrTab.systemUsers, Icons.manage_accounts_rounded, provider.translate('user_and_access_mgmt'), const Color(0xFFF59E0B)),
+      (HrTab.approvals, Icons.how_to_reg_rounded, provider.translate('approvals'), const Color(0xFFEC4899)),
+      (HrTab.holidays, Icons.event_available_rounded, provider.translate('holidays'), const Color(0xFF6366F1)),
+      (HrTab.locations, Icons.location_on_outlined, provider.translate('locations'), const Color(0xFF14B8A6)),
+      (HrTab.payroll, Icons.attach_money_rounded, provider.translate('payroll'), const Color(0xFF10B981)),
+      (HrTab.dailyReport, Icons.bar_chart_rounded, provider.translate('daily_report'), const Color(0xFF3B82F6)),
+      (HrTab.periodicReport, Icons.assessment_rounded, provider.translate('periodic_report'), const Color(0xFFF97316)),
+      (HrTab.device, Icons.fingerprint_rounded, provider.translate('device'), const Color(0xFF06B6D4)),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            MediaQuery.of(ctx).padding.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.admin_panel_settings_rounded,
+                    color: Color(0xFF00E5CE),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    provider.translate('all_hr_sections'),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: sections.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 2.8,
+                    ),
+                    itemBuilder: (context, idx) {
+                      final item = sections[idx];
+                      final isSelected = _activeTab == item.$1;
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _activeTab = item.$1;
+                              _searchQuery = '';
+                              _searchController.clear();
+                            });
+                            if (item.$1 == HrTab.dailyReport) {
+                              _loadDailyReportData();
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF00E5CE).withValues(alpha: isDark ? 0.2 : 0.12)
+                                  : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC)),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFF00E5CE)
+                                    : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: item.$4.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(item.$2, size: 18, color: item.$4),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    item.$3,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                      color: isSelected
+                                          ? const Color(0xFF00E5CE)
+                                          : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -319,7 +503,12 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
   }
 
   Widget _buildAddNewButton(AttendanceProvider provider) {
-    if (_activeTab == HrTab.payroll || _activeTab == HrTab.dailyReport || _activeTab == HrTab.periodicReport || _activeTab == HrTab.device) {
+    if (_activeTab == HrTab.payroll ||
+        _activeTab == HrTab.dailyReport ||
+        _activeTab == HrTab.periodicReport ||
+        _activeTab == HrTab.device ||
+        _activeTab == HrTab.systemUsers ||
+        _activeTab == HrTab.approvals) {
       return const SizedBox.shrink();
     }
     String label = '';
@@ -346,6 +535,8 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
       case HrTab.dailyReport:
       case HrTab.periodicReport:
       case HrTab.device:
+      case HrTab.systemUsers:
+      case HrTab.approvals:
         break;
     }
 
@@ -526,21 +717,13 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
           ],
         );
       case HrTab.employees:
-        return Column(
-          children: [
-            _buildSearchBar(provider.translate('search_employees')),
-            const SizedBox(height: 16),
-            Expanded(
-              child: HrEmployeesTab(
-                searchQuery: _searchQuery,
-                onEdit: (employee) => HrEmployeesTab.showEmployeeFormDialog(
-                  context: context,
-                  provider: provider,
-                  employee: employee,
-                ),
-              ),
-            ),
-          ],
+        return HrEmployeesTab(
+          searchQuery: _searchQuery,
+          onEdit: (employee) => HrEmployeesTab.showEmployeeFormDialog(
+            context: context,
+            provider: provider,
+            employee: employee,
+          ),
         );
       case HrTab.holidays:
         return Column(
@@ -579,6 +762,20 @@ class _HrManagementScreenMobileState extends State<HrManagementScreenMobile> {
         return HrPeriodicReportTab(searchQuery: _searchQuery);
       case HrTab.device:
         return const HrDeviceTab();
+      case HrTab.systemUsers:
+        return Column(
+          children: [
+            _buildSearchBar(provider.translate('search_system_accounts')),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SystemUsersTab(
+                searchQuery: _searchQuery,
+              ),
+            ),
+          ],
+        );
+      case HrTab.approvals:
+        return const RequestsScreen(initialSubordinateTab: true);
     }
   }
 

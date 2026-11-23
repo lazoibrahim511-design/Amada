@@ -9,6 +9,8 @@ enum HrTab {
   shifts,
   groups,
   employees,
+  systemUsers,
+  approvals,
   holidays,
   locations,
   payroll,

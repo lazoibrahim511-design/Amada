@@ -41,32 +41,41 @@ class HomeScreenMobile extends StatelessWidget {
               // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        provider.translate('welcome_back'),
-                        style: TextStyle(
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          provider.translate('welcome_back'),
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        provider.userName,
-                        style: TextStyle(
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
+                        const SizedBox(height: 2),
+                        Text(
+                          provider.userName,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   // Header Buttons
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       if (provider.isSuperAdmin) ...[
                         _buildHeaderButton(
@@ -77,7 +86,7 @@ class HomeScreenMobile extends StatelessWidget {
                           onTap: () =>
                               _showMobileCompanySwitcher(context, provider),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                       ],
                       if (provider.canEditCompanyInfo) ...[
                         _buildHeaderButton(context, 
@@ -86,7 +95,7 @@ class HomeScreenMobile extends StatelessWidget {
                             showCompanySettingsDialog(context);
                           },
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         _buildHeaderButton(context, 
                           icon: Icons.admin_panel_settings_outlined,
                           onTap: () {
@@ -99,7 +108,7 @@ class HomeScreenMobile extends StatelessWidget {
                             );
                           },
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                       ],
                       if (provider.currentEmployee?.role == 'hr' || provider.currentEmployee?.role == 'admin' || provider.canEditCompanyInfo) ...[
                         _buildHeaderButton(context, 
@@ -113,7 +122,7 @@ class HomeScreenMobile extends StatelessWidget {
                             );
                           },
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                       ],
                       _buildHeaderButton(context, 
                         icon: Icons.chat_bubble_outline_rounded,
@@ -127,7 +136,7 @@ class HomeScreenMobile extends StatelessWidget {
                           );
                         },
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       _buildHeaderButton(context, 
                         icon: Icons.person_outline,
                         onTap: () {
@@ -233,8 +242,8 @@ class HomeScreenMobile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),

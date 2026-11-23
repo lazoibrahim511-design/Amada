@@ -21,6 +21,8 @@ import '../widgets/hr/hr_employees_tab.dart';
 import '../widgets/hr/hr_daily_report_tab.dart';
 import '../widgets/hr/hr_periodic_report_tab.dart';
 import '../widgets/hr/hr_device_tab.dart';
+import '../widgets/hr/system_users_tab.dart';
+import 'requests_screen.dart';
 
 
 class HrManagementScreenWeb extends StatefulWidget {
@@ -230,9 +232,14 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
   }
 
   Widget _buildAddNewButton(AttendanceProvider provider) {
-    if (_activeTab == HrTab.payroll || _activeTab == HrTab.dailyReport || _activeTab == HrTab.periodicReport || _activeTab == HrTab.device)
-      // ignore: curly_braces_in_flow_control_structures
+    if (_activeTab == HrTab.payroll ||
+        _activeTab == HrTab.dailyReport ||
+        _activeTab == HrTab.periodicReport ||
+        _activeTab == HrTab.device ||
+        _activeTab == HrTab.systemUsers ||
+        _activeTab == HrTab.approvals) {
       return const SizedBox.shrink();
+    }
     String label = '';
     switch (_activeTab) {
       case HrTab.structures:
@@ -257,6 +264,8 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
       case HrTab.dailyReport:
       case HrTab.periodicReport:
       case HrTab.device:
+      case HrTab.systemUsers:
+      case HrTab.approvals:
         break;
     }
 
@@ -490,6 +499,20 @@ class _HrManagementScreenWebState extends State<HrManagementScreenWeb> {
         return HrPeriodicReportTab(searchQuery: _searchQuery);
       case HrTab.device:
         return const HrDeviceTab();
+      case HrTab.systemUsers:
+        return Column(
+          children: [
+            _buildSearchBar(provider.translate('search_system_accounts')),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SystemUsersTab(
+                searchQuery: _searchQuery,
+              ),
+            ),
+          ],
+        );
+      case HrTab.approvals:
+        return const RequestsScreen(initialSubordinateTab: true);
     }
   }
 

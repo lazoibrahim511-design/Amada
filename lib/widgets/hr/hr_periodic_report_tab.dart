@@ -786,248 +786,279 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
   }
 
   Widget _buildControlToolbar(AttendanceProvider provider, bool isDark, List<PeriodicReportRow> rows) {
-    return GlassContainer(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: Mode Toggle & Date Selectors & Presets
-          Row(
-            children: [
-              // Mode Segment
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 850;
+
+        final modeAndDatePicker = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Mode Segment
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              padding: const EdgeInsets.all(3),
+              child: Row(
+                children: [
+                  _buildModeButton(
+                    title: provider.translate('month_view'),
+                    isSelected: _isMonthMode,
+                    icon: Icons.calendar_month_outlined,
+                    onTap: () => setState(() => _isMonthMode = true),
+                    isDark: isDark,
+                  ),
+                  _buildModeButton(
+                    title: provider.translate('custom_range'),
+                    isSelected: !_isMonthMode,
+                    icon: Icons.date_range_outlined,
+                    onTap: () => setState(() => _isMonthMode = false),
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 14),
+
+            // Date Picker Display
+            if (_isMonthMode) ...[
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded),
+                tooltip: provider.translate('previous_month'),
+                onPressed: () => _onMonthChanged(DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1)),
+              ),
               Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                    color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFCBD5E1),
                   ),
                 ),
-                padding: const EdgeInsets.all(3),
                 child: Row(
                   children: [
-                    _buildModeButton(
-                      title: provider.translate('month_view'),
-                      isSelected: _isMonthMode,
-                      icon: Icons.calendar_month_outlined,
-                      onTap: () => setState(() => _isMonthMode = true),
-                      isDark: isDark,
-                    ),
-                    _buildModeButton(
-                      title: provider.translate('custom_range'),
-                      isSelected: !_isMonthMode,
-                      icon: Icons.date_range_outlined,
-                      onTap: () => setState(() => _isMonthMode = false),
-                      isDark: isDark,
+                    const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF10B981)),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${provider.translate('month_${_selectedMonth.month}')} ${_selectedMonth.year}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(width: 14),
-
-              // Date Picker Display
-              if (_isMonthMode) ...[
-                IconButton(
-                  icon: const Icon(Icons.chevron_left_rounded),
-                  tooltip: provider.translate('previous_month'),
-                  onPressed: () => _onMonthChanged(DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1)),
-                ),
-                Container(
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded),
+                tooltip: provider.translate('next_month'),
+                onPressed: () => _onMonthChanged(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1)),
+              ),
+            ] else ...[
+              InkWell(
+                onTap: _pickDateRange,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFCBD5E1),
+                      color: const Color(0xFF10B981).withValues(alpha: 0.5),
                     ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFF10B981)),
+                      const Icon(Icons.date_range_rounded, size: 16, color: Color(0xFF10B981)),
                       const SizedBox(width: 8),
                       Text(
-                        '${provider.translate('month_${_selectedMonth.month}')} ${_selectedMonth.year}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                        '${DateFormat('yyyy-MM-dd').format(_startDate)}  ➔  ${DateFormat('yyyy-MM-dd').format(_endDate)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.arrow_drop_down_rounded, size: 18),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right_rounded),
-                  tooltip: provider.translate('next_month'),
-                  onPressed: () => _onMonthChanged(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1)),
+              ),
+            ],
+          ],
+        );
+
+        final structureDropdown = Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _selectedStructureId,
+              hint: Text(provider.translate('all_structures_dropdown'), style: const TextStyle(fontSize: 12.5)),
+              icon: const Icon(Icons.apartment_rounded, size: 16),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(provider.translate('all_structures_dropdown'), style: const TextStyle(fontSize: 12.5)),
                 ),
-              ] else ...[
-                InkWell(
-                  onTap: _pickDateRange,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.date_range_rounded, size: 16, color: Color(0xFF10B981)),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${DateFormat('yyyy-MM-dd').format(_startDate)}  ➔  ${DateFormat('yyyy-MM-dd').format(_endDate)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.arrow_drop_down_rounded, size: 18),
-                      ],
-                    ),
+                ...provider.structures.map((s) => DropdownMenuItem<String?>(
+                      value: s.id,
+                      child: Text(s.name, style: const TextStyle(fontSize: 12.5)),
+                    )),
+              ],
+              onChanged: (val) => setState(() => _selectedStructureId = val),
+            ),
+          ),
+        );
+
+        final groupDropdown = Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _selectedGroupId,
+              hint: Text(provider.translate('all_groups_dropdown'), style: const TextStyle(fontSize: 12.5)),
+              icon: const Icon(Icons.people_alt_outlined, size: 16),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(provider.translate('all_groups_dropdown'), style: const TextStyle(fontSize: 12.5)),
+                ),
+                ...provider.groups.map((g) => DropdownMenuItem<String?>(
+                      value: g.id,
+                      child: Text(g.name, style: const TextStyle(fontSize: 12.5)),
+                    )),
+              ],
+              onChanged: (val) => setState(() => _selectedGroupId = val),
+            ),
+          ),
+        );
+
+        final searchField = SizedBox(
+          height: 38,
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              hintText: provider.translate('search_periodic_employee_hint'),
+              hintStyle: const TextStyle(fontSize: 12.5),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, size: 16),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+              ),
+            ),
+          ),
+        );
+
+        final exportButtons = [
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.table_chart_rounded, size: 16),
+            label: Text(provider.translate('excel_export_btn'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+            onPressed: _isExporting ? null : () => _exportExcel(rows, provider),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+            label: Text(provider.translate('pdf_export_btn'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+            onPressed: _isExporting ? null : () => _exportPdf(rows, provider),
+          ),
+        ];
+
+        if (isMobile) {
+          return GlassContainer(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: modeAndDatePicker,
+                ),
+                const SizedBox(height: 10),
+                searchField,
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      structureDropdown,
+                      const SizedBox(width: 8),
+                      groupDropdown,
+                      const SizedBox(width: 8),
+                      _buildMetricFilterControls(isDark, provider),
+                      const SizedBox(width: 10),
+                      ...exportButtons,
+                    ],
                   ),
                 ),
               ],
-            ],
-          ),
+            ),
+          );
+        }
 
-          const SizedBox(height: 12),
-
-          // Row 2: Structure, Group, Metric Filter, Search & Export Actions
-          Row(
+        return GlassContainer(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Structure Filter Dropdown
-              Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _selectedStructureId,
-                    hint: Text(provider.translate('all_structures_dropdown'), style: const TextStyle(fontSize: 12.5)),
-                    icon: const Icon(Icons.apartment_rounded, size: 16),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(provider.translate('all_structures_dropdown'), style: const TextStyle(fontSize: 12.5)),
-                      ),
-                      ...provider.structures.map((s) => DropdownMenuItem<String?>(
-                            value: s.id,
-                            child: Text(s.name, style: const TextStyle(fontSize: 12.5)),
-                          )),
-                    ],
-                    onChanged: (val) => setState(() => _selectedStructureId = val),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              // Group Filter Dropdown
-              Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade300),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _selectedGroupId,
-                    hint: Text(provider.translate('all_groups_dropdown'), style: const TextStyle(fontSize: 12.5)),
-                    icon: const Icon(Icons.people_alt_outlined, size: 16),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(provider.translate('all_groups_dropdown'), style: const TextStyle(fontSize: 12.5)),
-                      ),
-                      ...provider.groups.map((g) => DropdownMenuItem<String?>(
-                            value: g.id,
-                            child: Text(g.name, style: const TextStyle(fontSize: 12.5)),
-                          )),
-                    ],
-                    onChanged: (val) => setState(() => _selectedGroupId = val),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              // Metric Filter Dropdown & Duration Controls
-              _buildMetricFilterControls(isDark, provider),
-
-              const SizedBox(width: 10),
-
-              // Search Bar
-              Expanded(
-                child: SizedBox(
-                  height: 38,
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      hintText: provider.translate('search_periodic_employee_hint'),
-                      hintStyle: const TextStyle(fontSize: 12.5),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 16),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() {});
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // Excel Export Button
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
-                ),
-                icon: const Icon(Icons.table_chart_rounded, size: 16),
-                label: Text(provider.translate('excel_export_btn'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                onPressed: _isExporting ? null : () => _exportExcel(rows, provider),
-              ),
-
-              const SizedBox(width: 8),
-
-              // PDF Export Button
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
-                ),
-                icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
-                label: Text(provider.translate('pdf_export_btn'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                onPressed: _isExporting ? null : () => _exportPdf(rows, provider),
+              modeAndDatePicker,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  structureDropdown,
+                  const SizedBox(width: 10),
+                  groupDropdown,
+                  const SizedBox(width: 10),
+                  _buildMetricFilterControls(isDark, provider),
+                  const SizedBox(width: 10),
+                  Expanded(child: searchField),
+                  const SizedBox(width: 12),
+                  ...exportButtons,
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1272,62 +1303,71 @@ class _HrPeriodicReportTabState extends State<HrPeriodicReportTab> {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 800;
+        final tiles = [
+          _buildMetricTile(
+            title: provider.translate('total_deficit_card'),
+            value: '${totalDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
+            subtitle: provider.translate('missing_duty_hours_sub'),
+            icon: Icons.hourglass_bottom_rounded,
+            accentColor: const Color(0xFFEF4444),
+            isDark: isDark,
+          ),
+          _buildMetricTile(
+            title: provider.translate('total_overtime_card'),
+            value: '${totalOvertimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
+            subtitle: '${provider.translate('extra_time')}: ${totalExtraHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
+            icon: Icons.bolt_rounded,
+            accentColor: const Color(0xFF10B981),
+            isDark: isDark,
+          ),
+          _buildMetricTile(
+            title: provider.translate('delays_early_exits_card'),
+            value: '$totalDelays | $totalEarlyExits',
+            subtitle: provider.translate('lates_early_departs_sub'),
+            icon: Icons.timer_outlined,
+            accentColor: const Color(0xFFF59E0B),
+            isDark: isDark,
+          ),
+          _buildMetricTile(
+            title: provider.translate('penalties_deductions_card'),
+            value: '${totalPenalties.toStringAsFixed(1)} ${provider.translate('unit_days_short')}',
+            subtitle: provider.translate('policy_deductions_sub'),
+            icon: Icons.gavel_rounded,
+            accentColor: const Color(0xFF8B5CF6),
+            isDark: isDark,
+          ),
+          _buildMetricTile(
+            title: provider.translate('absences_leaves_card'),
+            value: '$totalAbsences ${provider.translate('unit_absences_short')} | $totalLeaves ${provider.translate('unit_leaves_short')}',
+            subtitle: provider.translate('for_n_employees_sub', params: {'count': '$totalEmployees'}),
+            icon: Icons.event_busy_rounded,
+            accentColor: const Color(0xFF0284C7),
+            isDark: isDark,
+          ),
+        ];
+
+        if (isMobile) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                for (int i = 0; i < tiles.length; i++) ...[
+                  SizedBox(width: 155, child: tiles[i]),
+                  if (i < tiles.length - 1) const SizedBox(width: 10),
+                ],
+              ],
+            ),
+          );
+        }
+
         return Row(
           children: [
-            Expanded(
-              child: _buildMetricTile(
-                title: provider.translate('total_deficit_card'),
-                value: '${totalDeficitHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
-                subtitle: provider.translate('missing_duty_hours_sub'),
-                icon: Icons.hourglass_bottom_rounded,
-                accentColor: const Color(0xFFEF4444),
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildMetricTile(
-                title: provider.translate('total_overtime_card'),
-                value: '${totalOvertimeHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
-                subtitle: '${provider.translate('extra_time')}: ${totalExtraHours.toStringAsFixed(1)} ${provider.translate('unit_hrs_short')}',
-                icon: Icons.bolt_rounded,
-                accentColor: const Color(0xFF10B981),
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildMetricTile(
-                title: provider.translate('delays_early_exits_card'),
-                value: '$totalDelays | $totalEarlyExits',
-                subtitle: provider.translate('lates_early_departs_sub'),
-                icon: Icons.timer_outlined,
-                accentColor: const Color(0xFFF59E0B),
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildMetricTile(
-                title: provider.translate('penalties_deductions_card'),
-                value: '${totalPenalties.toStringAsFixed(1)} ${provider.translate('unit_days_short')}',
-                subtitle: provider.translate('policy_deductions_sub'),
-                icon: Icons.gavel_rounded,
-                accentColor: const Color(0xFF8B5CF6),
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildMetricTile(
-                title: provider.translate('absences_leaves_card'),
-                value: '$totalAbsences ${provider.translate('unit_absences_short')} | $totalLeaves ${provider.translate('unit_leaves_short')}',
-                subtitle: provider.translate('for_n_employees_sub', params: {'count': '$totalEmployees'}),
-                icon: Icons.event_busy_rounded,
-                accentColor: const Color(0xFF0284C7),
-                isDark: isDark,
-              ),
-            ),
+            for (int i = 0; i < tiles.length; i++) ...[
+              Expanded(child: tiles[i]),
+              if (i < tiles.length - 1) const SizedBox(width: 10),
+            ],
           ],
         );
       },
