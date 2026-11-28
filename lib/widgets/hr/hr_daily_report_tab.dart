@@ -662,6 +662,10 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
       final s = (r['status'] as String).toLowerCase();
       return s.contains('leave') || s == 'holiday';
     }).length;
+    final offCount = compiledRows.where((r) {
+      final s = (r['status'] as String).toLowerCase();
+      return s == 'day off' || !(r['isWorkingDay'] as bool? ?? true);
+    }).length;
     final totalLateMinutes = compiledRows.fold<int>(
       0,
       (sum, r) => sum + (r['delay'] as int),
@@ -675,6 +679,13 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     final displayedRows = compiledRows.where((row) {
       if (_statusFilter == 'all') return true;
       final s = (row['status'] as String).toLowerCase();
+      final isWorking = (row['isWorkingDay'] as bool? ?? true);
+      if (_statusFilter == 'off' || _statusFilter == 'day_off') {
+        return s == 'day off' || !isWorking;
+      }
+      if (_statusFilter == 'on_duty' || _statusFilter == 'working') {
+        return isWorking;
+      }
       if (_statusFilter == 'present') return s == 'present' || s == 'active';
       if (_statusFilter == 'late') return s == 'late';
       if (_statusFilter == 'absent') return s == 'absent';
@@ -699,6 +710,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
             lateCount: lateCount,
             absentCount: absentCount,
             leaveCount: leaveCount,
+            offCount: offCount,
             totalLateMinutes: totalLateMinutes,
             totalWorkedMinutes: totalWorkedMinutes,
           ),
@@ -934,6 +946,7 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
     required int lateCount,
     required int absentCount,
     required int leaveCount,
+    required int offCount,
     required int totalLateMinutes,
     required int totalWorkedMinutes,
   }) {
@@ -986,11 +999,20 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
         isActive: _statusFilter == 'leave',
         onTap: () => setState(() => _statusFilter = 'leave'),
       ),
+      _buildMiniKpiCard(
+        title: provider.translate('day_off_kpi'),
+        value: '$offCount',
+        subtitle: provider.translate('scheduled_off_subtitle'),
+        color: const Color(0xFF64748B),
+        icon: Icons.hotel_rounded,
+        isActive: _statusFilter == 'off',
+        onTap: () => setState(() => _statusFilter = _statusFilter == 'off' ? 'all' : 'off'),
+      ),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 900) {
+        if (constraints.maxWidth >= 1050) {
           return Row(
             children: [
               for (int i = 0; i < cards.length; i++) ...[
@@ -1217,6 +1239,133 @@ class _HrDailyReportTabState extends State<HrDailyReportTab> {
           onChanged: (val) {
             setState(() {
               _selectedGroupId = (val == 'all') ? null : val;
+            });
+          },
+        ),
+
+        // Status / Duty Filter Capsule Dropdown (including Day Off)
+        _buildCapsuleDropdown(
+          label: provider.translate('status'),
+          icon: Icons.filter_list_rounded,
+          value: _statusFilter,
+          isDark: isDark,
+          items: [
+            DropdownMenuItem(
+              value: 'all',
+              child: Text(provider.translate('all_statuses')),
+            ),
+            DropdownMenuItem(
+              value: 'off',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF64748B),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(provider.translate('day_off_filter')),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 'on_duty',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF00E5CE),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(provider.translate('on_duty_filter')),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 'present',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF10B981),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(provider.translate('present')),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 'late',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF5C5C),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(provider.translate('late_kpi')),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 'absent',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEF4444),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(provider.translate('absent')),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 'leave',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF818CF8),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(provider.translate('leave_holiday_kpi')),
+                ],
+              ),
+            ),
+          ],
+          onChanged: (val) {
+            setState(() {
+              _statusFilter = val ?? 'all';
             });
           },
         ),
